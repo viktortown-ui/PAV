@@ -1,125 +1,186 @@
 import { create } from 'zustand';
 import { addEdge, applyEdgeChanges, applyNodeChanges, Connection, EdgeChange, NodeChange, Viewport } from 'reactflow';
 import { componentMap } from '../domain/registry/componentRegistry';
-import { demoProject } from '../domain/registry/demoProject';
-import { ProjectDocument, SimulationSettings, SoapEdge, SoapNode, SoapNodeKind } from '../domain/schemas/types';
+import { demoProject, templates } from '../domain/templates/templates';
+import { InspectorTab, ProjectDocument, SimulationSettings, SoapEdge, SoapNode, SoapNodeKind, TemplateId, ValidationIssue } from '../domain/schemas/types';
 import { db } from '../features/persistence/db';
 import { runSimulationStep } from '../domain/simulation/engine';
+import { validateProject } from '../domain/validation/validateProject';
 
 interface AppState {
   project: ProjectDocument;
   selectedNodeId?: string;
+  selectedEdgeId?: string;
   search: string;
-  inspectorTab: 'general' | 'process' | 'visual' | 'ports' | 'simulation';
+  inspectorTab: InspectorTab;
+  validationFocus: boolean;
+  showProblematicOnly: boolean;
+  issues: ValidationIssue[];
+  pathSelection: { upstream: string[]; downstream: string[]; edges: string[] };
   onNodesChange: (changes: NodeChange[]) => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
   onConnect: (connection: Connection) => void;
   setViewport: (viewport: Viewport) => void;
   addNode: (type: SoapNodeKind, position?: { x: number; y: number }) => void;
   selectNode: (nodeId?: string) => void;
+  selectEdge: (edgeId?: string) => void;
   updateNodeField: (nodeId: string, path: string, value: string | number | boolean) => void;
   setSearch: (search: string) => void;
-  setInspectorTab: (tab: AppState['inspectorTab']) => void;
+  setInspectorTab: (tab: InspectorTab) => void;
   setSimulationRunning: (running: boolean) => void;
   setSimulationSpeed: (speed: number) => void;
   tickSimulation: (dt: number) => void;
   resetProject: () => void;
   newProject: () => void;
+  loadTemplate: (templateId: TemplateId) => void;
   saveProject: () => Promise<void>;
   loadProject: (id?: string) => Promise<void>;
   exportProject: () => string;
   importProject: (json: string) => void;
+  runValidation: () => void;
+  toggleProblematicOnly: () => void;
 }
 
-const makeProject = (): ProjectDocument => structuredClone(demoProject);
+const clone = (project: ProjectDocument) => structuredClone(project);
+const makeProject = () => clone(demoProject);
+const limitedLog = (project: ProjectDocument) => ({ ...project, eventLog: project.eventLog.slice(-80) });
 
 const setByPath = (node: SoapNode, path: string, value: string | number | boolean) => {
-  if (path === 'label' || path === 'description') {
-    node.data[path] = String(value);
-    return;
-  }
-  if (path === 'tag') {
-    node.data.tag = String(value);
-    return;
-  }
-  if (path in node.data.process) {
-    node.data.process[path] = value;
-    return;
-  }
-  if (path === 'accent' || path === 'fill' || path === 'enabled' || path === 'mixing') {
-    (node.data.visual as Record<string, string | number | boolean>)[path] = value;
-    return;
-  }
-  if (path === 'simEnabled') node.data.simulation.enabled = Boolean(value);
-  if (path === 'simActive') node.data.simulation.active = Boolean(value);
-  if (path === 'simFlow') node.data.simulation.flow = Number(value);
+  if (path === 'label' || path === 'description' || path === 'shortName') (node.data as any)[path] = String(value);
+  else if (path === 'tag') node.data.tag = String(value);
+  else if (path === 'medium') node.data.medium = value as any;
+  else if (path === 'inputs' || path === 'outputs') (node.data.ports as any)[path] = Number(value);
+  else if (path === 'accent' || path === 'fill' || path === 'enabled' || path === 'showLabel') (node.data.visual as any)[path] = value;
+  else if (path === 'simEnabled') node.data.simulation.enabled = Boolean(value);
+  else if (path === 'simActive') node.data.simulation.active = Boolean(value);
+  else if (path === 'simFlow') node.data.simulation.flow = Number(value);
+  else if (path === 'alarmText') node.data.simulation.alarmText = String(value);
+  else if (path === 'routeState') node.data.simulation.routeState = value as any;
+  else node.data.process[path] = value;
+};
+
+const computePathSelection = (project: ProjectDocument, nodeId?: string, edgeId?: string) => {
+  const upstream = new Set<string>();
+  const downstream = new Set<string>();
+  const edges = new Set<string>();
+  const sourceNodeId = edgeId ? project.edges.find((edge) => edge.id === edgeId)?.source : nodeId;
+  const targetNodeId = edgeId ? project.edges.find((edge) => edge.id === edgeId)?.target : nodeId;
+
+  const visit = (seed: string | undefined, mode: 'up' | 'down') => {
+    if (!seed) return;
+    const queue = [seed];
+    const seen = new Set<string>(queue);
+    while (queue.length) {
+      const current = queue.shift()!;
+      project.edges.forEach((edge) => {
+        const match = mode === 'up' ? edge.target === current : edge.source === current;
+        const next = mode === 'up' ? edge.source : edge.target;
+        if (!match) return;
+        edges.add(edge.id);
+        (mode === 'up' ? upstream : downstream).add(next);
+        if (!seen.has(next)) {
+          seen.add(next);
+          queue.push(next);
+        }
+      });
+    }
+  };
+
+  visit(sourceNodeId, 'up');
+  visit(targetNodeId, 'down');
+  return { upstream: [...upstream], downstream: [...downstream], edges: [...edges] };
 };
 
 export const useAppStore = create<AppState>((set, get) => ({
   project: makeProject(),
   selectedNodeId: undefined,
+  selectedEdgeId: undefined,
   search: '',
-  inspectorTab: 'general',
-  onNodesChange: (changes) => set((state) => ({ project: { ...state.project, nodes: applyNodeChanges(changes, state.project.nodes) } })),
-  onEdgesChange: (changes) => set((state) => ({ project: { ...state.project, edges: applyEdgeChanges(changes, state.project.edges) } })),
-  onConnect: (connection) => set((state) => ({ project: { ...state.project, edges: addEdge({ ...connection, type: 'flowEdge', animated: false, data: { flowActive: false, blocked: false, flowRate: 0 } }, state.project.edges) } })),
+  inspectorTab: 'main',
+  validationFocus: false,
+  showProblematicOnly: false,
+  issues: validateProject(makeProject()),
+  pathSelection: { upstream: [], downstream: [], edges: [] },
+  onNodesChange: (changes) => set((state) => {
+    const project = { ...state.project, nodes: applyNodeChanges(changes, state.project.nodes) };
+    return { project, issues: validateProject(project) };
+  }),
+  onEdgesChange: (changes) => set((state) => {
+    const project = { ...state.project, edges: applyEdgeChanges(changes, state.project.edges) };
+    return { project, issues: validateProject(project) };
+  }),
+  onConnect: (connection) => set((state) => {
+    const source = state.project.nodes.find((node) => node.id === connection.source);
+    const target = state.project.nodes.find((node) => node.id === connection.target);
+    const project = {
+      ...state.project,
+      edges: addEdge({
+        ...connection,
+        type: 'flowEdge',
+        animated: false,
+        data: { flowActive: false, blocked: false, flowRate: 0, pressure: 0, routeState: 'idle', medium: target?.data.medium ?? source?.data.medium ?? 'water' },
+      }, state.project.edges),
+    };
+    return { project, issues: validateProject(project) };
+  }),
   setViewport: (viewport) => set((state) => ({ project: { ...state.project, viewport } })),
   addNode: (type, position = { x: 200, y: 200 }) => {
     const def = componentMap.get(type);
     if (!def) return;
     const id = crypto.randomUUID();
-    const node: SoapNode = {
-      id,
-      type: 'processNode',
-      position,
-      data: {
-        ...structuredClone(def.defaults),
-        label: def.label,
-        category: def.category,
-        description: def.description,
-      },
-    };
-    set((state) => ({ project: { ...state.project, nodes: [...state.project.nodes, node] }, selectedNodeId: id }));
+    const node: SoapNode = { id, type: 'processNode', position, data: { ...structuredClone(def.defaults), label: def.label, shortName: def.shortName, category: def.category, description: def.description } };
+    set((state) => {
+      const project = { ...state.project, nodes: [...state.project.nodes, node] };
+      return { project, selectedNodeId: id, issues: validateProject(project) };
+    });
   },
-  selectNode: (selectedNodeId) => set({ selectedNodeId }),
-  updateNodeField: (nodeId, path, value) => set((state) => ({
-    project: {
-      ...state.project,
-      nodes: state.project.nodes.map((node) => {
-        if (node.id !== nodeId) return node;
-        const copy = structuredClone(node);
-        setByPath(copy, path, value);
-        return copy;
-      }),
-    },
-  })),
+  selectNode: (selectedNodeId) => set((state) => ({ selectedNodeId, selectedEdgeId: undefined, pathSelection: computePathSelection(state.project, selectedNodeId, undefined) })),
+  selectEdge: (selectedEdgeId) => set((state) => ({ selectedEdgeId, selectedNodeId: undefined, pathSelection: computePathSelection(state.project, undefined, selectedEdgeId) })),
+  updateNodeField: (nodeId, path, value) => set((state) => {
+    const project = { ...state.project, nodes: state.project.nodes.map((node) => {
+      if (node.id !== nodeId) return node;
+      const copy = structuredClone(node);
+      setByPath(copy, path, value);
+      return copy;
+    }) };
+    return { project, issues: validateProject(project) };
+  }),
   setSearch: (search) => set({ search }),
   setInspectorTab: (inspectorTab) => set({ inspectorTab }),
   setSimulationRunning: (running) => set((state) => ({ project: { ...state.project, simulation: { ...state.project.simulation, running } } })),
   setSimulationSpeed: (speed) => set((state) => ({ project: { ...state.project, simulation: { ...state.project.simulation, speed } } })),
   tickSimulation: (dt) => set((state) => {
     if (!state.project.simulation.running) return state;
-    const result = runSimulationStep(state.project.nodes, state.project.edges, state.project.simulation, dt);
-    const simulation: SimulationSettings = {
-      ...state.project.simulation,
-      tick: state.project.simulation.tick + 1,
-      warnings: result.warnings,
-    };
-    return { project: { ...state.project, nodes: result.nodes, edges: result.edges, simulation } };
+    const result = runSimulationStep(state.project, dt);
+    const simulation: SimulationSettings = { ...state.project.simulation, tick: state.project.simulation.tick + 1, warnings: result.warnings, activeMedium: result.activeMedium, totalActiveFlow: result.totalActiveFlow, lastEvent: result.lastEvent };
+    const project = limitedLog({ ...state.project, nodes: result.nodes, edges: result.edges, simulation, eventLog: [...state.project.eventLog, ...result.events] });
+    return { project, issues: validateProject(project) };
   }),
-  resetProject: () => set((state) => ({ project: { ...makeProject(), simulation: { ...state.project.simulation, running: false, tick: 0, warnings: [] } } })),
-  newProject: () => set({ project: makeProject(), selectedNodeId: undefined }),
+  resetProject: () => set(() => {
+    const project = makeProject();
+    return { project, issues: validateProject(project), selectedNodeId: undefined, selectedEdgeId: undefined, pathSelection: { upstream: [], downstream: [], edges: [] } };
+  }),
+  newProject: () => set(() => {
+    const project = clone(templates['water-prep']);
+    return { project, selectedNodeId: undefined, selectedEdgeId: undefined, issues: validateProject(project), pathSelection: { upstream: [], downstream: [], edges: [] } };
+  }),
+  loadTemplate: (templateId) => set(() => {
+    const project = clone(templates[templateId]);
+    return { project, issues: validateProject(project), selectedNodeId: undefined, selectedEdgeId: undefined, pathSelection: { upstream: [], downstream: [], edges: [] } };
+  }),
   saveProject: async () => {
     const project = get().project;
     await db.projects.put({ ...project, lastOpenedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
   },
   loadProject: async (id) => {
     const stored = id ? await db.projects.get(id) : await db.projects.orderBy('lastOpenedAt').last();
-    if (stored) set({ project: stored, selectedNodeId: undefined });
+    if (stored) set({ project: stored, selectedNodeId: undefined, selectedEdgeId: undefined, issues: validateProject(stored), pathSelection: { upstream: [], downstream: [], edges: [] } });
   },
   exportProject: () => JSON.stringify(get().project, null, 2),
   importProject: (json) => {
-    const parsed = JSON.parse(json) as ProjectDocument;
-    set({ project: parsed, selectedNodeId: undefined });
+    const project = JSON.parse(json) as ProjectDocument;
+    set({ project, selectedNodeId: undefined, selectedEdgeId: undefined, issues: validateProject(project), pathSelection: { upstream: [], downstream: [], edges: [] } });
   },
+  runValidation: () => set((state) => ({ issues: validateProject(state.project), validationFocus: true })),
+  toggleProblematicOnly: () => set((state) => ({ showProblematicOnly: !state.showProblematicOnly })),
 }));
