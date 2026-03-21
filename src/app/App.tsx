@@ -12,7 +12,7 @@ export const App = () => {
 
   useEffect(() => { void loadProject(); }, [loadProject]);
   useEffect(() => {
-    const handle = window.setTimeout(() => { void saveProject(); }, 1200);
+    const handle = window.setTimeout(() => { void saveProject(); }, 1000);
     return () => window.clearTimeout(handle);
   }, [project, saveProject]);
 

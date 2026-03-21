@@ -1,4 +1,5 @@
 import { componentRegistry } from '../../domain/registry/componentRegistry';
+import { IndustrialIcon } from '../../icons/IndustrialIcon';
 import { useAppStore } from '../../store/useAppStore';
 
 export const ToolboxPanel = () => {
@@ -6,7 +7,7 @@ export const ToolboxPanel = () => {
   const setSearch = useAppStore((state) => state.setSearch);
   const addNode = useAppStore((state) => state.addNode);
   const grouped = componentRegistry
-    .filter((item) => `${item.label} ${item.category}`.toLowerCase().includes(search.toLowerCase()))
+    .filter((item) => `${item.label} ${item.category} ${item.shortName}`.toLowerCase().includes(search.toLowerCase()))
     .reduce<Record<string, typeof componentRegistry>>((acc, item) => {
       acc[item.category] ??= [];
       acc[item.category].push(item);
@@ -15,8 +16,9 @@ export const ToolboxPanel = () => {
 
   return (
     <aside className="panel toolbox-panel">
-      <div className="panel-title">Библиотека узлов</div>
-      <input className="panel-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Поиск оборудования" />
+      <div className="panel-title">Библиотека оборудования</div>
+      <p className="panel-caption">Схематические символы для быстрого построения линии.</p>
+      <input className="panel-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Поиск по типу оборудования" />
       <div className="toolbox-groups">
         {Object.entries(grouped).map(([category, items]) => (
           <section key={category}>
@@ -24,8 +26,11 @@ export const ToolboxPanel = () => {
             <div className="toolbox-list">
               {items.map((item) => (
                 <button key={item.type} className="toolbox-item" onClick={() => addNode(item.type)}>
-                  <strong>{item.label}</strong>
-                  <span>{item.description}</span>
+                  <span className="toolbox-icon"><IndustrialIcon kind={item.type} /></span>
+                  <div>
+                    <strong>{item.label}</strong>
+                    <span>{item.shortName} • {item.description}</span>
+                  </div>
                 </button>
               ))}
             </div>
