@@ -2,10 +2,17 @@ import { create } from 'zustand';
 import { addEdge, applyEdgeChanges, applyNodeChanges, Connection, EdgeChange, NodeChange, Viewport } from 'reactflow';
 import { componentMap } from '../domain/registry/componentRegistry';
 import { demoProject, templates } from '../domain/templates/templates';
-import { InspectorTab, ProjectDocument, SimulationSettings, SoapEdge, SoapNode, SoapNodeKind, TemplateId, ValidationIssue } from '../domain/schemas/types';
-import { db } from '../features/persistence/db';
+import { InspectorTab, ProjectDocument, SimulationSettings, SoapNode, SoapNodeKind, TemplateId, ValidationIssue } from '../domain/schemas/types';
+import { clearPersistedState, loadStoredProject, saveStoredProject } from '../features/persistence/db';
 import { runSimulationStep } from '../domain/simulation/engine';
-import { validateProject } from '../domain/validation/validateProject';
+import { restoreProjectDocument, validateProject } from '../domain/validation/validateProject';
+
+interface StartupNotice {
+  type: 'warning' | 'info';
+  message: string;
+}
+
+type StartupState = 'booting' | 'ready';
 
 interface AppState {
   project: ProjectDocument;
@@ -17,6 +24,9 @@ interface AppState {
   showProblematicOnly: boolean;
   issues: ValidationIssue[];
   pathSelection: { upstream: string[]; downstream: string[]; edges: string[] };
+  startupState: StartupState;
+  startupNotice?: StartupNotice;
+  startupError?: string;
   onNodesChange: (changes: NodeChange[]) => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
   onConnect: (connection: Connection) => void;
@@ -30,20 +40,32 @@ interface AppState {
   setSimulationRunning: (running: boolean) => void;
   setSimulationSpeed: (speed: number) => void;
   tickSimulation: (dt: number) => void;
-  resetProject: () => void;
+  resetProject: () => Promise<void>;
   newProject: () => void;
-  loadTemplate: (templateId: TemplateId) => void;
+  loadTemplate: (templateId: TemplateId) => Promise<void>;
   saveProject: () => Promise<void>;
   loadProject: (id?: string) => Promise<void>;
   exportProject: () => string;
   importProject: (json: string) => void;
   runValidation: () => void;
   toggleProblematicOnly: () => void;
+  clearLocalDataAndLoadDemo: () => Promise<void>;
+  loadSafeDemo: () => Promise<void>;
+  dismissStartupNotice: () => void;
+  setStartupError: (message?: string) => void;
 }
 
 const clone = (project: ProjectDocument) => structuredClone(project);
 const makeProject = () => clone(demoProject);
 const limitedLog = (project: ProjectDocument) => ({ ...project, eventLog: project.eventLog.slice(-80) });
+
+const sanitizeProjectState = (project: ProjectDocument) => ({
+  project,
+  issues: validateProject(project),
+  selectedNodeId: undefined,
+  selectedEdgeId: undefined,
+  pathSelection: { upstream: [], downstream: [], edges: [] },
+});
 
 const setByPath = (node: SoapNode, path: string, value: string | number | boolean) => {
   if (path === 'label' || path === 'description' || path === 'shortName') (node.data as any)[path] = String(value);
@@ -101,6 +123,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   showProblematicOnly: false,
   issues: validateProject(makeProject()),
   pathSelection: { upstream: [], downstream: [], edges: [] },
+  startupState: 'booting',
+  startupNotice: undefined,
+  startupError: undefined,
   onNodesChange: (changes) => set((state) => {
     const project = { ...state.project, nodes: applyNodeChanges(changes, state.project.nodes) };
     return { project, issues: validateProject(project) };
@@ -156,31 +181,86 @@ export const useAppStore = create<AppState>((set, get) => ({
     const project = limitedLog({ ...state.project, nodes: result.nodes, edges: result.edges, simulation, eventLog: [...state.project.eventLog, ...result.events] });
     return { project, issues: validateProject(project) };
   }),
-  resetProject: () => set(() => {
+  resetProject: async () => {
     const project = makeProject();
-    return { project, issues: validateProject(project), selectedNodeId: undefined, selectedEdgeId: undefined, pathSelection: { upstream: [], downstream: [], edges: [] } };
-  }),
-  newProject: () => set(() => {
-    const project = clone(templates['water-prep']);
-    return { project, selectedNodeId: undefined, selectedEdgeId: undefined, issues: validateProject(project), pathSelection: { upstream: [], downstream: [], edges: [] } };
-  }),
-  loadTemplate: (templateId) => set(() => {
+    set(sanitizeProjectState(project));
+    await saveStoredProject(project);
+  },
+  newProject: () => set(() => sanitizeProjectState(clone(templates['water-prep']))),
+  loadTemplate: async (templateId) => {
     const project = clone(templates[templateId]);
-    return { project, issues: validateProject(project), selectedNodeId: undefined, selectedEdgeId: undefined, pathSelection: { upstream: [], downstream: [], edges: [] } };
-  }),
+    set((state) => ({ ...sanitizeProjectState(project), startupNotice: state.startupNotice, startupError: undefined }));
+    await saveStoredProject(project);
+  },
   saveProject: async () => {
     const project = get().project;
-    await db.projects.put({ ...project, lastOpenedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+    await saveStoredProject(project);
   },
   loadProject: async (id) => {
-    const stored = id ? await db.projects.get(id) : await db.projects.orderBy('lastOpenedAt').last();
-    if (stored) set({ project: stored, selectedNodeId: undefined, selectedEdgeId: undefined, issues: validateProject(stored), pathSelection: { upstream: [], downstream: [], edges: [] } });
+    set({ startupState: 'booting', startupError: undefined });
+    try {
+      const result = await loadStoredProject(id);
+      if (result.project) {
+        set((state) => ({
+          ...sanitizeProjectState(result.project!),
+          startupState: 'ready',
+          startupNotice: result.recovered ? { type: 'warning', message: 'Обнаружены повреждённые локальные данные. Загружен безопасный проект.' } : state.startupNotice,
+          startupError: undefined,
+        }));
+        if (result.recovered) await saveStoredProject(result.project);
+        return;
+      }
+
+      const safeProject = makeProject();
+      set((state) => ({
+        ...sanitizeProjectState(safeProject),
+        startupState: 'ready',
+        startupNotice: result.recovered ? { type: 'warning', message: 'Обнаружены повреждённые локальные данные. Загружен безопасный проект.' } : state.startupNotice,
+        startupError: undefined,
+      }));
+      await saveStoredProject(safeProject);
+    } catch (error) {
+      console.error('Startup restore failed', error);
+      await clearPersistedState();
+      const safeProject = makeProject();
+      set({
+        ...sanitizeProjectState(safeProject),
+        startupState: 'ready',
+        startupNotice: { type: 'warning', message: 'Обнаружены повреждённые локальные данные. Загружен безопасный проект.' },
+        startupError: error instanceof Error ? error.message : 'Не удалось восстановить проект.',
+      });
+      await saveStoredProject(safeProject);
+    }
   },
   exportProject: () => JSON.stringify(get().project, null, 2),
   importProject: (json) => {
-    const project = JSON.parse(json) as ProjectDocument;
-    set({ project, selectedNodeId: undefined, selectedEdgeId: undefined, issues: validateProject(project), pathSelection: { upstream: [], downstream: [], edges: [] } });
+    const parsed = JSON.parse(json) as unknown;
+    const restored = restoreProjectDocument(parsed);
+    set({ ...sanitizeProjectState(restored), startupError: undefined });
   },
   runValidation: () => set((state) => ({ issues: validateProject(state.project), validationFocus: true })),
   toggleProblematicOnly: () => set((state) => ({ showProblematicOnly: !state.showProblematicOnly })),
+  clearLocalDataAndLoadDemo: async () => {
+    await clearPersistedState();
+    const project = makeProject();
+    set({
+      ...sanitizeProjectState(project),
+      startupNotice: { type: 'info', message: 'Локальные данные очищены. Загружен безопасный проект.' },
+      startupError: undefined,
+      startupState: 'ready',
+    });
+    await saveStoredProject(project);
+  },
+  loadSafeDemo: async () => {
+    const project = makeProject();
+    set((state) => ({
+      ...sanitizeProjectState(project),
+      startupNotice: state.startupNotice,
+      startupError: undefined,
+      startupState: 'ready',
+    }));
+    await saveStoredProject(project);
+  },
+  dismissStartupNotice: () => set({ startupNotice: undefined }),
+  setStartupError: (startupError) => set({ startupError }),
 }));

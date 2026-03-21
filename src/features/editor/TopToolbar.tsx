@@ -10,6 +10,7 @@ export const TopToolbar = () => {
   const loadTemplate = useAppStore((state) => state.loadTemplate);
   const runValidation = useAppStore((state) => state.runValidation);
   const resetProject = useAppStore((state) => state.resetProject);
+  const clearLocalDataAndLoadDemo = useAppStore((state) => state.clearLocalDataAndLoadDemo);
 
   const onExport = () => {
     const blob = new Blob([exportProject()], { type: 'application/json' });
@@ -34,7 +35,8 @@ export const TopToolbar = () => {
         <label className="import-button">Импорт JSON<input type="file" accept="application/json" onChange={(e) => e.target.files?.[0]?.text().then(importProject)} hidden /></label>
         <button onClick={() => rf.fitView({ padding: 0.22, duration: 500 })}>Вписать схему</button>
         <button onClick={runValidation}>Проверить</button>
-        <button onClick={resetProject}>Сброс</button>
+        <button onClick={() => void resetProject()}>Сброс</button>
+        <button onClick={() => void clearLocalDataAndLoadDemo()}>Очистить локальные данные</button>
       </div>
     </header>
   );
