@@ -12,9 +12,22 @@ export const SimulationPanel = () => {
 
   const selectedNode = project.nodes.find((node) => node.id === selectedNodeId);
   const selectedEdge = project.edges.find((edge) => edge.id === selectedEdgeId);
+  const warningCount = issues.filter((issue) => issue.severity !== 'info').length;
 
   return (
     <div className="simulation-panel">
+      <div className="sim-header">
+        <div>
+          <strong>Живое состояние схемы</strong>
+          <span>Поток, блокировки и уровень — реальные данные симуляции; остальное на холсте упрощено до символов.</span>
+        </div>
+        <div className="sim-pills">
+          <span className="sim-pill">{project.simulation.running ? 'Симуляция' : 'Редактирование'}</span>
+          <span className="sim-pill">Предупреждения: {warningCount}</span>
+          <span className="sim-pill">Поток: {Math.round(project.simulation.totalActiveFlow)} л/мин</span>
+        </div>
+      </div>
+
       <div className="sim-controls">
         <button onClick={() => setSimulationRunning(!project.simulation.running)}>{project.simulation.running ? 'Пауза' : 'Пуск'}</button>
         <label>
@@ -23,13 +36,9 @@ export const SimulationPanel = () => {
         </label>
         <button onClick={toggleProblematicOnly}>{showProblematicOnly ? 'Показать всё' : 'Только проблемные'}</button>
       </div>
-      <div className="status-strip">
-        <span><strong>Режим:</strong> {project.simulation.running ? 'Симуляция' : 'Редактирование'}</span>
+
+      <div className="status-strip compact">
         <span><strong>Среда:</strong> {project.simulation.activeMedium === 'none' ? 'нет' : project.simulation.activeMedium === 'mixed' ? 'смешанная' : project.simulation.activeMedium}</span>
-        <span><strong>Суммарный поток:</strong> {Math.round(project.simulation.totalActiveFlow)} л/мин</span>
-        <span><strong>Предупреждения:</strong> {issues.filter((issue) => issue.severity !== 'info').length}</span>
-      </div>
-      <div className="status-detail">
         <span><strong>Последнее событие:</strong> {project.simulation.lastEvent}</span>
         <span><strong>Выбор:</strong> {selectedNode ? `${selectedNode.data.label} • ${selectedNode.data.simulation.routeState}` : selectedEdge ? `${selectedEdge.data?.sourceLabel} → ${selectedEdge.data?.targetLabel}` : 'ничего не выбрано'}</span>
       </div>

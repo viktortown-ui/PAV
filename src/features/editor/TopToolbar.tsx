@@ -1,5 +1,4 @@
 import { useReactFlow } from 'reactflow';
-import { templates } from '../../domain/templates/templates';
 import { useAppStore } from '../../store/useAppStore';
 
 export const TopToolbar = () => {
@@ -10,8 +9,6 @@ export const TopToolbar = () => {
   const importProject = useAppStore((state) => state.importProject);
   const loadTemplate = useAppStore((state) => state.loadTemplate);
   const runValidation = useAppStore((state) => state.runValidation);
-  const simulation = useAppStore((state) => state.project.simulation);
-  const setSimulationRunning = useAppStore((state) => state.setSimulationRunning);
   const resetProject = useAppStore((state) => state.resetProject);
 
   const onExport = () => {
@@ -37,7 +34,6 @@ export const TopToolbar = () => {
         <label className="import-button">Импорт JSON<input type="file" accept="application/json" onChange={(e) => e.target.files?.[0]?.text().then(importProject)} hidden /></label>
         <button onClick={() => rf.fitView({ padding: 0.22, duration: 500 })}>Вписать схему</button>
         <button onClick={runValidation}>Проверить</button>
-        <button onClick={() => setSimulationRunning(!simulation.running)}>{simulation.running ? 'Пауза' : 'Пуск'}</button>
         <button onClick={resetProject}>Сброс</button>
       </div>
     </header>
