@@ -1,4 +1,4 @@
-import { MediumType, RouteState } from '../schemas/types';
+import { MediumType, RouteState } from '../../domain/schemas/types';
 
 export const mediumPalette: Record<MediumType, { base: string; glow: string; fill: string }> = {
   water: { base: '#63b9ff', glow: '#8de9ff', fill: '#4f9cff' },

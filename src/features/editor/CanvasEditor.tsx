@@ -1,11 +1,12 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactFlow, { Background, Controls, MiniMap, Panel, ReactFlowInstance, SelectionMode, Viewport, getViewportForBounds } from 'reactflow';
 import { shallow } from 'zustand/shallow';
-import { FlowEdge } from '../../edges/FlowEdge';
-import { ProcessNode } from '../../nodes/ProcessNode';
+import { FlowEdge } from '../../ui/edges/FlowEdge';
+import { ProcessNode } from '../../ui/nodes/ProcessNode';
 import { useAppStore } from '../../store/useAppStore';
 import { SimulationPanel } from '../simulation/SimulationPanel';
 import { instrumentCallsite } from '../../utils/instrumentation';
+import { DebugPanel } from '../devtools/DebugPanel';
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const VIEWPORT_POSITION_EPSILON = 0.5;
@@ -237,6 +238,7 @@ const CanvasEditorComponent = () => {
         <MiniMap pannable zoomable className="minimap" maskColor="rgba(8,12,18,0.78)" />
         <Controls showInteractive={false} />
         <Panel position="bottom-center"><SimulationPanel /></Panel>
+        <Panel position="top-right"><DebugPanel /></Panel>
       </ReactFlow>
     </div>
   );

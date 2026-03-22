@@ -2,8 +2,7 @@ import { useCallback } from 'react';
 import { useReactFlow } from 'reactflow';
 import { EdgeLabelMode } from '../../domain/schemas/types';
 import { useAppStore } from '../../store/useAppStore';
-
-const edgeLabelModes: Array<{ value: EdgeLabelMode; label: string }> = [ { value: 'hidden', label: 'Скрыть подписи' }, { value: 'selected', label: 'Только выбранные' }, { value: 'active', label: 'Только активные' }, { value: 'all', label: 'Все сегменты' } ];
+import { edgeLabelModes } from '../inspector/schemas';
 
 export const TopToolbar = () => {
   const rf = useReactFlow();

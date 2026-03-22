@@ -1,8 +1,8 @@
 import { memo } from 'react';
 import { BaseEdge, EdgeLabelRenderer, EdgeProps, getSmoothStepPath, useStore } from 'reactflow';
-import { MediumType, RouteState } from '../domain/schemas/types';
-import { mediumPalette, routeTone } from '../domain/visual/tokens';
-import { EdgeActionKind, useAppStore } from '../store/useAppStore';
+import { MediumType, RouteState } from '../../domain/schemas/types';
+import { mediumPalette, routeTone } from '../tokens/tokens';
+import { EdgeActionKind, useAppStore } from '../../store/useAppStore';
 
 const routeStateLabel: Record<RouteState, string> = { idle: 'Ожидание', primed: 'Подготовлен', flowing: 'Поток', blocked: 'Блокировка', starved: 'Нет подпитки', draining: 'Слив', cip: 'CIP', alarm: 'Авария', maintenance: 'Ремонт', offline: 'Отключён' };
 const routeParticleMode: Record<RouteState, string> = { idle: 'idle', primed: 'waiting', flowing: 'flowing', blocked: 'blocked', starved: 'starved', draining: 'draining', cip: 'cip', alarm: 'alarm', maintenance: 'idle', offline: 'idle' };
