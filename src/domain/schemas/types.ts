@@ -1,17 +1,44 @@
 import type { Edge, Node, Viewport } from 'reactflow';
 
 export type SoapNodeKind =
-  | 'inlet'
-  | 'filter'
-  | 'ro'
+  | 'source'
+  | 'waterFilter'
+  | 'roSkid'
   | 'tank'
+  | 'bufferTank'
   | 'reactor'
   | 'heatedReactor'
+  | 'fillingStation'
+  | 'filterUnit'
   | 'pump'
-  | 'valve'
-  | 'sensor'
-  | 'filling'
-  | 'drain';
+  | 'dosingPump'
+  | 'inlineFilter'
+  | 'inlineMixer'
+  | 'heatExchanger'
+  | 'manualValve'
+  | 'shutoffValve'
+  | 'solenoidValve'
+  | 'checkValve'
+  | 'controlValve'
+  | 'gateValve'
+  | 'drainValve'
+  | 'reliefValve'
+  | 'flowMeter'
+  | 'pressureSensor'
+  | 'temperatureSensor'
+  | 'levelSensor'
+  | 'phSensor'
+  | 'conductivitySensor'
+  | 'indicator'
+  | 'tee'
+  | 'cross'
+  | 'collector'
+  | 'splitter'
+  | 'mixingJunction'
+  | 'drainBranch'
+  | 'samplePoint'
+  | 'consumer'
+  | 'utilityDrain';
 
 export type MediumType = 'water' | 'product' | 'cip' | 'waste';
 export type NodeStatus = 'normal' | 'active' | 'warning' | 'alarm' | 'disabled';
@@ -21,6 +48,11 @@ export type PropertyFieldType = 'text' | 'number' | 'toggle' | 'select' | 'texta
 export type Severity = 'info' | 'warning' | 'error';
 export type TemplateId = 'water-prep' | 'soap-line' | 'cip-fragment';
 export type EdgeLabelMode = 'hidden' | 'selected' | 'active' | 'all';
+export type EquipmentClass = 'major' | 'line' | 'valve' | 'instrument' | 'topology';
+export type ValveMode = 'manual' | 'auto';
+export type FailPosition = 'open' | 'closed' | 'hold';
+export type SignalType = 'analogue' | 'digital' | 'pulse';
+export type TopologyMode = 'distribution' | 'collection' | 'mixing' | 'drain';
 
 export interface PropertyField {
   key: string;
@@ -57,25 +89,29 @@ export interface ProjectViewState {
 
 export interface SoapNodeData {
   kind: SoapNodeKind;
-  label: string;
+  visibleName: string;
   shortName: string;
-  tag: string;
+  technicalTag: string;
   category: string;
   description: string;
+  className: EquipmentClass;
   status: NodeStatus;
   rotation: number;
   medium: MediumType;
+  notes?: string;
   process: Record<string, number | string | boolean>;
   visual: {
     accent: string;
     fill: number;
     enabled: boolean;
-    semanticSize: 'main' | 'inline' | 'instrument';
+    semanticSize: 'major' | 'line' | 'valve' | 'instrument' | 'topology';
     showLabel: boolean;
   };
   ports: {
     inputs: number;
     outputs: number;
+    preferredDirection: 'ltr' | 'ttb';
+    inline: boolean;
   };
   simulation: {
     enabled: boolean;
@@ -101,6 +137,10 @@ export interface SoapEdgeData {
   blockedBy?: string[];
   hovered?: boolean;
   labelMode?: EdgeLabelMode;
+  segmentId?: string;
+  direction?: 'forward' | 'reverse' | 'bidirectional';
+  nominalDiameter?: string;
+  stateLabel?: string;
 }
 
 export type SoapNode = Node<SoapNodeData>;
@@ -110,9 +150,11 @@ export interface ComponentDefinition {
   type: SoapNodeKind;
   label: string;
   shortName: string;
+  technicalPrefix: string;
   category: string;
   description: string;
-  defaults: Omit<SoapNodeData, 'label' | 'shortName' | 'category' | 'description'>;
+  className: EquipmentClass;
+  defaults: Omit<SoapNodeData, 'visibleName' | 'shortName' | 'technicalTag' | 'category' | 'description' | 'className'>;
   fields: Record<InspectorTab, PropertyField[]>;
 }
 
@@ -148,6 +190,8 @@ export interface ProjectDocument {
   name: string;
   templateId: TemplateId;
   updatedAt: string;
+  appSchemaVersion: number;
+  projectSchemaVersion: number;
   nodes: SoapNode[];
   edges: SoapEdge[];
   view: ProjectViewState;
