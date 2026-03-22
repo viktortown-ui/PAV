@@ -20,6 +20,7 @@ export type InspectorTab = 'main' | 'process' | 'ports' | 'signals' | 'appearanc
 export type PropertyFieldType = 'text' | 'number' | 'toggle' | 'select' | 'textarea';
 export type Severity = 'info' | 'warning' | 'error';
 export type TemplateId = 'water-prep' | 'soap-line' | 'cip-fragment';
+export type EdgeLabelMode = 'hidden' | 'selected' | 'active' | 'all';
 
 export interface PropertyField {
   key: string;
@@ -75,6 +76,8 @@ export interface SoapEdgeData {
   sourceLabel?: string;
   targetLabel?: string;
   blockedBy?: string[];
+  hovered?: boolean;
+  labelMode?: EdgeLabelMode;
 }
 
 export type SoapNode = Node<SoapNodeData>;

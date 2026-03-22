@@ -16,6 +16,9 @@ export const CanvasEditor = () => {
   const tickSimulation = useAppStore((state) => state.tickSimulation);
   const pathSelection = useAppStore((state) => state.pathSelection);
   const showProblematicOnly = useAppStore((state) => state.showProblematicOnly);
+  const hoveredEdgeId = useAppStore((state) => state.hoveredEdgeId);
+  const edgeLabelMode = useAppStore((state) => state.edgeLabelMode);
+  const hoverEdge = useAppStore((state) => state.hoverEdge);
   const issues = useAppStore((state) => state.issues);
   const frameRef = useRef<number>();
   const lastTimeRef = useRef<number>();
@@ -38,7 +41,7 @@ export const CanvasEditor = () => {
   const problemEdgeIds = new Set(issues.flatMap((issue) => issue.edgeIds ?? []));
 
   const nodes = project.nodes.map((node) => ({ ...node, hidden: showProblematicOnly ? !problemNodeIds.has(node.id) : false, style: { opacity: pathSelection.upstream.length || pathSelection.downstream.length ? (pathSelection.upstream.includes(node.id) || pathSelection.downstream.includes(node.id) || node.id === useAppStore.getState().selectedNodeId ? 1 : 0.22) : 1 } }));
-  const edges = project.edges.map((edge) => ({ ...edge, hidden: showProblematicOnly ? !problemEdgeIds.has(edge.id) : false, data: { ...edge.data, selectedPath: pathSelection.edges.includes(edge.id) }, style: { opacity: pathSelection.edges.length ? (pathSelection.edges.includes(edge.id) ? 1 : 0.16) : 1 } }));
+  const edges = project.edges.map((edge) => ({ ...edge, hidden: showProblematicOnly ? !problemEdgeIds.has(edge.id) : false, data: { ...edge.data, selectedPath: pathSelection.edges.includes(edge.id), hovered: hoveredEdgeId === edge.id, labelMode: edgeLabelMode }, style: { opacity: pathSelection.edges.length ? (pathSelection.edges.includes(edge.id) ? 1 : 0.16) : 1 } }));
 
   return (
     <div className="canvas-shell">
@@ -52,7 +55,9 @@ export const CanvasEditor = () => {
         onConnect={onConnect}
         onNodeClick={(_, node) => selectNode(node.id)}
         onEdgeClick={(_, edge) => selectEdge(edge.id)}
-        onPaneClick={() => { selectNode(undefined); selectEdge(undefined); }}
+        onEdgeMouseEnter={(_, edge) => hoverEdge(edge.id)}
+        onEdgeMouseLeave={() => hoverEdge(undefined)}
+        onPaneClick={() => { selectNode(undefined); selectEdge(undefined); hoverEdge(undefined); }}
         defaultViewport={project.viewport}
         onMoveEnd={(_, viewport) => setViewport(viewport)}
         snapToGrid
