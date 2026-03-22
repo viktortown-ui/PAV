@@ -13,7 +13,7 @@ interface SimulationResult {
 }
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
-const vesselKinds = new Set(['inlet', 'tank', 'reactor', 'heatedReactor']);
+const vesselKinds = new Set(['source', 'tank', 'bufferTank', 'reactor', 'heatedReactor']);
 
 const routeStateFor = (active: boolean, blocked: boolean, sourceLevel: number, medium: import('../schemas/types').MediumType): RouteState => {
   if (blocked) return sourceLevel <= 0 ? 'starved' : 'blocked';
@@ -54,10 +54,10 @@ export const runSimulationStep = (project: ProjectDocument, dt: number): Simulat
 
     const sourceLevel = Number(source.data.process.level ?? 0);
     const sourceEnabled = Boolean(source.data.simulation.enabled) && source.data.visual.enabled;
-    const valveOpen = source.data.kind !== 'valve' || Boolean(source.data.process.valveOpen);
-    const targetValveOpen = target.data.kind !== 'valve' || Boolean(target.data.process.valveOpen);
-    const pumpReady = source.data.kind !== 'pump' || Boolean(source.data.process.pumpOn);
-    const targetCanReceive = target.data.kind === 'drain' || Number(target.data.process.capacity ?? Infinity) === 0 || Number(target.data.process.level ?? 0) < Number(target.data.process.capacity ?? Infinity);
+    const valveOpen = source.data.className !== 'valve' || Boolean(source.data.process.valveOpen ?? source.data.process.valveState !== 'closed');
+    const targetValveOpen = target.data.className !== 'valve' || Boolean(target.data.process.valveOpen ?? target.data.process.valveState !== 'closed');
+    const pumpReady = (source.data.kind !== 'pump' && source.data.kind !== 'dosingPump') || Boolean(source.data.process.pumpOn);
+    const targetCanReceive = target.data.kind === 'utilityDrain' || Number(target.data.process.capacity ?? Infinity) === 0 || Number(target.data.process.level ?? 0) < Number(target.data.process.capacity ?? Infinity);
     const active = sourceEnabled && sourceLevel > 0 && valveOpen && targetValveOpen && pumpReady && targetCanReceive;
     const blocked = !active && (sourceEnabled || sourceLevel > 0);
     const flowRate = active ? Number(source.data.process.flowRate ?? source.data.simulation.flow ?? 0) * project.simulation.speed : 0;
@@ -72,8 +72,8 @@ export const runSimulationStep = (project: ProjectDocument, dt: number): Simulat
       routeState,
       flowRate,
       pressure: active ? Number(source.data.process.pressure ?? 1) : blocked ? Number(source.data.process.pressure ?? 1.8) : 0,
-      sourceLabel: source.data.label,
-      targetLabel: target.data.label,
+      sourceLabel: source.data.visibleName,
+      targetLabel: target.data.visibleName,
       blockedBy: blocked && (!valveOpen || !targetValveOpen) ? ['Закрытый клапан'] : blocked && !pumpReady ? ['Насос выключен'] : blocked && !targetCanReceive ? ['Приёмник заполнен'] : blocked && sourceLevel <= 0 ? ['Источник пуст'] : [],
     };
 
@@ -89,7 +89,7 @@ export const runSimulationStep = (project: ProjectDocument, dt: number): Simulat
       const delta = (flowRate * dt) / 60;
       if (vesselKinds.has(source.data.kind)) source.data.process.level = clamp(Number(source.data.process.level ?? 0) - delta, 0, Number(source.data.process.capacity ?? sourceLevel));
       if (vesselKinds.has(target.data.kind)) target.data.process.level = clamp(Number(target.data.process.level ?? 0) + delta, 0, Number(target.data.process.capacity ?? Infinity));
-      if ((target.data.kind === 'reactor' || target.data.kind === 'heatedReactor') && Boolean(target.data.process.mixingOn)) target.data.process.rpm = Math.max(120, Number(target.data.process.rpm ?? 120));
+      if ((target.data.kind === 'reactor' || target.data.kind === 'heatedReactor' || target.data.kind === 'inlineMixer') && Boolean(target.data.process.mixingOn)) target.data.process.rpm = Math.max(120, Number(target.data.process.rpm ?? 120));
     } else if (blocked) {
       source.data.simulation.blocked = true;
       target.data.simulation.blocked = true;
@@ -107,15 +107,15 @@ export const runSimulationStep = (project: ProjectDocument, dt: number): Simulat
     const level = Number(node.data.process.level ?? 0);
     if (capacity > 0) node.data.visual.fill = clamp((level / capacity) * 100, 0, 100);
     node.data.medium = (node.data.process.medium as any) ?? node.data.medium;
-    if (node.data.kind === 'pump' && Boolean(node.data.process.pumpOn) && level <= 0 && Boolean(node.data.process.dryRunWarning)) {
+    if ((node.data.kind === 'pump' || node.data.kind === 'dosingPump') && Boolean(node.data.process.pumpOn) && level <= 0 && Boolean(node.data.process.dryRunWarning ?? true)) {
       node.data.status = 'warning';
       node.data.simulation.alarmText = 'Риск сухого хода';
-      warnings.push(`${node.data.label}: риск сухого хода.`);
+      warnings.push(`${node.data.visibleName}: риск сухого хода.`);
     }
     if (capacity > 0 && level >= capacity && Boolean(node.data.process.overflowAlarm)) {
       node.data.status = 'alarm';
       node.data.simulation.alarmText = 'Переполнение';
-      warnings.push(`${node.data.label}: переполнение.`);
+      warnings.push(`${node.data.visibleName}: переполнение.`);
     }
   });
 
