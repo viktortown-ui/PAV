@@ -89,6 +89,14 @@ input[type='checkbox'] { width: 18px; height: 18px; }
 .edge-badge.is-focus { border-color: rgba(125, 230, 255, 0.32); }
 .edge-badge.is-active { background: rgba(6, 20, 28, 0.96); }
 .edge-badge.is-warning { border-color: rgba(255, 154, 91, 0.4); }
+.edge-hitbox { position: absolute; width: 34px; height: 34px; border: none; border-radius: 999px; background: rgba(125, 230, 255, 0.001); box-shadow: 0 0 0 1px rgba(255,255,255,0.04); }
+.edge-hitbox.is-selected { background: rgba(125, 230, 255, 0.14); box-shadow: 0 0 0 1px rgba(125, 230, 255, 0.44), 0 0 0 8px rgba(125, 230, 255, 0.08); }
+.edge-editor-popover { position: absolute; min-width: 180px; padding: 8px; border-radius: 16px; background: rgba(7, 14, 23, 0.98); border: 1px solid rgba(120, 164, 217, 0.22); box-shadow: 0 16px 38px rgba(0,0,0,0.35); }
+.edge-toolbar, .edge-picker { display: grid; gap: 6px; }
+.edge-toolbar button, .edge-picker button { border: 1px solid rgba(122,150,183,0.18); background: linear-gradient(180deg, #132335, #0d1825); color: #edf7ff; border-radius: 12px; padding: 8px 10px; text-align: left; }
+.edge-picker { grid-template-columns: repeat(2, minmax(0, 1fr)); min-width: 300px; }
+.edge-picker .is-secondary { grid-column: 1 / -1; text-align: center; color: #9fb3cd; }
+.branch-port-handle { width: 14px; height: 14px; top: -7px; background: #8de2ff; box-shadow: 0 0 0 4px rgba(141, 226, 255, 0.15); }
 .tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0; }
 .tabs button { border: 1px solid rgba(122,150,183,0.15); background: #0d1725; color: #90a6c5; border-radius: 12px; padding: 8px 10px; font-size: 12px; }
 .tabs button.is-active { border-color: rgba(125,230,255,0.42); color: #eef8ff; }
