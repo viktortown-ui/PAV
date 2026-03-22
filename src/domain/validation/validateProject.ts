@@ -1,6 +1,7 @@
 import { componentMap } from '../registry/componentRegistry';
 import { demoProject } from '../templates/templates';
 import { EventLogEntry, MediumType, ProjectDocument, ProjectViewState, RouteState, Severity, SimulationSettings, SoapEdge, SoapNode, SoapNodeData, SoapNodeKind, TemplateId, TemplateViewMetadata, ValidationIssue } from '../schemas/types';
+import { instrumentCallsite } from '../../utils/instrumentation';
 
 const TEMPLATE_IDS = new Set(['water-prep', 'soap-line', 'cip-fragment'] as const);
 const MEDIUM_TYPES = new Set<MediumType>(['water', 'product', 'cip', 'waste']);
@@ -163,6 +164,13 @@ const sanitizeEdge = (value: unknown, nodeIds: Set<string>): SoapEdge | null => 
 };
 
 export const restoreProjectDocument = (value: unknown): ProjectDocument => {
+  instrumentCallsite('project restore', {
+    callsite: 'restoreProjectDocument',
+    when: 'Runs whenever persisted or imported project data must be normalized.',
+    why: 'It sanitizes untrusted JSON before the rest of the editor consumes it.',
+    repeatable: true,
+    guidance: 'none',
+  });
   if (!isObject(value)) throw new Error('Сохранённый проект не является объектом.');
 
   const fallback = structuredClone(demoProject);
@@ -190,6 +198,14 @@ export const restoreProjectDocument = (value: unknown): ProjectDocument => {
 export const getPersistenceSchemaVersion = () => PERSISTENCE_SCHEMA_VERSION;
 
 export const validateProject = (project: ProjectDocument): ValidationIssue[] => {
+  instrumentCallsite('graph validation', {
+    callsite: 'validateProject',
+    when: 'Runs on initialization, debounced graph edits, and explicit validation requests.',
+    why: 'It traverses nodes and edges to produce user-facing graph issues.',
+    repeatable: true,
+    guidance: 'throttle',
+    details: { nodeCount: project.nodes.length, edgeCount: project.edges.length },
+  });
   const issues: ValidationIssue[] = [];
   const incoming = new Map<string, number>();
   const outgoing = new Map<string, number>();

@@ -1,5 +1,6 @@
 import { mediumPalette } from '../visual/tokens';
 import { EventLogEntry, ProjectDocument, RouteState, SimulationSettings, SoapEdge, SoapNode } from '../schemas/types';
+import { instrumentCallsite } from '../../utils/instrumentation';
 
 interface SimulationResult {
   nodes: SoapNode[];
@@ -23,6 +24,14 @@ const routeStateFor = (active: boolean, blocked: boolean, sourceLevel: number, m
 };
 
 export const runSimulationStep = (project: ProjectDocument, dt: number): SimulationResult => {
+  instrumentCallsite('route recomputation', {
+    callsite: 'runSimulationStep',
+    when: 'Runs on every animation-frame simulation tick while simulation is enabled.',
+    why: 'It recomputes edge flow, blockage, and route-state propagation across the graph.',
+    repeatable: true,
+    guidance: 'throttle',
+    details: { dt, running: project.simulation.running, edgeCount: project.edges.length },
+  });
   const warnings: string[] = [];
   const events: EventLogEntry[] = [];
   const nextNodes = project.nodes.map((node) => structuredClone(node));

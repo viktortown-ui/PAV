@@ -5,6 +5,7 @@ import { FlowEdge } from '../../edges/FlowEdge';
 import { ProcessNode } from '../../nodes/ProcessNode';
 import { useAppStore } from '../../store/useAppStore';
 import { SimulationPanel } from '../simulation/SimulationPanel';
+import { instrumentCallsite } from '../../utils/instrumentation';
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const VIEWPORT_POSITION_EPSILON = 0.5;
@@ -153,9 +154,23 @@ const CanvasEditorComponent = () => {
     }
 
     suppressMoveEndRef.current = true;
+    instrumentCallsite('setViewport', {
+      callsite: `CanvasEditor.applyViewport(${mode})`,
+      when: mode === 'restore'
+        ? `Runs after a project restore/import/template load nonce changes (${reason}).`
+        : `Runs after a curated viewport request such as initial load or resize (${reason}).`,
+      why: mode === 'restore'
+        ? 'It replays the saved viewport so the restored project opens in the same place.'
+        : 'It computes and applies the metadata-driven viewport that frames the template safely.',
+      repeatable: mode === 'curated',
+      guidance: mode === 'curated' ? 'throttle' : 'none',
+      details: { currentViewport, targetViewport },
+    });
     debugLog('viewport', `${reason}: applying ${mode} viewport`, { currentViewport, targetViewport });
     await flow.setViewport(targetViewport, { duration: 0 });
-    if (mode === 'curated') setViewportState(targetViewport, { manual: false });
+    if (mode === 'curated' && !sameViewport(latestViewRef.current.viewport, targetViewport)) {
+      setViewportState(targetViewport, { manual: false });
+    }
   }, [buildCuratedViewport, flow, setViewportState]);
 
   useEffect(() => {

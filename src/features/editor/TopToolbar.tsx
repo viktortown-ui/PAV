@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { useReactFlow } from 'reactflow';
 import { EdgeLabelMode } from '../../domain/schemas/types';
 import { useAppStore } from '../../store/useAppStore';
+import { instrumentCallsite } from '../../utils/instrumentation';
 
 const edgeLabelModes: Array<{ value: EdgeLabelMode; label: string }> = [
   { value: 'hidden', label: 'Скрыть линии' },
@@ -11,8 +12,13 @@ const edgeLabelModes: Array<{ value: EdgeLabelMode; label: string }> = [
 ];
 
 const logFitView = () => {
-  if (!import.meta.env.DEV) return;
-  console.debug('[perf:viewport] explicit fitView requested from toolbar');
+  instrumentCallsite('fitView', {
+    callsite: 'TopToolbar.onFitView',
+    when: 'Runs when the user clicks the "Вписать схему" toolbar button.',
+    why: 'It reframes the current graph in the viewport after an explicit user request.',
+    repeatable: true,
+    guidance: 'user-triggered',
+  });
 };
 
 export const TopToolbar = () => {
@@ -50,7 +56,7 @@ export const TopToolbar = () => {
         <button onClick={() => loadTemplate('water-prep')}>Шаблон воды</button>
         <button onClick={() => loadTemplate('soap-line')}>Шаблон ПАВ</button>
         <button onClick={() => loadTemplate('cip-fragment')}>Шаблон CIP</button>
-        <button onClick={() => void saveProject()}>Сохранить</button>
+        <button onClick={() => void saveProject('manual')}>Сохранить</button>
         <button onClick={() => void loadProject()}>Открыть</button>
         <button onClick={onExport}>Экспорт JSON</button>
         <label className="import-button">Импорт JSON<input type="file" accept="application/json" onChange={(e) => e.target.files?.[0]?.text().then(importProject)} hidden /></label>
