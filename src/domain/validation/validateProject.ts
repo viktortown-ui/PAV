@@ -58,6 +58,8 @@ const sanitizeNode = (value: unknown): SoapNode | null => {
   const sanitizedData: SoapNodeData = {
     ...structuredClone(definition.defaults),
     kind,
+    id: asString(value.data.id, value.id),
+    type: kind,
     visibleName: asString(value.data.visibleName ?? value.data.label, definition.label),
     shortName: asString(value.data.shortName, definition.shortName),
     technicalTag: asString(value.data.technicalTag ?? value.data.tag, `${definition.technicalPrefix}-101`),
@@ -65,13 +67,23 @@ const sanitizeNode = (value: unknown): SoapNode | null => {
     description: asString(value.data.description, definition.description),
     className: definition.className,
     status: typeof value.data.status === 'string' && STATUSES.has(value.data.status) ? value.data.status as SoapNodeData['status'] : definition.defaults.status,
+    mode: value.data.mode === 'manual' ? 'manual' : 'auto',
     rotation: asNumber(value.data.rotation, definition.defaults.rotation),
+    mediumType: asMedium(value.data.mediumType ?? value.data.medium, definition.defaults.mediumType),
     medium: asMedium(value.data.medium, definition.defaults.medium),
     notes: asString(value.data.notes, ''),
+    alarms: Array.isArray(value.data.alarms) ? value.data.alarms.filter((item: unknown): item is string => typeof item === 'string') : [],
+    isEnabled: asBoolean(value.data.isEnabled, true),
+    isInteractive: asBoolean(value.data.isInteractive, true),
+    simulationEnabled: asBoolean(value.data.simulationEnabled, true),
+    createdAt: asString(value.data.createdAt, new Date().toISOString()),
+    updatedAt: asString(value.data.updatedAt, new Date().toISOString()),
+    revision: Math.max(1, asNumber(value.data.revision, 1)),
     process: Object.fromEntries(Object.entries(process).filter(([, entry]) => ['string', 'number', 'boolean'].includes(typeof entry))) as Record<string, string | number | boolean>,
     visual: { accent: asString(visual.accent, definition.defaults.visual.accent), fill: Math.min(100, Math.max(0, asNumber(visual.fill, definition.defaults.visual.fill))), enabled: asBoolean(visual.enabled, definition.defaults.visual.enabled), semanticSize: ['major', 'line', 'valve', 'instrument', 'topology'].includes(String(visual.semanticSize)) ? visual.semanticSize as any : definition.defaults.visual.semanticSize, showLabel: asBoolean(visual.showLabel, definition.defaults.visual.showLabel) },
     ports: { inputs: Math.max(0, Math.round(asNumber(ports.inputs, definition.defaults.ports.inputs))), outputs: Math.max(0, Math.round(asNumber(ports.outputs, definition.defaults.ports.outputs))), preferredDirection: ports.preferredDirection === 'ttb' ? 'ttb' : 'ltr', inline: asBoolean(ports.inline, definition.defaults.ports.inline) },
-    simulation: { enabled: asBoolean(simulation.enabled, definition.defaults.simulation.enabled), active: asBoolean(simulation.active, definition.defaults.simulation.active), blocked: asBoolean(simulation.blocked, definition.defaults.simulation.blocked), routeState: asRouteState(simulation.routeState, definition.defaults.simulation.routeState), flow: Math.max(0, asNumber(simulation.flow, definition.defaults.simulation.flow)), lastEvent: typeof simulation.lastEvent === 'string' ? simulation.lastEvent : definition.defaults.simulation.lastEvent, alarmText: typeof simulation.alarmText === 'string' ? simulation.alarmText : definition.defaults.simulation.alarmText },
+    runtime: { enabled: asBoolean(simulation.enabled, definition.defaults.runtime.enabled), active: asBoolean(simulation.active, definition.defaults.runtime.active), blocked: asBoolean(simulation.blocked, definition.defaults.runtime.blocked), routeState: asRouteState(simulation.routeState, definition.defaults.runtime.routeState), flow: Math.max(0, asNumber(simulation.flow, definition.defaults.runtime.flow)), flowLpm: Math.max(0, asNumber((simulation as any).flowLpm ?? simulation.flow, definition.defaults.runtime.flowLpm)), lastEvent: typeof simulation.lastEvent === 'string' ? simulation.lastEvent : definition.defaults.runtime.lastEvent, alarmText: typeof simulation.alarmText === 'string' ? simulation.alarmText : definition.defaults.runtime.alarmText },
+    simulation: { enabled: asBoolean(simulation.enabled, definition.defaults.runtime.enabled), active: asBoolean(simulation.active, definition.defaults.runtime.active), blocked: asBoolean(simulation.blocked, definition.defaults.runtime.blocked), routeState: asRouteState(simulation.routeState, definition.defaults.runtime.routeState), flow: Math.max(0, asNumber(simulation.flow, definition.defaults.runtime.flow)), flowLpm: Math.max(0, asNumber((simulation as any).flowLpm ?? simulation.flow, definition.defaults.runtime.flowLpm)), lastEvent: typeof simulation.lastEvent === 'string' ? simulation.lastEvent : definition.defaults.runtime.lastEvent, alarmText: typeof simulation.alarmText === 'string' ? simulation.alarmText : definition.defaults.runtime.alarmText },
   };
   return { id: value.id, type: 'processNode', position: { x: asNumber(value.position.x, 0), y: asNumber(value.position.y, 0) }, data: sanitizedData };
 };
@@ -80,7 +92,7 @@ const sanitizeEdge = (value: unknown, nodeIds: Set<string>): SoapEdge | null => 
   if (!isObject(value) || typeof value.id !== 'string' || typeof value.source !== 'string' || typeof value.target !== 'string') return null;
   if (!nodeIds.has(value.source) || !nodeIds.has(value.target)) return null;
   const edgeData = isObject(value.data) ? value.data : {};
-  return { id: value.id, source: value.source, target: value.target, sourceHandle: typeof value.sourceHandle === 'string' ? value.sourceHandle : null, targetHandle: typeof value.targetHandle === 'string' ? value.targetHandle : null, type: 'flowEdge', animated: asBoolean(value.animated, false), markerEnd: value.markerEnd as SoapEdge['markerEnd'], data: { medium: asMedium(edgeData.medium, 'water'), flowActive: asBoolean(edgeData.flowActive, false), blocked: asBoolean(edgeData.blocked, false), routeState: asRouteState(edgeData.routeState, 'idle'), flowRate: Math.max(0, asNumber(edgeData.flowRate, 0)), pressure: asNumber(edgeData.pressure, 0), selectedPath: asBoolean(edgeData.selectedPath, false), sourceLabel: typeof edgeData.sourceLabel === 'string' ? edgeData.sourceLabel : undefined, targetLabel: typeof edgeData.targetLabel === 'string' ? edgeData.targetLabel : undefined, blockedBy: Array.isArray(edgeData.blockedBy) ? edgeData.blockedBy.filter((item): item is string => typeof item === 'string') : undefined, segmentId: asString(edgeData.segmentId, value.id), direction: edgeData.direction === 'reverse' || edgeData.direction === 'bidirectional' ? edgeData.direction : 'forward', nominalDiameter: asString(edgeData.nominalDiameter, 'DN50'), stateLabel: asString(edgeData.stateLabel, 'Ожидание') } };
+  return { id: value.id, source: value.source, target: value.target, sourceHandle: typeof value.sourceHandle === 'string' ? value.sourceHandle : null, targetHandle: typeof value.targetHandle === 'string' ? value.targetHandle : null, type: 'flowEdge', animated: asBoolean(value.animated, false), markerEnd: value.markerEnd as SoapEdge['markerEnd'], data: { mediumType: asMedium(edgeData.mediumType ?? edgeData.medium, 'water'), medium: asMedium(edgeData.medium, 'water'), flowLpm: Math.max(0, asNumber(edgeData.flowLpm ?? edgeData.flowRate, 0)), flowRate: Math.max(0, asNumber(edgeData.flowRate ?? edgeData.flowLpm, 0)), flowActive: asBoolean(edgeData.flowActive, false), blocked: asBoolean(edgeData.blocked, false), routeState: asRouteState(edgeData.routeState, 'idle'), pressure: asNumber(edgeData.pressure, 0), selectedPath: asBoolean(edgeData.selectedPath, false), sourceLabel: typeof edgeData.sourceLabel === 'string' ? edgeData.sourceLabel : undefined, targetLabel: typeof edgeData.targetLabel === 'string' ? edgeData.targetLabel : undefined, blockedBy: Array.isArray(edgeData.blockedBy) ? edgeData.blockedBy.filter((item): item is string => typeof item === 'string') : undefined, segmentId: asString(edgeData.segmentId, value.id), direction: edgeData.direction === 'reverse' || edgeData.direction === 'bidirectional' ? edgeData.direction : 'forward', nominalDiameter: asString(edgeData.nominalDiameter, 'DN50'), stateLabel: asString(edgeData.stateLabel, 'Ожидание'), upstreamRef: asString(edgeData.upstreamRef, value.source), downstreamRef: asString(edgeData.downstreamRef, value.target) } };
 };
 
 export const restoreProjectDocument = (value: unknown): ProjectDocument => {

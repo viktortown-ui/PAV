@@ -64,12 +64,15 @@ export const runSimulationStep = (project: ProjectDocument, dt: number): Simulat
     const routeState = routeStateFor(active, blocked, sourceLevel, edge.data?.medium ?? source.data.medium);
 
     edge.animated = active;
+    const currentEdgeData = edge.data ?? { mediumType: source.data.mediumType, medium: source.data.medium, flowLpm: 0, flowRate: 0, flowActive: false, blocked: false, routeState: 'idle', pressure: 0, nominalDiameter: 'DN50' as const };
     edge.data = {
-      ...edge.data,
-      medium: edge.data?.medium ?? source.data.medium,
+      ...currentEdgeData,
+      mediumType: currentEdgeData.mediumType ?? source.data.mediumType,
+      medium: currentEdgeData.medium ?? source.data.medium,
       flowActive: active,
       blocked,
       routeState,
+      flowLpm: flowRate,
       flowRate,
       pressure: active ? Number(source.data.process.pressure ?? 1) : blocked ? Number(source.data.process.pressure ?? 1.8) : 0,
       sourceLabel: source.data.visibleName,
@@ -79,7 +82,7 @@ export const runSimulationStep = (project: ProjectDocument, dt: number): Simulat
 
     if (active) {
       totalActiveFlow += flowRate;
-      activeMediums.add(edge.data.medium);
+      activeMediums.add((edge.data?.mediumType ?? edge.data?.medium) || source.data.mediumType);
       source.data.simulation.active = true;
       target.data.simulation.active = true;
       source.data.status = 'active';

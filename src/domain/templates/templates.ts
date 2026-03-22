@@ -7,18 +7,24 @@ export const PROJECT_SCHEMA_VERSION = 2;
 
 const node = (id: string, type: SoapNodeKind, x: number, y: number, visibleName?: string, technicalTag?: string): SoapNode => {
   const def = componentMap.get(type)!;
+  const timestamp = new Date().toISOString();
   return {
     id,
     type: 'processNode',
     position: { x, y },
     data: {
       ...structuredClone(def.defaults),
+      id,
+      type,
       visibleName: visibleName ?? def.label,
       shortName: def.shortName,
       technicalTag: technicalTag ?? `${def.technicalPrefix}-${id.replace(/[^0-9]/g, '').slice(-3) || '101'}`,
       category: def.category,
       description: def.description,
       className: def.className,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      revision: 1,
     },
   };
 };
@@ -31,7 +37,7 @@ const edge = (id: string, source: string, target: string, medium: import('../sch
   targetHandle,
   type: 'flowEdge',
   markerEnd: { type: MarkerType.ArrowClosed },
-  data: { medium, flowActive: false, blocked: false, routeState: 'idle', flowRate: 0, pressure: 0, nominalDiameter, direction: 'forward', stateLabel: 'Ожидание', segmentId: id },
+  data: { mediumType: medium, medium, flowLpm: 0, flowRate: 0, flowActive: false, blocked: false, routeState: 'idle', pressure: 0, nominalDiameter, direction: 'forward', stateLabel: 'Ожидание', segmentId: id, upstreamRef: source, downstreamRef: target },
   animated: false,
 });
 

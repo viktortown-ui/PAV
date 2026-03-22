@@ -32,16 +32,19 @@ const sanitizeProjectState = (project: ProjectDocument, revision = 0, persistedR
 };
 
 const setByPath = (node: SoapNode, path: string, value: string | number | boolean) => {
-  if (path === 'visibleName' || path === 'description' || path === 'shortName' || path === 'notes' || path === 'technicalTag') (node.data as any)[path] = String(value);
-  else if (path === 'medium') node.data.medium = value as any;
-  else if (path === 'inputs' || path === 'outputs' || path === 'preferredDirection' || path === 'inline') (node.data.ports as any)[path] = path === 'inputs' || path === 'outputs' ? Number(value) : value;
-  else if (path === 'accent' || path === 'fill' || path === 'enabled' || path === 'showLabel') (node.data.visual as any)[path] = value;
-  else if (path === 'simEnabled') node.data.simulation.enabled = Boolean(value);
-  else if (path === 'simActive') node.data.simulation.active = Boolean(value);
-  else if (path === 'simFlow') node.data.simulation.flow = Number(value);
-  else if (path === 'alarmText') node.data.simulation.alarmText = String(value);
-  else if (path === 'routeState') node.data.simulation.routeState = value as any;
-  else node.data.process[path] = value;
+  const data = node.data as any;
+  if (['visibleName', 'description', 'shortName', 'notes', 'technicalTag', 'status', 'mode'].includes(path)) data[path] = value;
+  else if (path === 'medium' || path === 'mediumType') { data.medium = value; data.mediumType = value; data.process.medium = value; data.process.mediumType = value; }
+  else if (path === 'inputs' || path === 'outputs' || path === 'preferredDirection' || path === 'inline') data.ports[path] = path === 'inputs' || path === 'outputs' ? Number(value) : value;
+  else if (path === 'accent' || path === 'fill' || path === 'enabled' || path === 'showLabel') { data.visual[path === 'enabled' ? 'enabled' : path] = value; if (path === 'enabled') data.isEnabled = Boolean(value); }
+  else if (path === 'simEnabled') { data.simulation.enabled = Boolean(value); data.runtime.enabled = Boolean(value); data.simulationEnabled = Boolean(value); }
+  else if (path === 'simActive') { data.simulation.active = Boolean(value); data.runtime.active = Boolean(value); }
+  else if (path === 'simFlow') { data.simulation.flow = Number(value); data.runtime.flow = Number(value); data.runtime.flowLpm = Number(value); }
+  else if (path === 'alarmText') { data.simulation.alarmText = String(value); data.runtime.alarmText = String(value); }
+  else if (path === 'routeState') { data.simulation.routeState = value; data.runtime.routeState = value; }
+  else data.process[path] = value;
+  data.updatedAt = new Date().toISOString();
+  data.revision = Number(data.revision ?? 0) + 1;
 };
 
 const computePathSelection = (project: ProjectDocument, nodeId?: string, edgeId?: string) => {
@@ -88,18 +91,24 @@ const logEvent = (project: ProjectDocument, message: string, targetId?: string):
 const buildNode = (kind: SoapNodeKind, position: { x: number; y: number }): SoapNode => {
   const def = componentMap.get(kind)!;
   const id = crypto.randomUUID();
+  const timestamp = new Date().toISOString();
   return {
     id,
     type: 'processNode',
     position,
     data: {
       ...structuredClone(def.defaults),
+      id,
+      type: kind,
       visibleName: def.label,
       shortName: def.shortName,
       technicalTag: `${def.technicalPrefix}-${String(Math.floor(Math.random() * 900) + 100)}`,
       category: def.category,
       description: def.description,
       className: def.className,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      revision: 1,
     },
   };
 };
@@ -119,13 +128,14 @@ const buildEdge = (
   type: 'flowEdge',
   markerEnd: { type: MarkerType.ArrowClosed },
   animated: false,
-  data: { medium, flowActive: false, blocked: false, routeState: 'idle', flowRate: 0, pressure: 0, nominalDiameter, direction: 'forward', stateLabel: 'Ожидание', segmentId: crypto.randomUUID() },
+  data: { mediumType: medium, medium, flowLpm: 0, flowRate: 0, flowActive: false, blocked: false, routeState: 'idle', pressure: 0, nominalDiameter, direction: 'forward', stateLabel: 'Ожидание', segmentId: crypto.randomUUID(), upstreamRef: source, downstreamRef: target },
 });
 
 interface AppState {
   project: ProjectDocument; projectRevision: number; persistedRevision: number; viewportNonce: number; selectedNodeId?: string; selectedEdgeId?: string; search: string; inspectorTab: InspectorTab; showProblematicOnly: boolean; hoveredEdgeId?: string; edgeLabelMode: EdgeLabelMode; edgeEditorMode?: EdgeEditorMode; issues: ValidationIssue[]; pathSelection: { upstream: string[]; downstream: string[]; edges: string[] }; startupState: StartupState; startupNotice?: StartupNotice; startupError?: string;
   onNodesChange: (changes: NodeChange[]) => void; onEdgesChange: (changes: EdgeChange[]) => void; onConnect: (connection: Connection) => void; setViewport: (viewport: Viewport, options?: { manual?: boolean }) => void; addNode: (type: SoapNodeKind, position?: { x: number; y: number }) => void; selectNode: (nodeId?: string) => void; selectEdge: (edgeId?: string) => void; updateNodeField: (nodeId: string, path: string, value: string | number | boolean) => void; setSearch: (search: string) => void; setInspectorTab: (tab: InspectorTab) => void; setSimulationRunning: (running: boolean) => void; setSimulationSpeed: (speed: number) => void; tickSimulation: (dt: number) => void;
   resetProject: () => Promise<void>; resetUserData: () => Promise<void>; clearLocalDataAndLoadDemo: () => Promise<void>; newProject: () => void; loadTemplate: (templateId: TemplateId) => Promise<void>; saveProject: (reason?: 'autosave' | 'manual') => Promise<void>; loadProject: (id?: string) => Promise<void>; exportProject: () => string; importProject: (json: string) => void; runValidation: () => void; toggleProblematicOnly: () => void; hoverEdge: (edgeId?: string) => void; setEdgeLabelMode: (mode: EdgeLabelMode) => void; loadSafeDemo: () => Promise<void>; dismissStartupNotice: () => void; setStartupError: (message?: string) => void;
+  updateEdgeField: (edgeId: string, field: string, value: string | number | boolean) => void; executeNodeAction: (nodeId: string, action: string) => void;
   setEdgeEditorMode: (mode?: EdgeEditorMode) => void; executeEdgeAction: (action: EdgeActionKind, edgeId?: string) => void; insertNodeIntoEdge: (kind: SoapNodeKind, edgeId?: string) => void; createBranchFromEdge: (kind?: SoapNodeKind, edgeId?: string) => void; removeSelectedSegment: (edgeId?: string) => void; reconnectSelectedEdge: (edgeId?: string) => void;
 }
 
@@ -155,6 +165,34 @@ export const useAppStore = create<AppState>((set, get) => ({
   runValidation: () => set((state) => ({ issues: validateProject(state.project) })), toggleProblematicOnly: () => set((state) => ({ showProblematicOnly: !state.showProblematicOnly })), hoverEdge: (hoveredEdgeId) => set({ hoveredEdgeId }), setEdgeLabelMode: (edgeLabelMode) => set({ edgeLabelMode }),
   loadSafeDemo: async () => { const project = clone(demoProject); const revision = get().projectRevision + 1; set({ ...sanitizeProjectState(project, revision, revision, get().viewportNonce + 1), startupState: 'ready', startupError: undefined }); await saveStoredProject(project); },
   dismissStartupNotice: () => set({ startupNotice: undefined }), setStartupError: (startupError) => set({ startupError }),
+
+  updateEdgeField: (edgeId, field, value) => set((state) => { const project = { ...state.project, edges: state.project.edges.map((edge) => { if (edge.id !== edgeId) return edge; const data: any = { ...(edge.data ?? {}) }; data[field] = value; if (field === 'mediumType') data.medium = value as any; if (field === 'flowLpm') data.flowRate = Number(value); return { ...edge, data } as SoapEdge; }) }; return { project, issues: validateProject(project), projectRevision: state.projectRevision + 1 }; }),
+  executeNodeAction: (nodeId, action) => set((state) => {
+    const project = { ...state.project, nodes: state.project.nodes.map((node) => {
+      if (node.id !== nodeId) return node;
+      const copy = structuredClone(node); const p: any = copy.data.process; const d: any = copy.data;
+      if (action === 'reactor:start') { d.status = 'running'; d.runtime.active = true; d.simulation.active = true; }
+      else if (action === 'reactor:stop') { d.status = 'off'; d.runtime.active = false; d.simulation.active = false; }
+      else if (action === 'reactor:toggleHeating') p.heatingOn = !p.heatingOn;
+      else if (action === 'reactor:toggleAgitator') p.agitatorOn = !p.agitatorOn;
+      else if (action === 'reactor:setIdle') d.status = 'idle';
+      else if (action === 'reactor:setMaintenance') d.status = 'maintenance';
+      else if (action === 'pump:start') { d.status = 'running'; p.pumpOn = true; p.actualFlowLpm = p.nominalFlowLpm ?? p.actualFlowLpm; }
+      else if (action === 'pump:stop') { d.status = 'off'; p.pumpOn = false; p.actualFlowLpm = 0; }
+      else if (action === 'pump:toggleEnabled' || action === 'sensor:toggleEnabled') { d.isEnabled = !d.isEnabled; d.visual.enabled = d.isEnabled; }
+      else if (action === 'pump:setAlarm') { d.status = 'alarm'; d.alarms = ['Авария насоса']; d.runtime.alarmText = 'Авария насоса'; }
+      else if (action === 'pump:clearAlarm' || action === 'sensor:clearWarning') { d.status = 'idle'; d.alarms = []; d.runtime.alarmText = ''; }
+      else if (action === 'valve:open') { p.isOpen = true; d.status = 'running'; }
+      else if (action === 'valve:close') { p.isOpen = false; d.status = 'blocked'; }
+      else if (action === 'valve:toggleMode') d.mode = d.mode === 'auto' ? 'manual' : 'auto';
+      else if (action === 'valve:toggleFailPosition') p.failPosition = p.failPosition === 'open' ? 'closed' : 'open';
+      else if (action === 'tank:toggleReceive') p.canReceive = !p.canReceive;
+      else if (action === 'tank:toggleDischarge') p.canDischarge = !p.canDischarge;
+      else if (action === 'sensor:simulateWarning') { d.status = 'alarm'; d.alarms = ['Контрольный сигнал']; d.runtime.alarmText = 'Контрольный сигнал'; }
+      d.updatedAt = new Date().toISOString(); d.revision = Number(d.revision ?? 0) + 1; return copy;
+    }) };
+    return { project, issues: validateProject(project), projectRevision: state.projectRevision + 1 };
+  }),
   setEdgeEditorMode: (edgeEditorMode) => set({ edgeEditorMode }),
   executeEdgeAction: (action, edgeId) => {
     if (action.startsWith('insert:')) get().insertNodeIntoEdge(action.replace('insert:', '') as SoapNodeKind, edgeId);
