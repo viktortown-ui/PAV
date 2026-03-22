@@ -1,4 +1,4 @@
-import { ComponentDefinition, EquipmentClass, InspectorTab, PropertyField, SoapNodeKind, SymbolFamily } from '../schemas/types';
+import { ComponentDefinition, DirectionPolicy, EquipmentClass, InspectorTab, MediaGroup, PortRole, PropertyField, SoapNodeKind, SymbolFamily } from '../schemas/types';
 
 const select = (label: string, value: string) => ({ label, value });
 const tabs = (...fields: PropertyField[]) => fields;
@@ -58,6 +58,36 @@ const simulationFields = tabs(
   { key: 'simFlow', label: 'Поток симуляции, л/мин', type: 'number', min: 0, step: 1 },
   { key: 'routeState', label: 'Состояние маршрута', type: 'select', options: [select('Ожидание', 'idle'), select('Подготовлен', 'primed'), select('Поток', 'flowing'), select('Блокировка', 'blocked'), select('Голодание', 'starved'), select('Слив', 'draining'), select('CIP', 'cip'), select('Авария', 'alarm'), select('Ремонт', 'maintenance'), select('Отключён', 'offline')] },
 );
+
+
+const inferMediaGroup = (type: SoapNodeKind): MediaGroup => {
+  if (type === 'utilityDrain' || type === 'drainBranch' || type === 'drainValve') return 'waste';
+  if (type === 'source' || type === 'waterFilter' || type === 'roSkid') return 'water';
+  if (type === 'mixingJunction' || type === 'inlineMixer' || type === 'reactor' || type === 'heatedReactor') return 'any';
+  return 'product';
+};
+
+const makePortDetails = (type: SoapNodeKind, ports: { inputs: number; outputs: number; preferredDirection?: 'ltr' | 'ttb'; inline?: boolean }) => {
+  const mediaGroup = inferMediaGroup(type);
+  const details: Record<string, { portRole: PortRole; occupied: 'free'; mediaGroup: MediaGroup; allowMixing: boolean }> = {};
+  if (ports.inputs > 0 || ['tee', 'splitter', 'cross', 'collector', 'mixingJunction', 'drainBranch', 'samplePoint'].includes(type)) {
+    details['in-left'] = { portRole: 'inlet', occupied: 'free', mediaGroup, allowMixing: type === 'mixingJunction' };
+  }
+  if (ports.outputs > 0 || ['tee', 'splitter', 'cross', 'collector', 'mixingJunction', 'drainBranch', 'samplePoint'].includes(type)) {
+    details['out-right'] = { portRole: ['tee', 'splitter', 'drainBranch'].includes(type) ? 'branch' : 'outlet', occupied: 'free', mediaGroup, allowMixing: type === 'mixingJunction' };
+  }
+  if (['tee', 'splitter', 'cross', 'drainBranch', 'samplePoint'].includes(type)) details['out-top'] = { portRole: 'branch', occupied: 'free', mediaGroup: type === 'drainBranch' ? 'waste' : mediaGroup, allowMixing: false };
+  if (['collector', 'mixingJunction'].includes(type)) details['in-top'] = { portRole: 'branch', occupied: 'free', mediaGroup, allowMixing: type === 'mixingJunction' };
+  if (type === 'cross') details['in-bottom'] = { portRole: 'branch', occupied: 'free', mediaGroup, allowMixing: false };
+  return details;
+};
+
+const topologyPolicy = (type: SoapNodeKind): DirectionPolicy => {
+  if (type === 'collector') return 'routeDriven';
+  if (type === 'mixingJunction') return 'bidirectional';
+  if (type === 'cross') return 'bidirectional';
+  return 'inherited';
+};
 
 const familyLabelMap: Record<SymbolFamily, string> = {
   vessel: 'Крупное оборудование',
@@ -156,6 +186,11 @@ const makeDefinition = (type: SoapNodeKind, config: DefinitionConfig): Component
         junctionType: config.label,
         allowedDirections: 'Вход/выход по схеме',
         topologyMode: 'distribution',
+        mixingAllowed: type === 'mixingJunction',
+        splitAllowed: ['tee', 'splitter', 'cross', 'drainBranch'].includes(type),
+        mergeAllowed: ['collector', 'mixingJunction', 'cross'].includes(type),
+        branchPriority: type === 'drainBranch' ? -1 : type === 'mixingJunction' ? 2 : 1,
+        directionPolicy: topologyPolicy(type),
         pumpOn: type === 'pump' || type === 'dosingPump',
         valveOpen: true,
         mixingOn: type === 'reactor' || type === 'heatedReactor' || type === 'inlineMixer',
@@ -174,6 +209,7 @@ const makeDefinition = (type: SoapNodeKind, config: DefinitionConfig): Component
         outputs: ports.outputs,
         preferredDirection: ports.preferredDirection ?? 'ltr',
         inline: ports.inline ?? false,
+        details: makePortDetails(type, ports),
       },
       runtime: { enabled: true, active: false, blocked: false, routeState: 'idle', flow: Number(config.overrides?.flowRate ?? 0), flowLpm: Number(config.overrides?.flowRate ?? 0) },
       simulation: { enabled: true, active: false, blocked: false, routeState: 'idle', flow: Number(config.overrides?.flowRate ?? 0), flowLpm: Number(config.overrides?.flowRate ?? 0) },

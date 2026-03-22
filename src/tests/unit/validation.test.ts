@@ -27,6 +27,28 @@ describe('validators', () => {
     expect(restored.edges[0].data?.upstreamRef).toBe(project.edges[0].data?.upstreamRef);
   });
 
+  it('rejects reverse flow through a check valve', () => {
+    const project = cloneProject(demoProject);
+    const valve = project.nodes.find((node) => node.data.kind === 'shutoffValve')!;
+    valve.data.kind = 'checkValve';
+    const guarded = project.edges.find((edge) => edge.target === valve.id) ?? project.edges[0]!;
+    guarded.data = { ...guarded.data!, directionMode: 'reverse', direction: 'reverse' };
+
+    const issues = validateProject(project);
+    expect(issues.some((issue) => issue.id.includes('check-valve'))).toBe(true);
+  });
+
+  it('rejects hidden mixing outside explicit mixing nodes', () => {
+    const project = cloneProject(demoProject);
+    const sink = project.nodes.find((node) => node.data.kind === 'bufferTank')!;
+    const source = project.nodes.find((node) => node.data.kind === 'tank')!;
+    project.edges.push(buildEdge(source.id, sink.id, 'cip', 'DN40'));
+
+    const issues = validateProject(project);
+    expect(issues.some((issue) => issue.id.includes('hidden-merge') || issue.id.includes('mixing-'))).toBe(true);
+  });
+
+
   it('triggers safe reset on incompatible persistence versions', () => {
     const project = cloneProject(demoProject);
     expect(isStoredProjectCompatible({ ...project, persistenceVersion: 999999 })).toBe(false);

@@ -41,6 +41,15 @@ export type SoapNodeKind =
   | 'utilityDrain';
 
 export type MediumType = 'water' | 'product' | 'cip' | 'waste';
+export type CompositeMediumType = MediumType | 'composite';
+export type FlowDirectionMode = 'forward' | 'reverse' | 'bidirectional' | 'derived';
+export type FlowDirection = 'forward' | 'reverse' | 'bidirectional';
+export type MediumMode = 'single' | 'mixed' | 'unknown';
+export type LineRole = 'process' | 'drain' | 'CIP' | 'utility' | 'recycle';
+export type PortRole = 'inlet' | 'outlet' | 'branch' | 'bidirectional';
+export type PortOccupancy = 'occupied' | 'free';
+export type MediaGroup = 'water' | 'product' | 'cip' | 'waste' | 'utility' | 'any' | 'unknown' | 'composite';
+export type DirectionPolicy = 'inherited' | 'lockedForward' | 'lockedReverse' | 'bidirectional' | 'routeDriven';
 export type EquipmentStatus = 'off' | 'idle' | 'standby' | 'running' | 'blocked' | 'alarm' | 'maintenance' | 'normal' | 'active' | 'warning' | 'disabled';
 export type EquipmentMode = 'manual' | 'auto';
 export type InspectorTab = 'main' | 'process' | 'ports' | 'signals' | 'appearance' | 'alarms' | 'simulation' | 'actions';
@@ -147,6 +156,9 @@ export interface TopologyProcess extends BaseEquipmentProcess {
   allowedDirections: string;
   mixingAllowed: boolean;
   splitAllowed: boolean;
+  mergeAllowed: boolean;
+  branchPriority: number;
+  directionPolicy: DirectionPolicy;
   topologyMode: TopologyMode;
 }
 
@@ -199,6 +211,12 @@ export interface SoapNodeData {
     outputs: number;
     preferredDirection: 'ltr' | 'ttb';
     inline: boolean;
+    details: Record<string, {
+      portRole: PortRole;
+      occupied: PortOccupancy;
+      mediaGroup: MediaGroup;
+      allowMixing: boolean;
+    }>;
   };
   runtime: {
     enabled: boolean;
@@ -214,12 +232,15 @@ export interface SoapNodeData {
 }
 
 export interface SoapEdgeData {
-  mediumType: MediumType;
-  medium: MediumType;
+  mediumType: CompositeMediumType;
+  medium: CompositeMediumType;
   flowLpm: number;
   flowRate: number;
+  directionMode: FlowDirectionMode;
   nominalDiameter: string;
   routeState: RouteState;
+  mediumMode: MediumMode;
+  lineRole: LineRole;
   upstreamRef?: string;
   downstreamRef?: string;
   flowActive: boolean;
@@ -232,8 +253,11 @@ export interface SoapEdgeData {
   hovered?: boolean;
   labelMode?: EdgeLabelMode;
   segmentId?: string;
-  direction?: 'forward' | 'reverse' | 'bidirectional';
+  direction?: FlowDirection;
   stateLabel?: string;
+  routeWarnings?: string[];
+  composition?: Partial<Record<MediumType, number>>;
+  mixedFlow?: boolean;
 }
 
 export type SoapNode = Node<SoapNodeData>;
