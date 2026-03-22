@@ -20,14 +20,15 @@ export const insertNodeIntoEdge = (project: ProjectDocument, edgeId: string, kin
   const ctx = getEdgeContext(project, edgeId);
   if (!ctx) return null;
   const { edge, source, target } = ctx;
-  const node = buildNode(kind, midPoint(source, target));
+  const context = { selectedEdge: edge, selectedNode: source };
+  const node = buildNode(kind, midPoint(source, target), project, context);
   const upstreamHandle = normalizeHandleForNode(source, 'source', edge.sourceHandle) ?? DEFAULT_SOURCE_HANDLE;
   const downstreamHandle = normalizeHandleForNode(target, 'target', edge.targetHandle) ?? DEFAULT_TARGET_HANDLE;
   const insertTargetHandle = normalizeHandleForNode(node, 'target', DEFAULT_TARGET_HANDLE) ?? DEFAULT_TARGET_HANDLE;
   const insertSourceHandle = normalizeHandleForNode(node, 'source', DEFAULT_SOURCE_HANDLE) ?? DEFAULT_SOURCE_HANDLE;
   const newEdges = [
-    buildEdge(source.id, node.id, edge.data?.medium ?? source.data.medium, edge.data?.nominalDiameter ?? 'DN50', { sourceHandle: upstreamHandle, targetHandle: insertTargetHandle }),
-    buildEdge(node.id, target.id, edge.data?.medium ?? target.data.medium, edge.data?.nominalDiameter ?? 'DN50', { sourceHandle: insertSourceHandle, targetHandle: downstreamHandle }),
+    buildEdge(source.id, node.id, edge.data?.medium ?? source.data.medium, edge.data?.nominalDiameter ?? 'DN50', { sourceHandle: upstreamHandle, targetHandle: insertTargetHandle }, project, context),
+    buildEdge(node.id, target.id, edge.data?.medium ?? target.data.medium, edge.data?.nominalDiameter ?? 'DN50', { sourceHandle: insertSourceHandle, targetHandle: downstreamHandle }, project, context),
   ];
   const nextProject = logEvent({ ...project, nodes: [...project.nodes, node], edges: project.edges.filter((item) => item.id !== edge.id).concat(newEdges) }, `В линию вставлен элемент «${node.data.visibleName}».`, node.id);
   return { project: nextProject, nodeId: node.id };
@@ -37,15 +38,16 @@ export const createBranchFromEdge = (project: ProjectDocument, edgeId: string, k
   const ctx = getEdgeContext(project, edgeId);
   if (!ctx) return null;
   const { edge, source, target } = ctx;
-  const branchNode = buildNode(kind, midPoint(source, target));
+  const context = { selectedEdge: edge, selectedNode: source };
+  const branchNode = buildNode(kind, midPoint(source, target), project, context);
   const upstreamHandle = normalizeHandleForNode(source, 'source', edge.sourceHandle) ?? DEFAULT_SOURCE_HANDLE;
   const downstreamHandle = normalizeHandleForNode(target, 'target', edge.targetHandle) ?? DEFAULT_TARGET_HANDLE;
   const branchInputHandle = getPreferredFreeHandleId(branchNode, 'target', project.edges, DEFAULT_TARGET_HANDLE, edge.id) ?? normalizeHandleForNode(branchNode, 'target', DEFAULT_TARGET_HANDLE) ?? DEFAULT_TARGET_HANDLE;
-  const inlineBranchEdge = buildEdge(source.id, branchNode.id, edge.data?.medium ?? source.data.medium, edge.data?.nominalDiameter ?? 'DN50', { sourceHandle: upstreamHandle, targetHandle: branchInputHandle });
+  const inlineBranchEdge = buildEdge(source.id, branchNode.id, edge.data?.medium ?? source.data.medium, edge.data?.nominalDiameter ?? 'DN50', { sourceHandle: upstreamHandle, targetHandle: branchInputHandle }, project, context);
   const selectedFreeSourceHandle = getPreferredFreeHandleId(branchNode, 'source', [inlineBranchEdge], DEFAULT_SOURCE_HANDLE) ?? normalizeHandleForNode(branchNode, 'source', DEFAULT_SOURCE_HANDLE) ?? DEFAULT_SOURCE_HANDLE;
   const newEdges = [
     inlineBranchEdge,
-    buildEdge(branchNode.id, target.id, edge.data?.medium ?? target.data.medium, edge.data?.nominalDiameter ?? 'DN50', { sourceHandle: selectedFreeSourceHandle, targetHandle: downstreamHandle }),
+    buildEdge(branchNode.id, target.id, edge.data?.medium ?? target.data.medium, edge.data?.nominalDiameter ?? 'DN50', { sourceHandle: selectedFreeSourceHandle, targetHandle: downstreamHandle }, project, context),
   ];
   const nextProject = logEvent({ ...project, nodes: [...project.nodes, branchNode], edges: project.edges.filter((item) => item.id !== edge.id).concat(newEdges) }, `Создано ответвление через узел «${branchNode.data.visibleName}». Потяните свободный порт, чтобы сразу продолжить ветвь.`, branchNode.id);
   return { project: nextProject, nodeId: branchNode.id };
