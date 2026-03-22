@@ -6,6 +6,7 @@ import { EdgeLabelMode, InspectorTab, ProjectDocument, SimulationSettings, SoapN
 import { clearPersistedState, loadStoredProject, saveStoredProject } from '../features/persistence/db';
 import { runSimulationStep } from '../domain/simulation/engine';
 import { restoreProjectDocument, validateProject } from '../domain/validation/validateProject';
+import { instrumentCallsite } from '../utils/instrumentation';
 
 interface StartupNotice {
   type: 'warning' | 'info';
@@ -48,7 +49,7 @@ interface AppState {
   resetProject: () => Promise<void>;
   newProject: () => void;
   loadTemplate: (templateId: TemplateId) => Promise<void>;
-  saveProject: () => Promise<void>;
+  saveProject: (reason?: 'autosave' | 'manual') => Promise<void>;
   loadProject: (id?: string) => Promise<void>;
   exportProject: () => string;
   importProject: (json: string) => void;
@@ -108,6 +109,14 @@ const setByPath = (node: SoapNode, path: string, value: string | number | boolea
 };
 
 const computePathSelection = (project: ProjectDocument, nodeId?: string, edgeId?: string) => {
+  instrumentCallsite('route recomputation', {
+    callsite: 'useAppStore.computePathSelection',
+    when: 'Runs whenever node or edge selection changes.',
+    why: 'It recomputes upstream/downstream highlighting for the selected graph element.',
+    repeatable: true,
+    guidance: 'memoize',
+    details: { nodeId, edgeId, edgeCount: project.edges.length },
+  });
   const upstream = new Set<string>();
   const downstream = new Set<string>();
   const edges = new Set<string>();
@@ -155,6 +164,14 @@ const computePathSelection = (project: ProjectDocument, nodeId?: string, edgeId?
 
 let validationTimer: number | undefined;
 const scheduleValidation = (project: ProjectDocument) => {
+  instrumentCallsite('graph validation', {
+    callsite: 'useAppStore.scheduleValidation',
+    when: 'Runs after graph mutations that replace the project document.',
+    why: 'It debounces validation so edits do not pay immediate whole-graph validation cost.',
+    repeatable: true,
+    guidance: 'throttle',
+    details: { nodeCount: project.nodes.length, edgeCount: project.edges.length },
+  });
   if (typeof window === 'undefined') return;
   if (validationTimer) window.clearTimeout(validationTimer);
   validationTimer = window.setTimeout(() => {
@@ -222,6 +239,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     return { project, projectRevision: state.projectRevision + 1 };
   }),
   setViewport: (viewport, options) => updateProjectState(set, (state) => {
+    instrumentCallsite('setViewport', {
+      callsite: 'useAppStore.setViewport',
+      when: options?.manual ? 'Runs after a user pan/zoom gesture ends.' : 'Runs after a programmatic curated viewport sync.',
+      why: options?.manual ? 'It persists the viewport chosen by the user.' : 'It mirrors the latest curated viewport into project state.',
+      repeatable: true,
+      guidance: options?.manual ? 'none' : 'throttle',
+      details: { viewport, manual: options?.manual ?? true },
+    });
     if (sameViewport(state.project.view.viewport, viewport) && state.project.view.hasManualViewport === (options?.manual ?? true)) return state;
     perfLog('viewport', `store write (${options?.manual ? 'manual' : 'programmatic'})`, viewport);
     return {
@@ -282,8 +307,16 @@ export const useAppStore = create<AppState>((set, get) => ({
     await saveStoredProject(project);
     set({ persistedRevision: revision });
   },
-  saveProject: async () => {
+  saveProject: async (reason = 'manual') => {
     const state = get();
+    instrumentCallsite('autosave', {
+      callsite: `useAppStore.saveProject(${reason})`,
+      when: reason === 'autosave' ? 'Runs from the debounced app-level autosave effect when unsaved revisions exist.' : 'Runs when the user presses the manual save button.',
+      why: 'It persists the current project into IndexedDB.',
+      repeatable: true,
+      guidance: reason === 'autosave' ? 'throttle' : 'user-triggered',
+      details: { revision: state.projectRevision },
+    });
     const startedAt = performance.now();
     await saveStoredProject(state.project);
     perfLog('autosave', `saved revision ${state.projectRevision} in ${(performance.now() - startedAt).toFixed(1)}ms`);
@@ -291,6 +324,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   loadProject: async (id) => {
     set({ startupState: 'booting', startupError: undefined });
+    instrumentCallsite('project restore', {
+      callsite: 'useAppStore.loadProject',
+      when: id ? `Runs when a restore is requested for project id ${id}.` : 'Runs on app startup and when the user presses the open button.',
+      why: 'It loads the last persisted project or a safe fallback from IndexedDB.',
+      repeatable: true,
+      guidance: 'none',
+      details: { id },
+    });
     perfLog('startup', `restore requested${id ? ` (${id})` : ''}`);
     try {
       const result = await loadStoredProject(id);
@@ -332,6 +373,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   exportProject: () => JSON.stringify(get().project, null, 2),
   importProject: (json) => {
+    instrumentCallsite('project restore', {
+      callsite: 'useAppStore.importProject',
+      when: 'Runs when the user imports a JSON project file.',
+      why: 'It restores an external project payload into the normalized in-memory document.',
+      repeatable: true,
+      guidance: 'user-triggered',
+    });
     const parsed = JSON.parse(json) as unknown;
     const restored = restoreProjectDocument(parsed);
     const revision = get().projectRevision + 1;
@@ -339,6 +387,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   runValidation: () => {
     const state = get();
+    instrumentCallsite('graph validation', {
+      callsite: 'useAppStore.runValidation',
+      when: 'Runs when the user presses the validation button.',
+      why: 'It forces an immediate validation pass and focuses the issue panel.',
+      repeatable: true,
+      guidance: 'user-triggered',
+      details: { nodeCount: state.project.nodes.length, edgeCount: state.project.edges.length },
+    });
     const startedAt = performance.now();
     const issues = validateProject(state.project);
     perfLog('validation', `manual validation in ${(performance.now() - startedAt).toFixed(1)}ms`, { issues: issues.length });

@@ -58,7 +58,7 @@ export const App = () => {
   useEffect(() => {
     if (startupState !== 'ready') return;
     if (projectRevision === persistedRevision) return;
-    const handle = window.setTimeout(() => { void saveProject(); }, 1200);
+    const handle = window.setTimeout(() => { void saveProject('autosave'); }, 1200);
     return () => window.clearTimeout(handle);
   }, [persistedRevision, projectRevision, saveProject, startupState]);
 
