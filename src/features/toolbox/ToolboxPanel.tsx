@@ -1,4 +1,5 @@
 import { componentRegistry } from '../../domain/registry/componentRegistry';
+import { hasWizardSubtype } from '../equipmentWizard/schema';
 import { IndustrialIcon } from '../../icons/IndustrialIcon';
 import { useAppStore } from '../../store/useAppStore';
 
@@ -6,6 +7,7 @@ export const ToolboxPanel = () => {
   const search = useAppStore((state) => state.search);
   const setSearch = useAppStore((state) => state.setSearch);
   const addNode = useAppStore((state) => state.addNode);
+  const openEquipmentWizard = useAppStore((state) => state.openEquipmentWizard);
   const filtered = componentRegistry.filter((item) => `${item.label} ${item.category} ${item.shortName} ${item.familyLabel} ${item.technicalPrefix}`.toLowerCase().includes(search.toLowerCase()));
   const grouped = filtered.reduce<Record<string, typeof componentRegistry>>((acc, item) => { acc[item.category] ??= []; acc[item.category].push(item); return acc; }, {});
 
@@ -13,14 +15,14 @@ export const ToolboxPanel = () => {
     <aside className="panel toolbox-panel">
       <div className="panel-title">Инженерная библиотека</div>
       <p className="panel-caption">Библиотека перестроена по инженерным семействам: аппараты, inline-машины, арматура, КИП, топология и терминалы.</p>
-      <input className="panel-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Поиск по названию, группе, семейству или тегу" />
+      <div className="toolbox-actions"><button className="primary" onClick={() => openEquipmentWizard()}>Мастер создания</button><span>RU-first, только нужные поля по схеме.</span></div><input className="panel-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Поиск по названию, группе, семейству или тегу" />
       <div className="toolbox-groups">
         {Object.entries(grouped).map(([category, items]) => (
           <section key={category}>
             <h3>{category}</h3>
             <div className="toolbox-list">
               {items.map((item) => (
-                <button key={item.type} className={`toolbox-item family-${item.family}`} onClick={() => addNode(item.type)} title={`${item.label}: ${item.auditNote}`}>
+                <button key={item.type} className={`toolbox-item family-${item.family}`} onClick={() => hasWizardSubtype(item.type) ? openEquipmentWizard({ kind: item.type }) : addNode(item.type)} title={`${item.label}: ${item.auditNote}`}>
                   <span className="toolbox-icon"><IndustrialIcon kind={item.type} definition={item} /></span>
                   <div className="toolbox-copy">
                     <strong>{item.label}</strong>
