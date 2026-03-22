@@ -1,6 +1,6 @@
 import { MarkerType, Viewport } from 'reactflow';
 import { componentMap } from '../registry/componentRegistry';
-import { ProjectDocument, SoapEdge, SoapNode, SoapNodeKind, TemplateId, TemplateViewMetadata } from '../schemas/types';
+import { ProjectDefaults, ProjectDocument, SoapEdge, SoapNode, SoapNodeKind, TemplateId, TemplateViewMetadata } from '../schemas/types';
 
 export const APP_SCHEMA_VERSION = 2;
 export const PROJECT_SCHEMA_VERSION = 2;
@@ -47,6 +47,47 @@ const createInitialViewport = (metadata: TemplateViewMetadata): Viewport => ({
   zoom: metadata.defaultZoom,
 });
 
+const projectDefaults: ProjectDefaults = {
+  project: {
+    all: { namingRule: '{prefix}-{seq}', nominalDiameter: 'DN50', diameterNominal: 'DN50', medium: 'water', mediumType: 'water', lineRole: 'process', status: 'idle', mode: 'auto' },
+    groups: {
+      pumps: { requiredFields: ['visibleName', 'technicalTag', 'flowRate', 'powerKw', 'mode', 'dryRunProtection'] },
+      valves: { requiredFields: ['visibleName', 'technicalTag', 'valveType', 'normallyOpen', 'failPosition'] },
+      instrumentation: { requiredFields: ['visibleName', 'technicalTag', 'medium', 'diameterNominal', 'measuredProperty', 'unit', 'warnLow', 'warnHigh'] },
+      pipework: { requiredFields: ['visibleName', 'technicalTag', 'medium', 'diameterNominal'] },
+      reactors: { requiredFields: ['visibleName', 'technicalTag', 'capacity', 'temperature', 'agitatorOn'] },
+    },
+  },
+  template: {},
+};
+
+const templateDefaultsById: Record<TemplateId, ProjectDefaults['template']> = {
+  'water-prep': {
+    all: { medium: 'water', mediumType: 'water', nominalDiameter: 'DN65', diameterNominal: 'DN65', lineRole: 'process', namingRule: '{prefix}-{seq}' },
+    groups: {
+      waterPrep: { medium: 'water', mediumType: 'water', status: 'idle', mode: 'auto', requiredFields: ['visibleName', 'technicalTag', 'medium'] },
+      pumps: { medium: 'water', mediumType: 'water', nominalDiameter: 'DN65', diameterNominal: 'DN65' },
+    },
+  },
+  'soap-line': {
+    all: { medium: 'product', mediumType: 'product', nominalDiameter: 'DN50', diameterNominal: 'DN50', lineRole: 'process', namingRule: '{prefix}-{seq}' },
+    groups: {
+      reactors: { medium: 'product', mediumType: 'product', status: 'standby' },
+      instrumentation: { medium: 'product', mediumType: 'product', nominalDiameter: 'DN50', diameterNominal: 'DN50' },
+    },
+  },
+  'cip-fragment': {
+    all: { medium: 'cip', mediumType: 'cip', nominalDiameter: 'DN50', diameterNominal: 'DN50', lineRole: 'CIP', namingRule: '{prefix}-{seq}' },
+    groups: {
+      utilities: { medium: 'waste', mediumType: 'waste', lineRole: 'drain' },
+      valves: { medium: 'cip', mediumType: 'cip', lineRole: 'CIP' },
+    },
+    kinds: {
+      utilityDrain: { medium: 'waste', mediumType: 'waste', lineRole: 'drain', status: 'idle' },
+    },
+  },
+};
+
 const makeProject = (id: TemplateId, name: string, nodes: SoapNode[], edges: SoapEdge[], metadata: TemplateViewMetadata): ProjectDocument => ({
   id: `template-${id}`,
   name,
@@ -58,6 +99,7 @@ const makeProject = (id: TemplateId, name: string, nodes: SoapNode[], edges: Soa
   simulation: { running: false, speed: 1, tick: 0, warnings: [], activeMedium: 'none', totalActiveFlow: 0, lastEvent: 'Проект загружен' },
   eventLog: [{ id: crypto.randomUUID(), timestamp: new Date().toISOString(), type: 'template', message: `Загружен шаблон: ${name}`, severity: 'info' }],
   nodes, edges,
+  defaults: { project: structuredClone(projectDefaults.project), template: structuredClone(templateDefaultsById[id]) },
 });
 
 export const templates: Record<TemplateId, ProjectDocument> = {

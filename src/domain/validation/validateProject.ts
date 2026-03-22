@@ -1,7 +1,7 @@
 import { componentMap } from '../registry/componentRegistry';
 import { getHandleIds, normalizeProjectEdgeHandles } from '../flow/handles';
 import { demoProject } from '../templates/templates';
-import { CompositeMediumType, EventLogEntry, FlowDirection, FlowDirectionMode, LineRole, MediumMode, MediumType, ProjectDocument, ProjectViewState, RouteState, Severity, SimulationSettings, SoapEdge, SoapNode, SoapNodeData, SoapNodeKind, TemplateId, TemplateViewMetadata, ValidationIssue } from '../schemas/types';
+import { CompositeMediumType, DefaultValueMap, EventLogEntry, FlowDirection, FlowDirectionMode, LineRole, MediumMode, MediumType, ProjectDefaults, ProjectDocument, ProjectViewState, RouteState, Severity, SimulationSettings, SoapEdge, SoapNode, SoapNodeData, SoapNodeKind, TemplateId, TemplateViewMetadata, ValidationIssue } from '../schemas/types';
 
 const TEMPLATE_IDS = new Set(['water-prep', 'soap-line', 'cip-fragment'] as const);
 const MEDIUM_TYPES = new Set<MediumType>(['water', 'product', 'cip', 'waste']);
@@ -55,6 +55,33 @@ const sanitizeTemplateViewMetadata = (value: unknown, fallback: TemplateViewMeta
 const sanitizeView = (value: unknown, fallback: ProjectViewState): ProjectViewState => ({ viewport: sanitizeViewport(isObject(value) ? value.viewport : undefined), metadata: sanitizeTemplateViewMetadata(isObject(value) ? value.metadata : undefined, fallback.metadata), hasManualViewport: asBoolean(isObject(value) ? value.hasManualViewport : undefined, fallback.hasManualViewport) });
 const sanitizeSimulation = (value: unknown, fallback: SimulationSettings): SimulationSettings => ({ running: asBoolean(isObject(value) ? value.running : undefined, false), speed: Math.min(3, Math.max(0.5, asNumber(isObject(value) ? value.speed : undefined, fallback.speed))), tick: Math.max(0, asNumber(isObject(value) ? value.tick : undefined, fallback.tick)), warnings: Array.isArray(isObject(value) ? value.warnings : undefined) ? (value as any).warnings.filter((item: unknown) => typeof item === 'string').slice(0, 50) : fallback.warnings, activeMedium: (isObject(value) && (value.activeMedium === 'mixed' || value.activeMedium === 'none')) ? value.activeMedium as any : asMedium(isObject(value) ? value.activeMedium : undefined, fallback.activeMedium === 'mixed' || fallback.activeMedium === 'none' ? 'water' : fallback.activeMedium), totalActiveFlow: Math.max(0, asNumber(isObject(value) ? value.totalActiveFlow : undefined, fallback.totalActiveFlow)), lastEvent: asString(isObject(value) ? value.lastEvent : undefined, fallback.lastEvent) });
 const sanitizeEventLog = (value: unknown, fallback: EventLogEntry[]) => Array.isArray(value) ? value.filter(isObject).map((entry, index) => ({ id: asString(entry.id, `event-${index}`), timestamp: asString(entry.timestamp, new Date().toISOString()), type: asString(entry.type, 'restore'), message: asString(entry.message, 'Восстановлено состояние проекта'), severity: asSeverity(entry.severity), targetId: typeof entry.targetId === 'string' ? entry.targetId : undefined })).slice(-80) : fallback;
+const sanitizeDefaultValueMap = (value: unknown, fallback: DefaultValueMap = {}): DefaultValueMap => {
+  if (!isObject(value)) return fallback;
+  return {
+    visibleName: typeof value.visibleName === 'string' ? value.visibleName : fallback.visibleName,
+    technicalTag: typeof value.technicalTag === 'string' ? value.technicalTag : fallback.technicalTag,
+    namingRule: typeof value.namingRule === 'string' ? value.namingRule : fallback.namingRule,
+    medium: typeof value.medium === 'string' ? asMedium(value.medium, fallback.medium as MediumType | undefined) : fallback.medium,
+    mediumType: typeof value.mediumType === 'string' ? asMedium(value.mediumType, fallback.mediumType as MediumType | undefined) : fallback.mediumType,
+    nominalDiameter: typeof value.nominalDiameter === 'string' ? value.nominalDiameter : fallback.nominalDiameter,
+    diameterNominal: typeof value.diameterNominal === 'string' ? value.diameterNominal : fallback.diameterNominal,
+    lineRole: typeof value.lineRole === 'string' ? asLineRole(value.lineRole, fallback.lineRole as LineRole | undefined) : fallback.lineRole,
+    status: typeof value.status === 'string' && STATUSES.has(value.status) ? value.status as any : fallback.status,
+    mode: value.mode === 'manual' || value.mode === 'auto' ? value.mode : fallback.mode,
+    requiredFields: Array.isArray(value.requiredFields) ? value.requiredFields.filter((item): item is string => typeof item === 'string') : fallback.requiredFields,
+    process: isObject(value.process) ? Object.fromEntries(Object.entries(value.process).filter(([, entry]) => ['string', 'number', 'boolean'].includes(typeof entry))) as Record<string, string | number | boolean> : fallback.process,
+  };
+};
+const sanitizeDefaultRuleLayer = (value: unknown, fallback: ProjectDefaults['project']) => ({
+  all: sanitizeDefaultValueMap(isObject(value) ? value.all : undefined, fallback.all),
+  edges: sanitizeDefaultValueMap(isObject(value) ? value.edges : undefined, fallback.edges),
+  groups: isObject(isObject(value) ? value.groups : undefined) ? Object.fromEntries(Object.entries((value as any).groups).map(([key, item]) => [key, sanitizeDefaultValueMap(item)])) : fallback.groups,
+  kinds: isObject(isObject(value) ? value.kinds : undefined) ? Object.fromEntries(Object.entries((value as any).kinds).map(([key, item]) => [key, sanitizeDefaultValueMap(item)])) : fallback.kinds,
+});
+const sanitizeProjectDefaults = (value: unknown, fallback: ProjectDefaults): ProjectDefaults => ({
+  project: sanitizeDefaultRuleLayer(isObject(value) ? value.project : undefined, fallback.project),
+  template: sanitizeDefaultRuleLayer(isObject(value) ? value.template : undefined, fallback.template),
+});
 
 const sanitizeNode = (value: unknown): SoapNode | null => {
   if (!isObject(value) || typeof value.id !== 'string' || !isObject(value.position) || !isObject(value.data)) return null;
@@ -167,7 +194,7 @@ export const restoreProjectDocument = (value: unknown): ProjectDocument => {
   const nodeIds = new Set(nodes.map((node) => node.id));
   const edges = Array.isArray(value.edges) ? value.edges.map((edge) => sanitizeEdge(edge, nodeIds)).filter((e): e is SoapEdge => e !== null) : [];
   const templateId: TemplateId = typeof value.templateId === 'string' && TEMPLATE_IDS.has(value.templateId as TemplateId) ? value.templateId as TemplateId : fallback.templateId;
-  return normalizeProjectEdgeHandles({ id: asString(value.id, fallback.id), name: asString(value.name, fallback.name), templateId, updatedAt: asString(value.updatedAt, new Date().toISOString()), appSchemaVersion: asNumber(value.appSchemaVersion, fallback.appSchemaVersion), projectSchemaVersion: asNumber(value.projectSchemaVersion, fallback.projectSchemaVersion), nodes, edges, view: sanitizeView(value.view, fallback.view), simulation: sanitizeSimulation(value.simulation, fallback.simulation), eventLog: sanitizeEventLog(value.eventLog, fallback.eventLog) });
+  return normalizeProjectEdgeHandles({ id: asString(value.id, fallback.id), name: asString(value.name, fallback.name), templateId, updatedAt: asString(value.updatedAt, new Date().toISOString()), appSchemaVersion: asNumber(value.appSchemaVersion, fallback.appSchemaVersion), projectSchemaVersion: asNumber(value.projectSchemaVersion, fallback.projectSchemaVersion), nodes, edges, view: sanitizeView(value.view, fallback.view), simulation: sanitizeSimulation(value.simulation, fallback.simulation), eventLog: sanitizeEventLog(value.eventLog, fallback.eventLog), defaults: sanitizeProjectDefaults(value.defaults, fallback.defaults) });
 };
 
 export const validateProject = (project: ProjectDocument): ValidationIssue[] => {

@@ -224,9 +224,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   project: makeProject(), projectRevision: 0, persistedRevision: 0, viewportNonce: 0, selectedNodeId: undefined, selectedEdgeId: undefined, search: '', inspectorTab: 'main', showProblematicOnly: false, hoveredEdgeId: undefined, edgeLabelMode: 'selected', edgeEditorMode: undefined, issues: validateProject(makeProject()), pathSelection: { upstream: [], downstream: [], edges: [] }, startupState: 'booting', startupNotice: undefined, startupError: undefined, lastCommand: undefined, wizard: { open: false, groupId: undefined, kind: undefined, values: {}, namingRule: '{prefix}-{seq}' },
   onNodesChange: (changes) => set((state) => { const project = normalizeProjectEdgeHandles({ ...state.project, nodes: applyNodeChanges(changes, state.project.nodes) }); return { project, issues: validateProject(project), projectRevision: state.projectRevision + 1 }; }),
   onEdgesChange: (changes) => set((state) => { const project = normalizeProjectEdgeHandles({ ...state.project, edges: applyEdgeChanges(changes, state.project.edges) }); return { project, issues: validateProject(project), projectRevision: state.projectRevision + 1 }; }),
-  onConnect: (connection) => set((state) => { const source = state.project.nodes.find((node) => node.id === connection.source); const target = state.project.nodes.find((node) => node.id === connection.target); if (!source || !target) return state; const sourceHandle = getPreferredFreeHandleId(source, 'source', state.project.edges, connection.sourceHandle) ?? normalizeHandleForNode(source, 'source', connection.sourceHandle); const targetHandle = getPreferredFreeHandleId(target, 'target', state.project.edges, connection.targetHandle) ?? normalizeHandleForNode(target, 'target', connection.targetHandle); if (!sourceHandle || !targetHandle) return state; const project = { ...state.project, edges: addEdge(buildEdge(source.id, target.id, target.data.medium || source.data.medium, 'DN50', { sourceHandle, targetHandle }), state.project.edges) }; const loggedProject = logEvent(project, `Создан новый сегмент между «${source.data.visibleName}» и «${target.data.visibleName}».`, source.id); return { project: loggedProject, issues: validateProject(loggedProject), projectRevision: state.projectRevision + 1 }; }),
+  onConnect: (connection) => set((state) => { const source = state.project.nodes.find((node) => node.id === connection.source); const target = state.project.nodes.find((node) => node.id === connection.target); if (!source || !target) return state; const sourceHandle = getPreferredFreeHandleId(source, 'source', state.project.edges, connection.sourceHandle) ?? normalizeHandleForNode(source, 'source', connection.sourceHandle); const targetHandle = getPreferredFreeHandleId(target, 'target', state.project.edges, connection.targetHandle) ?? normalizeHandleForNode(target, 'target', connection.targetHandle); if (!sourceHandle || !targetHandle) return state; const edgeContext = { selectedNode: source }; const project = { ...state.project, edges: addEdge(buildEdge(source.id, target.id, target.data.medium || source.data.medium, (source.data.process as any).diameterNominal ?? 'DN50', { sourceHandle, targetHandle }, state.project, edgeContext), state.project.edges) }; const loggedProject = logEvent(project, `Создан новый сегмент между «${source.data.visibleName}» и «${target.data.visibleName}».`, source.id); return { project: loggedProject, issues: validateProject(loggedProject), projectRevision: state.projectRevision + 1 }; }),
   setViewport: (viewport, options) => set((state) => ({ project: { ...state.project, view: { ...state.project.view, viewport, hasManualViewport: options?.manual ?? true } }, projectRevision: options?.manual ? state.projectRevision + 1 : state.projectRevision })),
-  addNode: (type, position = { x: 200, y: 200 }) => set((state) => { const node = buildNode(type, position); const project = { ...state.project, nodes: [...state.project.nodes, node] }; return { project: logEvent(project, `Добавлен элемент «${node.data.visibleName}».`, node.id), selectedNodeId: node.id, issues: validateProject(project), projectRevision: state.projectRevision + 1 }; }),
+  addNode: (type, position = { x: 200, y: 200 }) => set((state) => { const context = inferWizardContext(state.project, state.selectedNodeId, state.selectedEdgeId); const node = buildNode(type, position, state.project, { selectedNode: context.selectedNode, selectedEdge: context.selectedEdge, groupId: wizardSubtypeMap.get(type) }); const project = { ...state.project, nodes: [...state.project.nodes, node] }; return { project: logEvent(project, `Добавлен элемент «${node.data.visibleName}».`, node.id), selectedNodeId: node.id, issues: validateProject(project), projectRevision: state.projectRevision + 1 }; }),
   selectNode: (selectedNodeId) => set((state) => ({ selectedNodeId, selectedEdgeId: undefined, hoveredEdgeId: undefined, edgeEditorMode: undefined, pathSelection: computePathSelection(state.project, selectedNodeId, undefined) })),
   selectEdge: (selectedEdgeId) => set((state) => ({ selectedEdgeId, selectedNodeId: undefined, hoveredEdgeId: selectedEdgeId ?? state.hoveredEdgeId, edgeEditorMode: selectedEdgeId ? 'actions' : undefined, pathSelection: computePathSelection(state.project, undefined, selectedEdgeId) })),
   updateNodeField: (nodeId, path, value) => set((state) => { const updatedRevision = state.projectRevision + 1; const project = reapplyDerivedState(normalizeProjectEdgeHandles({ ...state.project, nodes: state.project.nodes.map((node) => node.id !== nodeId ? node : (() => { const copy = structuredClone(node); setByPath(copy, path, value); syncNodePresentation(copy); return copy; })()) })); scheduleSafePersist(project, updatedRevision); return { project, issues: validateProject(project), projectRevision: updatedRevision }; }),
@@ -257,23 +257,24 @@ export const useAppStore = create<AppState>((set, get) => ({
     const groupId = options?.groupId ?? (options?.kind ? wizardSubtypeMap.get(options.kind) : undefined) ?? state.wizard.groupId ?? 'pumps';
     const kind = options?.kind ?? state.wizard.kind ?? (groupId ? [...wizardSubtypeMap.entries()].find(([, value]) => value === groupId)?.[0] : undefined) ?? 'pump';
     const context = inferWizardContext(state.project, state.selectedNodeId, state.selectedEdgeId);
-    return { wizard: { open: true, groupId, kind, namingRule: state.wizard.namingRule, values: buildWizardInitialValues(state.project, groupId, kind, context) } };
+    return { wizard: { open: true, groupId, kind, namingRule: context.namingRule, values: buildWizardInitialValues(state.project, groupId, kind, context) } };
   }),
   closeEquipmentWizard: () => set((state) => ({ wizard: { ...state.wizard, open: false } })),
   setWizardGroup: (groupId) => set((state) => {
     const kind = [...wizardSubtypeMap.entries()].find(([, value]) => value === groupId)?.[0] ?? 'pump';
     const context = inferWizardContext(state.project, state.selectedNodeId, state.selectedEdgeId);
-    return { wizard: { ...state.wizard, open: true, groupId, kind, values: buildWizardInitialValues(state.project, groupId, kind, context) } };
+    return { wizard: { ...state.wizard, open: true, groupId, kind, namingRule: context.namingRule, values: buildWizardInitialValues(state.project, groupId, kind, context) } };
   }),
   setWizardKind: (kind) => set((state) => {
     const groupId = wizardSubtypeMap.get(kind) ?? state.wizard.groupId ?? 'pumps';
     const context = inferWizardContext(state.project, state.selectedNodeId, state.selectedEdgeId);
-    return { wizard: { ...state.wizard, open: true, groupId, kind, values: buildWizardInitialValues(state.project, groupId, kind, context) } };
+    return { wizard: { ...state.wizard, open: true, groupId, kind, namingRule: context.namingRule, values: buildWizardInitialValues(state.project, groupId, kind, context) } };
   }),
   updateWizardValue: (key, value) => set((state) => ({ wizard: { ...state.wizard, values: { ...state.wizard.values, [key]: value } } })),
   regenerateWizardTag: () => set((state) => {
     if (!state.wizard.kind) return state;
-    return { wizard: { ...state.wizard, values: { ...state.wizard.values, technicalTag: generateTechnicalTag(state.project, state.wizard.kind, state.wizard.namingRule) } } };
+    const context = inferWizardContext(state.project, state.selectedNodeId, state.selectedEdgeId);
+    return { wizard: { ...state.wizard, values: { ...state.wizard.values, technicalTag: generateTechnicalTag(state.project, state.wizard.kind, context.namingRule) }, namingRule: context.namingRule } };
   }),
   createEquipmentFromWizard: () => set((state) => {
     const { groupId, kind, values } = state.wizard;
@@ -285,7 +286,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const target = state.project.nodes.find((node) => node.id === selectedEdge.target);
       return source && target ? midPoint(source, target) : { x: 280, y: 220 };
     })() : selectedNode ? { x: selectedNode.position.x + 220, y: selectedNode.position.y } : { x: 280, y: 220 };
-    let node = buildNode(kind, position);
+    let node = buildNode(kind, position, state.project, { selectedNode, selectedEdge, groupId });
     node = applyWizardValuesToNode(node, values);
     const updatedRevision = state.projectRevision + 1;
     const project = reapplyDerivedState({ ...state.project, nodes: [...state.project.nodes, node] });

@@ -18,7 +18,7 @@ export const EquipmentWizard = () => {
 
   const context = useMemo(() => inferWizardContext(project, selectedNodeId, selectedEdgeId), [project, selectedEdgeId, selectedNodeId]);
   const subtypes = wizard.groupId ? getWizardSubtypes(wizard.groupId) : [];
-  const fields = wizard.kind ? getWizardFields(wizard.kind) : [];
+  const fields = wizard.kind && wizard.groupId ? getWizardFields(project, wizard.groupId, wizard.kind, context) : [];
 
   if (!wizard.open || !wizard.groupId || !wizard.kind) return null;
 

@@ -1,17 +1,8 @@
 import { componentMap, componentRegistry } from '../../domain/registry/componentRegistry';
-import { MediumType, PropertyFieldType, SoapEdge, SoapNode, SoapNodeData, SoapNodeKind, ProjectDocument } from '../../domain/schemas/types';
+import { resolveNodeDefaults } from '../../domain/defaults/defaults';
+import { DefaultsGroupId, MediumType, PropertyFieldType, SoapEdge, SoapNode, SoapNodeData, SoapNodeKind, ProjectDocument } from '../../domain/schemas/types';
 
-export type EquipmentWizardGroupId =
-  | 'sources'
-  | 'waterPrep'
-  | 'vessels'
-  | 'reactors'
-  | 'pumps'
-  | 'valves'
-  | 'instrumentation'
-  | 'pipework'
-  | 'consumers'
-  | 'utilities';
+export type EquipmentWizardGroupId = DefaultsGroupId;
 
 export interface EquipmentWizardField {
   key: string;
@@ -123,12 +114,13 @@ export const inferWizardContext = (project: ProjectDocument, selectedNodeId?: st
   const selectedEdge = project.edges.find((edge) => edge.id === selectedEdgeId);
   const nodeDefaults = defaultsFromNode(selectedNode);
   const edgeDefaults = defaultsFromEdge(selectedEdge);
+  const inferred = resolveNodeDefaults(project, selectedNode?.data.kind ?? 'pump', { selectedNode, selectedEdge });
   return {
     selectedNode,
     selectedEdge,
-    namingRule: '{prefix}-{seq}',
-    inferredMedium: (edgeDefaults.medium ?? nodeDefaults.medium ?? 'water') as MediumType,
-    inferredDiameter: (edgeDefaults.diameterNominal ?? nodeDefaults.diameterNominal ?? 'DN50') as string,
+    namingRule: inferred.namingRule,
+    inferredMedium: (edgeDefaults.medium ?? nodeDefaults.medium ?? inferred.medium ?? 'water') as MediumType,
+    inferredDiameter: (edgeDefaults.diameterNominal ?? nodeDefaults.diameterNominal ?? inferred.nominalDiameter ?? 'DN50') as string,
   };
 };
 
@@ -141,15 +133,16 @@ export const getWizardSubtypes = (groupId: EquipmentWizardGroupId): EquipmentWiz
   });
 };
 
-export const getWizardFields = (kind: SoapNodeKind): EquipmentWizardField[] => {
-  if (wizardFieldMap[kind]) return wizardFieldMap[kind]!;
-  return [
+export const getWizardFields = (project: ProjectDocument, groupId: EquipmentWizardGroupId, kind: SoapNodeKind, context?: EquipmentWizardContext): EquipmentWizardField[] => {
+  const baseFields = wizardFieldMap[kind] ?? [
     ...commonFields,
     { key: 'medium', label: 'Среда', type: 'select', required: true, source: 'process', options: mediumOptions },
     { key: 'diameterNominal', label: 'Диаметр', type: 'text', required: false, source: 'process' },
     { key: 'mode', label: 'Режим', type: 'select', required: true, source: 'top-level', options: modeOptions },
     { key: 'activityLabel', label: 'Назначение', type: 'text', required: false, source: 'process' },
   ];
+  const requiredFields = new Set(resolveNodeDefaults(project, kind, { groupId, selectedNode: context?.selectedNode, selectedEdge: context?.selectedEdge }).requiredFields);
+  return baseFields.map((field) => ({ ...field, required: field.required || requiredFields.has(field.key) }));
 };
 
 export const nextTagSequence = (project: ProjectDocument, prefix: string) => {
@@ -164,28 +157,29 @@ export const nextTagSequence = (project: ProjectDocument, prefix: string) => {
 export const generateTechnicalTag = (project: ProjectDocument, kind: SoapNodeKind, namingRule = '{prefix}-{seq}') => {
   const definition = componentMap.get(kind)!;
   const seq = String(nextTagSequence(project, definition.technicalPrefix)).padStart(3, '0');
-  return namingRule.replace('{prefix}', definition.technicalPrefix).replace('{seq}', seq);
+  return namingRule.replace(/\{prefix\}/g, definition.technicalPrefix).replace(/\{seq\}/g, seq).replace(/\{kind\}/g, kind);
 };
 
 export const buildWizardInitialValues = (project: ProjectDocument, groupId: EquipmentWizardGroupId, kind: SoapNodeKind, context: EquipmentWizardContext) => {
   const definition = componentMap.get(kind)!;
   const groupDefaults = wizardGroups.find((item) => item.id === groupId)?.defaults ?? {};
-  const fields = getWizardFields(kind);
-  const process = definition.defaults.process as Record<string, string | number | boolean | undefined>;
+  const resolvedDefaults = resolveNodeDefaults(project, kind, { groupId, selectedNode: context.selectedNode, selectedEdge: context.selectedEdge });
+  const fields = getWizardFields(project, groupId, kind, context);
+  const process = { ...(definition.defaults.process as Record<string, string | number | boolean | undefined>), ...resolvedDefaults.process };
   const base: Record<string, string | number | boolean> = {
     visibleName: definition.label,
-    technicalTag: generateTechnicalTag(project, kind, context.namingRule),
-    mode: definition.defaults.mode,
-    medium: context.inferredMedium ?? definition.defaults.medium,
-    diameterNominal: context.inferredDiameter ?? 'DN50',
+    technicalTag: generateTechnicalTag(project, kind, resolvedDefaults.namingRule),
+    mode: resolvedDefaults.mode,
+    medium: context.inferredMedium ?? resolvedDefaults.medium,
+    diameterNominal: context.inferredDiameter ?? resolvedDefaults.nominalDiameter,
   };
   fields.forEach((field) => {
     if (field.key in base) return;
-    const value = process[field.key] ?? (definition.defaults as unknown as Record<string, string | number | boolean | undefined>)[field.key] ?? groupDefaults[field.key];
+    const value = process[field.key] ?? (resolvedDefaults as unknown as Record<string, string | number | boolean | undefined>)[field.key] ?? groupDefaults[field.key];
     if (value !== undefined) base[field.key] = value;
   });
-  if ('medium' in base) base.medium = context.inferredMedium ?? (groupDefaults.medium as MediumType | undefined) ?? (base.medium as MediumType);
-  if ('diameterNominal' in base) base.diameterNominal = context.inferredDiameter ?? (groupDefaults.diameterNominal as string | undefined) ?? String(base.diameterNominal);
+  if ('medium' in base) base.medium = context.inferredMedium ?? (groupDefaults.medium as MediumType | undefined) ?? resolvedDefaults.medium;
+  if ('diameterNominal' in base) base.diameterNominal = context.inferredDiameter ?? (groupDefaults.diameterNominal as string | undefined) ?? resolvedDefaults.nominalDiameter;
   if (kind === 'pump' || kind === 'dosingPump') {
     base.dryRunProtection = groupDefaults.dryRunProtection ?? process.dryRunProtection ?? true;
     base.powerKw = process.powerKw ?? 5.5;

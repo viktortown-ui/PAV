@@ -67,6 +67,7 @@ export type TopologyMode = 'distribution' | 'collection' | 'mixing' | 'drain';
 export type ValveType = 'manual' | 'shutoff' | 'solenoid' | 'check' | 'control' | 'gate' | 'drain' | 'relief';
 export type JunctionType = 'tee' | 'cross' | 'collector' | 'splitter' | 'mixing' | 'drain' | 'sample';
 export type RouteState = 'idle' | 'primed' | 'flowing' | 'blocked' | 'starved' | 'draining' | 'cip' | 'alarm' | 'maintenance' | 'offline';
+export type DefaultsGroupId = 'sources' | 'waterPrep' | 'vessels' | 'reactors' | 'pumps' | 'valves' | 'instrumentation' | 'pipework' | 'consumers' | 'utilities';
 
 export interface PropertyField {
   key: string;
@@ -76,6 +77,33 @@ export interface PropertyField {
   max?: number;
   step?: number;
   options?: Array<{ label: string; value: string }>;
+}
+
+export interface DefaultValueMap {
+  visibleName?: string;
+  technicalTag?: string;
+  namingRule?: string;
+  medium?: MediumType;
+  mediumType?: MediumType;
+  nominalDiameter?: string;
+  diameterNominal?: string;
+  lineRole?: LineRole;
+  status?: EquipmentStatus;
+  mode?: EquipmentMode;
+  requiredFields?: string[];
+  process?: Record<string, string | number | boolean>;
+}
+
+export interface DefaultRuleLayer {
+  all?: DefaultValueMap;
+  edges?: DefaultValueMap;
+  groups?: Partial<Record<DefaultsGroupId, DefaultValueMap>>;
+  kinds?: Partial<Record<SoapNodeKind, DefaultValueMap>>;
+}
+
+export interface ProjectDefaults {
+  project: DefaultRuleLayer;
+  template: DefaultRuleLayer;
 }
 
 export interface TemplateViewportBounds {
@@ -321,4 +349,5 @@ export interface ProjectDocument {
   view: ProjectViewState;
   simulation: SimulationSettings;
   eventLog: EventLogEntry[];
+  defaults: ProjectDefaults;
 }
