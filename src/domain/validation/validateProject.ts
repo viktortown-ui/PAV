@@ -14,7 +14,7 @@ const DIRECTIONS = new Set<FlowDirection>(['forward', 'reverse', 'bidirectional'
 const MEDIUM_MODES = new Set<MediumMode>(['single', 'mixed', 'unknown']);
 const LINE_ROLES = new Set<LineRole>(['process', 'drain', 'CIP', 'utility', 'recycle']);
 
-const TOPOLOGY_NODES = new Set<SoapNodeKind>(['tee', 'cross', 'collector', 'splitter', 'mixingJunction', 'drainBranch', 'samplePoint']);
+const TOPOLOGY_NODES = new Set<SoapNodeKind>(['tee', 'cross', 'collector', 'splitter', 'mixingJunction', 'drainBranch', 'samplePoint', 'offPageConnector', 'serviceTerminal']);
 const MERGE_NODES = new Set<SoapNodeKind>(['collector', 'mixingJunction', 'cross']);
 const BRANCH_NODES = new Set<SoapNodeKind>(['tee', 'cross', 'splitter', 'drainBranch']);
 const MIXING_NODES = new Set<SoapNodeKind>(['mixingJunction']);

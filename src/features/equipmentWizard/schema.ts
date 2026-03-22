@@ -61,9 +61,9 @@ export const wizardGroups: EquipmentWizardGroup[] = [
   { id: 'pumps', label: 'Насосы', description: 'Перекачка и дозирование среды.', subtypeKinds: ['pump', 'dosingPump'], defaults: { flowRate: 25, dryRunProtection: true } },
   { id: 'valves', label: 'Арматура', description: 'Запорная, регулирующая и защитная арматура.', subtypeKinds: ['manualValve', 'shutoffValve', 'solenoidValve', 'checkValve', 'controlValve', 'gateValve', 'drainValve', 'reliefValve'], defaults: { normallyOpen: false, failPosition: 'closed' } },
   { id: 'instrumentation', label: 'КИП', description: 'Измерение, индикация и сигнализация.', subtypeKinds: ['flowMeter', 'pressureSensor', 'temperatureSensor', 'levelSensor', 'phSensor', 'conductivitySensor', 'indicator'], defaults: { warningLow: 0, warningHigh: 0 } },
-  { id: 'pipework', label: 'Трубные узлы', description: 'Соединения, распределение и сервисные точки.', subtypeKinds: ['inlineFilter', 'inlineMixer', 'heatExchanger', 'tee', 'cross', 'collector', 'splitter', 'mixingJunction', 'drainBranch', 'samplePoint'], defaults: { diameterNominal: 'DN50' } },
+  { id: 'pipework', label: 'Трубные узлы', description: 'Соединения, распределение и сервисные точки.', subtypeKinds: ['inlineFilter', 'inlineMixer', 'heatExchanger', 'tee', 'cross', 'collector', 'splitter', 'mixingJunction', 'drainBranch', 'samplePoint', 'offPageConnector', 'serviceTerminal'], defaults: { diameterNominal: 'DN50' } },
   { id: 'consumers', label: 'Потребители', description: 'Финальные приёмники среды.', subtypeKinds: ['consumer', 'fillingStation'], defaults: { medium: 'product' } },
-  { id: 'utilities', label: 'Утилиты', description: 'Слив, дренаж и вспомогательные узлы.', subtypeKinds: ['utilityDrain'], defaults: { medium: 'waste' } },
+  { id: 'utilities', label: 'Утилиты', description: 'Слив, дренаж и вспомогательные узлы.', subtypeKinds: ['utilityDrain', 'serviceTerminal'], defaults: { medium: 'waste' } },
 ];
 
 export const wizardSubtypeMap = new Map<SoapNodeKind, EquipmentWizardGroupId>(wizardGroups.flatMap((group) => group.subtypeKinds.map((kind) => [kind, group.id] as const)));
