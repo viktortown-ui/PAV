@@ -52,6 +52,8 @@ const appearanceFields = tabs(
   { key: 'enabled', label: 'Элемент видим', type: 'toggle' },
 );
 
+const actionFields = tabs();
+
 const simulationFields = tabs(
   { key: 'simEnabled', label: 'Участвует в симуляции', type: 'toggle' },
   { key: 'simActive', label: 'Форсировать активность', type: 'toggle' },
@@ -87,6 +89,7 @@ const makeDefinition = (
     appearance: appearanceFields,
     alarms: valveFields,
     simulation: simulationFields,
+    actions: actionFields,
   };
 
   if (config.className === 'topology') baseFields.process = topologyFields;
@@ -105,9 +108,15 @@ const makeDefinition = (
     className: config.className,
     defaults: {
       kind: type,
-      status: 'normal',
+      status: 'idle',
       rotation: 0,
+      mediumType: 'water',
       medium: 'water',
+      mode: 'auto',
+      alarms: [],
+      isEnabled: true,
+      isInteractive: true,
+      simulationEnabled: true,
       notes: '',
       process: {
         capacity: 1000,
@@ -151,12 +160,21 @@ const makeDefinition = (
         preferredDirection: ports.preferredDirection ?? 'ltr',
         inline: ports.inline ?? false,
       },
+      runtime: {
+        enabled: true,
+        active: false,
+        blocked: false,
+        routeState: 'idle',
+        flow: Number(config.overrides?.flowRate ?? 0),
+        flowLpm: Number(config.overrides?.flowRate ?? 0),
+      },
       simulation: {
         enabled: true,
         active: false,
         blocked: false,
         routeState: 'idle',
         flow: Number(config.overrides?.flowRate ?? 0),
+        flowLpm: Number(config.overrides?.flowRate ?? 0),
       },
     },
     fields: baseFields,

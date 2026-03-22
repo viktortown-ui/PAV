@@ -41,18 +41,20 @@ export type SoapNodeKind =
   | 'utilityDrain';
 
 export type MediumType = 'water' | 'product' | 'cip' | 'waste';
-export type NodeStatus = 'normal' | 'active' | 'warning' | 'alarm' | 'disabled';
-export type RouteState = 'idle' | 'primed' | 'flowing' | 'blocked' | 'starved' | 'draining' | 'cip' | 'alarm' | 'offline';
-export type InspectorTab = 'main' | 'process' | 'ports' | 'signals' | 'appearance' | 'alarms' | 'simulation';
+export type EquipmentStatus = 'off' | 'idle' | 'standby' | 'running' | 'blocked' | 'alarm' | 'maintenance' | 'normal' | 'active' | 'warning' | 'disabled';
+export type EquipmentMode = 'manual' | 'auto';
+export type InspectorTab = 'main' | 'process' | 'ports' | 'signals' | 'appearance' | 'alarms' | 'simulation' | 'actions';
 export type PropertyFieldType = 'text' | 'number' | 'toggle' | 'select' | 'textarea';
 export type Severity = 'info' | 'warning' | 'error';
 export type TemplateId = 'water-prep' | 'soap-line' | 'cip-fragment';
 export type EdgeLabelMode = 'hidden' | 'selected' | 'active' | 'all';
 export type EquipmentClass = 'major' | 'line' | 'valve' | 'instrument' | 'topology';
-export type ValveMode = 'manual' | 'auto';
 export type FailPosition = 'open' | 'closed' | 'hold';
-export type SignalType = 'analogue' | 'digital' | 'pulse';
+export type SignalQuality = 'good' | 'uncertain' | 'bad';
 export type TopologyMode = 'distribution' | 'collection' | 'mixing' | 'drain';
+export type ValveType = 'manual' | 'shutoff' | 'solenoid' | 'check' | 'control' | 'gate' | 'drain' | 'relief';
+export type JunctionType = 'tee' | 'cross' | 'collector' | 'splitter' | 'mixing' | 'drain' | 'sample';
+export type RouteState = 'idle' | 'primed' | 'flowing' | 'blocked' | 'starved' | 'draining' | 'cip' | 'alarm' | 'offline';
 
 export interface PropertyField {
   key: string;
@@ -87,25 +89,109 @@ export interface ProjectViewState {
   hasManualViewport: boolean;
 }
 
+export interface BaseEquipmentProcess {
+  mediumType?: MediumType;
+  medium?: MediumType;
+  [key: string]: string | number | boolean | string[] | undefined;
+}
+
+export interface TankProcess extends BaseEquipmentProcess {
+  capacityLiters: number;
+  currentLevelLiters: number;
+  levelPercent: number;
+  canReceive: boolean;
+  canDischarge: boolean;
+  temperatureC: number;
+}
+
+export interface ReactorProcess extends TankProcess {
+  agitatorOn: boolean;
+  heatingOn: boolean;
+  batchStage: string;
+  recipeName?: string;
+}
+
+export interface PumpProcess extends BaseEquipmentProcess {
+  nominalFlowLpm: number;
+  actualFlowLpm: number;
+  powerKw: number;
+  rpm: number;
+  startAllowed: boolean;
+  dryRunProtection: boolean;
+  suctionAvailable: boolean;
+}
+
+export interface ValveProcess extends BaseEquipmentProcess {
+  valveType: ValveType;
+  isOpen: boolean;
+  failPosition: FailPosition;
+  manualOverride: boolean;
+  normallyOpen: boolean;
+  normallyClosed: boolean;
+}
+
+export interface SensorProcess extends BaseEquipmentProcess {
+  measuredProperty: string;
+  unit: string;
+  currentValue: number;
+  warnLow: number;
+  warnHigh: number;
+  alarmLow: number;
+  alarmHigh: number;
+  signalQuality: SignalQuality;
+}
+
+export interface TopologyProcess extends BaseEquipmentProcess {
+  junctionType: JunctionType;
+  allowedDirections: string;
+  mixingAllowed: boolean;
+  splitAllowed: boolean;
+  topologyMode: TopologyMode;
+}
+
+export interface GenericProcess extends BaseEquipmentProcess {
+  nominalFlowLpm?: number;
+  actualFlowLpm?: number;
+  powerKw?: number;
+  rpm?: number;
+  temperatureC?: number;
+  pressureBar?: number;
+  activityLabel?: string;
+}
+
+export type EquipmentProcess = TankProcess | ReactorProcess | PumpProcess | ValveProcess | SensorProcess | TopologyProcess | GenericProcess;
+
 export interface SoapNodeData {
   kind: SoapNodeKind;
+  id: string;
+  type: SoapNodeKind;
   visibleName: string;
   shortName: string;
   technicalTag: string;
+  notes?: string;
   category: string;
+  mediumType: MediumType;
+  medium: MediumType;
+  status: EquipmentStatus;
+  mode: EquipmentMode;
+  alarms: string[];
+  isEnabled: boolean;
+  isInteractive: boolean;
+  simulationEnabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+  revision: number;
   description: string;
   className: EquipmentClass;
-  status: NodeStatus;
   rotation: number;
-  medium: MediumType;
-  notes?: string;
-  process: Record<string, number | string | boolean>;
+  process: EquipmentProcess;
   visual: {
     accent: string;
     fill: number;
     enabled: boolean;
     semanticSize: 'major' | 'line' | 'valve' | 'instrument' | 'topology';
     showLabel: boolean;
+    stateBadge?: string;
   };
   ports: {
     inputs: number;
@@ -113,23 +199,30 @@ export interface SoapNodeData {
     preferredDirection: 'ltr' | 'ttb';
     inline: boolean;
   };
-  simulation: {
+  runtime: {
     enabled: boolean;
     active: boolean;
     blocked: boolean;
     routeState: RouteState;
     flow: number;
+    flowLpm: number;
     lastEvent?: string;
     alarmText?: string;
   };
+  simulation: SoapNodeData['runtime'];
 }
 
 export interface SoapEdgeData {
+  mediumType: MediumType;
   medium: MediumType;
+  flowLpm: number;
+  flowRate: number;
+  nominalDiameter: string;
+  routeState: RouteState;
+  upstreamRef?: string;
+  downstreamRef?: string;
   flowActive: boolean;
   blocked: boolean;
-  routeState: RouteState;
-  flowRate: number;
   pressure: number;
   selectedPath?: boolean;
   sourceLabel?: string;
@@ -139,7 +232,6 @@ export interface SoapEdgeData {
   labelMode?: EdgeLabelMode;
   segmentId?: string;
   direction?: 'forward' | 'reverse' | 'bidirectional';
-  nominalDiameter?: string;
   stateLabel?: string;
 }
 
@@ -154,7 +246,7 @@ export interface ComponentDefinition {
   category: string;
   description: string;
   className: EquipmentClass;
-  defaults: Omit<SoapNodeData, 'visibleName' | 'shortName' | 'technicalTag' | 'category' | 'description' | 'className'>;
+  defaults: Omit<SoapNodeData, 'id' | 'type' | 'visibleName' | 'shortName' | 'technicalTag' | 'category' | 'description' | 'className' | 'createdAt' | 'updatedAt' | 'revision'>;
   fields: Record<InspectorTab, PropertyField[]>;
 }
 
