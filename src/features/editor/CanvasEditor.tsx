@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import ReactFlow, { Background, Controls, MiniMap, Panel, ReactFlowInstance, SelectionMode, Viewport, getViewportForBounds } from 'reactflow';
+import ReactFlow, { Background, ControlButton, Controls, MiniMap, Panel, ReactFlowInstance, SelectionMode, Viewport, getViewportForBounds } from 'reactflow';
 import { shallow } from 'zustand/shallow';
 import { FlowEdge } from '../../ui/edges/FlowEdge';
 import { ProcessNode } from '../../ui/nodes/ProcessNode';
@@ -32,6 +32,8 @@ const debugLog = (scope: string, message: string, payload?: unknown) => {
 };
 
 const CanvasEditorComponent = ({ focusMode = false }: { focusMode?: boolean }) => {
+  const setEdgeLabelMode = useAppStore((state) => state.setEdgeLabelMode);
+  const edgeLabelMode = useAppStore((state) => state.edgeLabelMode);
   const {
     nodes: projectNodes,
     edges: projectEdges,
@@ -42,7 +44,6 @@ const CanvasEditorComponent = ({ focusMode = false }: { focusMode?: boolean }) =
     pathSelection,
     showProblematicOnly,
     hoveredEdgeId,
-    edgeLabelMode,
     viewportNonce,
     onNodesChange,
     onEdgesChange,
@@ -275,8 +276,12 @@ const CanvasEditorComponent = ({ focusMode = false }: { focusMode?: boolean }) =
         multiSelectionKeyCode="Shift"
       >
         <Background color="rgba(93,117,145,0.18)" gap={24} size={1.2} />
-        <MiniMap pannable zoomable className="minimap" maskColor="rgba(8,12,18,0.78)" />
-        <Controls showInteractive={false} />
+        {!focusMode ? <MiniMap pannable zoomable className="minimap" maskColor="rgba(8,12,18,0.78)" /> : null}
+        <Controls showInteractive={false} position="bottom-right" className="canvas-controls">
+          <ControlButton title="Вписать схему" onClick={() => void flow?.fitView({ padding: 0.2, duration: 220 })}>⌗</ControlButton>
+          <ControlButton title="Подписи линий" onClick={() => setEdgeLabelMode(edgeLabelMode === 'hidden' ? 'selected' : 'hidden')}>{edgeLabelMode === 'hidden' ? 'T' : 'Т'}</ControlButton>
+          <ControlButton title={focusMode ? 'Canvas focus mode включен' : 'Canvas focus mode выключен'} disabled>{focusMode ? 'Ф' : 'UI'}</ControlButton>
+        </Controls>
         <Panel position="top-right"><DebugPanel /></Panel>
       </ReactFlow>
       <div className={`canvas-overlay simulation-overlay placement-${panelPlacement} ${focusMode ? 'is-focus-mode' : ''}`}>
