@@ -48,7 +48,8 @@ export type PropertyFieldType = 'text' | 'number' | 'toggle' | 'select' | 'texta
 export type Severity = 'info' | 'warning' | 'error';
 export type TemplateId = 'water-prep' | 'soap-line' | 'cip-fragment';
 export type EdgeLabelMode = 'hidden' | 'selected' | 'active' | 'all';
-export type EquipmentClass = 'major' | 'line' | 'valve' | 'instrument' | 'topology';
+export type EquipmentClass = 'major' | 'line' | 'valve' | 'instrument' | 'topology' | 'terminal';
+export type SymbolFamily = 'vessel' | 'machinery' | 'valve' | 'instrument' | 'topology' | 'terminal';
 export type FailPosition = 'open' | 'closed' | 'hold';
 export type SignalQuality = 'good' | 'uncertain' | 'bad';
 export type TopologyMode = 'distribution' | 'collection' | 'mixing' | 'drain';
@@ -246,6 +247,11 @@ export interface ComponentDefinition {
   category: string;
   description: string;
   className: EquipmentClass;
+  family: SymbolFamily;
+  familyLabel: string;
+  ruDescriptionShort: string;
+  placementNote?: string;
+  auditNote: string;
   defaults: Omit<SoapNodeData, 'id' | 'type' | 'visibleName' | 'shortName' | 'technicalTag' | 'category' | 'description' | 'className' | 'createdAt' | 'updatedAt' | 'revision'>;
   fields: Record<InspectorTab, PropertyField[]>;
 }
