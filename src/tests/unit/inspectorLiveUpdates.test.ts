@@ -53,4 +53,18 @@ describe('inspector live updates', () => {
     expect(updated.data?.medium).toBe('cip');
     expect(updated.data?.nominalDiameter).toBe('DN80');
   });
+
+
+  it('persists explicit direction and line-role edits on segments', () => {
+    resetStore();
+    const store = useAppStore.getState();
+    const edge = store.project.edges[0]!;
+
+    store.updateEdgeField(edge.id, 'directionMode', 'bidirectional');
+    store.updateEdgeField(edge.id, 'lineRole', 'recycle');
+
+    const updated = useAppStore.getState().project.edges.find((item) => item.id === edge.id)!;
+    expect(updated.data?.directionMode).toBe('bidirectional');
+    expect(updated.data?.lineRole).toBe('recycle');
+  });
 });

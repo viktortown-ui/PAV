@@ -37,7 +37,7 @@ const edge = (id: string, source: string, target: string, medium: import('../sch
   targetHandle,
   type: 'flowEdge',
   markerEnd: { type: MarkerType.ArrowClosed },
-  data: { mediumType: medium, medium, flowLpm: 0, flowRate: 0, flowActive: false, blocked: false, routeState: 'idle', pressure: 0, nominalDiameter, direction: 'forward', stateLabel: 'Ожидание', segmentId: id, upstreamRef: source, downstreamRef: target },
+  data: { mediumType: medium, medium, flowLpm: 0, flowRate: 0, flowActive: false, blocked: false, routeState: 'idle', pressure: 0, directionMode: 'derived', nominalDiameter, mediumMode: 'single', lineRole: medium === 'cip' ? 'CIP' : medium === 'waste' ? 'drain' : 'process', direction: 'forward', stateLabel: 'Ожидание', routeWarnings: [], composition: { [medium]: 1 }, mixedFlow: false, segmentId: id, upstreamRef: source, downstreamRef: target },
   animated: false,
 });
 

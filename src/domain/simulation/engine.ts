@@ -1,5 +1,5 @@
 import { mediumPalette } from '../../ui/tokens/tokens';
-import { EventLogEntry, MediumType, ProjectDocument, RouteState, SimulationSettings, SoapEdge, SoapNode, SoapNodeData } from '../schemas/types';
+import { CompositeMediumType, EventLogEntry, FlowDirection, MediumType, ProjectDocument, RouteState, SimulationSettings, SoapEdge, SoapNode, SoapNodeData } from '../schemas/types';
 import { instrumentCallsite } from '../../utils/instrumentation';
 
 interface SimulationResult {
@@ -21,6 +21,8 @@ interface EdgeEvaluation {
   blockedBy: string[];
   stateLabel: string;
   sourceSupplyAvailable: boolean;
+  resolvedDirection: FlowDirection;
+  routeWarnings: string[];
 }
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -29,6 +31,7 @@ const tankKinds = new Set(['source', 'tank', 'bufferTank']);
 const pumpKinds = new Set(['pump', 'dosingPump']);
 const reactorKinds = new Set(['reactor', 'heatedReactor']);
 const sensorKinds = new Set(['flowMeter', 'pressureSensor', 'temperatureSensor', 'levelSensor', 'phSensor', 'conductivitySensor', 'indicator']);
+const mixingNodeKinds = new Set(['mixingJunction']);
 
 const isTankLike = (node: SoapNode) => tankKinds.has(node.data.kind) || reactorKinds.has(node.data.kind);
 const isPump = (node: SoapNode) => pumpKinds.has(node.data.kind);
@@ -53,27 +56,33 @@ const pushEvent = (events: EventLogEntry[], type: string, message: string, sever
 const getIncomingEdges = (nodeId: string, edges: SoapEdge[]) => edges.filter((edge) => edge.target === nodeId);
 const getOutgoingEdges = (nodeId: string, edges: SoapEdge[]) => edges.filter((edge) => edge.source === nodeId);
 
-const routeStateLabel = (state: RouteState) => ({
-  idle: 'Ожидание',
-  primed: 'Подготовлен',
-  flowing: 'Поток',
-  blocked: 'Блокирован',
-  starved: 'Нет подпитки',
-  draining: 'Слив',
-  cip: 'CIP',
-  alarm: 'Авария',
-  maintenance: 'Ремонт',
-  offline: 'Отключён',
-}[state]);
-
+const routeStateLabel = (state: RouteState) => ({ idle: 'Ожидание', primed: 'Подготовлен', flowing: 'Поток', blocked: 'Блокирован', starved: 'Нет подпитки', draining: 'Слив', cip: 'CIP', alarm: 'Авария', maintenance: 'Ремонт', offline: 'Отключён' }[state]);
 const getNodeBaseFlow = (node: SoapNode) => Number((node.data.process as any).actualFlowLpm ?? (node.data.process as any).nominalFlowLpm ?? (node.data.process as any).flowRate ?? node.data.runtime.flowLpm ?? node.data.simulation.flowLpm ?? 0);
+const normalizeComposition = (composition: Partial<Record<MediumType, number>>) => {
+  const total = Object.values(composition).reduce((sum, value) => sum + Number(value ?? 0), 0);
+  if (total <= 0) return composition;
+  return Object.fromEntries(Object.entries(composition).map(([medium, share]) => [medium, Number(share ?? 0) / total])) as Partial<Record<MediumType, number>>;
+};
 
-const canValvePass = (node: SoapNode, edge: SoapEdge) => {
+const getEdgeComposition = (edge: SoapEdge, fallback: MediumType): Partial<Record<MediumType, number>> => {
+  const composition = edge.data?.composition;
+  if (composition && Object.keys(composition).length > 0) return normalizeComposition(composition);
+  return { [fallback]: 1 };
+};
+
+const inferDirection = (edge: SoapEdge, source: SoapNode, target: SoapNode): FlowDirection => {
+  const mode = edge.data?.directionMode ?? 'derived';
+  if (mode === 'forward' || mode === 'reverse' || mode === 'bidirectional') return mode;
+  if (source.position.x <= target.position.x) return 'forward';
+  return 'reverse';
+};
+
+const canValvePass = (node: SoapNode, direction: FlowDirection) => {
   if (!isValve(node)) return { pass: true, reason: '' };
   const process = node.data.process as any;
   const isOpen = Boolean(process.isOpen ?? process.valveOpen ?? process.valveState !== 'closed');
   if (!isOpen) return { pass: false, reason: 'Клапан закрыт' };
-  if (node.data.kind === 'checkValve' && (edge.data?.direction ?? 'forward') === 'reverse') return { pass: false, reason: 'Обратный клапан блокирует направление' };
+  if (node.data.kind === 'checkValve' && direction === 'reverse') return { pass: false, reason: 'Обратный клапан блокирует направление' };
   return { pass: true, reason: '' };
 };
 
@@ -88,8 +97,11 @@ const evaluateEdge = (edge: SoapEdge, nodeMap: Map<string, SoapNode>, allEdges: 
   const target = nodeMap.get(edge.target)!;
   const sourceMaintenance = getNodeModeRouteState(source);
   const targetMaintenance = getNodeModeRouteState(target);
+  const resolvedDirection = inferDirection(edge, source, target);
+  const routeWarnings: string[] = [];
+
   if (sourceMaintenance || targetMaintenance) {
-    return { active: false, blocked: false, routeState: 'maintenance', flowRate: 0, pressure: 0, blockedBy: ['Оборудование в ремонте'], stateLabel: 'Ремонт', sourceSupplyAvailable: false };
+    return { active: false, blocked: false, routeState: 'maintenance', flowRate: 0, pressure: 0, blockedBy: ['Оборудование в ремонте'], stateLabel: 'Ремонт', sourceSupplyAvailable: false, resolvedDirection, routeWarnings };
   }
 
   const sourceLevel = getLevel(source);
@@ -101,8 +113,8 @@ const evaluateEdge = (edge: SoapEdge, nodeMap: Map<string, SoapNode>, allEdges: 
   const sourceIsExternallyFed = getIncomingEdges(source.id, allEdges).some((candidate) => candidate.data?.flowActive);
   const sourceSupplyAvailable = sourceHasMaterial || sourceIsExternallyFed;
   const targetHasSpace = target.data.kind === 'utilityDrain' || targetCapacity <= 0 || targetLevel < targetCapacity;
-  const sourceValve = canValvePass(source, edge);
-  const targetValve = canValvePass(target, edge);
+  const sourceValve = canValvePass(source, resolvedDirection);
+  const targetValve = canValvePass(target, resolvedDirection);
   const sourcePumpReady = !isPump(source) || Boolean((source.data.process as any).pumpOn);
   const targetPumpReady = !isPump(target) || Boolean((target.data.process as any).pumpOn);
   const reactorSourceAllowed = !reactorKinds.has(source.data.kind) || Boolean((source.data.process as any).canDischarge ?? true);
@@ -123,16 +135,19 @@ const evaluateEdge = (edge: SoapEdge, nodeMap: Map<string, SoapNode>, allEdges: 
   if (!targetPumpReady && isPump(target)) blockedBy.push('Насос-приёмник выключен');
   if (!reactorSourceAllowed) blockedBy.push('Реактор не разрешает выдачу');
   if (!reactorTargetAllowed) blockedBy.push('Реактор не разрешает приём');
+  if (edge.data?.directionMode === 'reverse' && resolvedDirection !== 'reverse') routeWarnings.push('Сегмент принудительно развернут локально');
+  if (edge.data?.directionMode === 'bidirectional') routeWarnings.push('Сегмент допускает локальный реверс потока');
 
   const active = blockedBy.length === 0;
   const blocked = !active && (sourceOperational || sourceSupplyAvailable || isPump(source));
   const flowRate = active ? getNodeBaseFlow(source) * speed : 0;
-  const medium = (edge.data?.mediumType ?? edge.data?.medium ?? source.data.mediumType) as MediumType;
+  const medium = (edge.data?.mediumType ?? edge.data?.medium ?? source.data.mediumType) as CompositeMediumType;
   const routeState: RouteState = active
     ? medium === 'cip' ? 'cip' : medium === 'waste' ? 'draining' : 'flowing'
     : sourceMaintenance || targetMaintenance ? 'maintenance'
     : !sourceSupplyAvailable ? 'starved'
-    : blocked ? (blockedBy.some((reason) => reason.includes('авари')) ? 'alarm' : 'blocked') : 'idle';
+    : blocked ? 'blocked' : 'idle';
+
   return {
     active,
     blocked,
@@ -142,21 +157,59 @@ const evaluateEdge = (edge: SoapEdge, nodeMap: Map<string, SoapNode>, allEdges: 
     blockedBy,
     stateLabel: routeStateLabel(routeState),
     sourceSupplyAvailable,
+    resolvedDirection,
+    routeWarnings,
   };
 };
 
 const syncNodeRuntime = (node: SoapNode) => {
-  node.data.runtime = {
-    ...node.data.runtime,
-    enabled: node.data.visual.enabled,
-    active: node.data.simulation.active,
-    blocked: node.data.simulation.blocked,
-    routeState: node.data.simulation.routeState,
-    flow: node.data.simulation.flow,
-    flowLpm: node.data.simulation.flowLpm,
-    lastEvent: node.data.simulation.lastEvent,
-    alarmText: node.data.simulation.alarmText,
-  };
+  node.data.runtime = { ...node.data.runtime, enabled: node.data.visual.enabled, active: node.data.simulation.active, blocked: node.data.simulation.blocked, routeState: node.data.simulation.routeState, flow: node.data.simulation.flow, flowLpm: node.data.simulation.flowLpm, lastEvent: node.data.simulation.lastEvent, alarmText: node.data.simulation.alarmText };
+};
+
+const updatePortOccupancy = (nodes: SoapNode[], edges: SoapEdge[]) => {
+  nodes.forEach((node) => {
+    Object.keys(node.data.ports.details).forEach((portId) => {
+      const occupied = edges.some((edge) => edge.source === node.id && edge.sourceHandle === portId) || edges.some((edge) => edge.target === node.id && edge.targetHandle === portId);
+      node.data.ports.details[portId].occupied = occupied ? 'occupied' : 'free';
+    });
+  });
+};
+
+const applyMixingState = (nodeMap: Map<string, SoapNode>, edges: SoapEdge[], warnings: string[]) => {
+  edges.forEach((edge) => {
+    const source = nodeMap.get(edge.source);
+    const target = nodeMap.get(edge.target);
+    if (!source || !target || !edge.data) return;
+    const targetAllowsMixing = mixingNodeKinds.has(target.data.kind) || Boolean((target.data.process as any).mixingAllowed);
+    const sourceAllowsMixing = mixingNodeKinds.has(source.data.kind) || Boolean((source.data.process as any).mixingAllowed);
+    const incomingToSource = getIncomingEdges(source.id, edges).filter((candidate) => candidate.id !== edge.id && candidate.data?.flowActive);
+    if (incomingToSource.length > 1 && !sourceAllowsMixing) {
+      warnings.push(`${source.data.visibleName}: скрытое слияние без mixing-capable node.`);
+    }
+    const incomingToTarget = getIncomingEdges(target.id, edges).filter((candidate) => candidate.data?.flowActive);
+    if (incomingToTarget.length < 2 || !targetAllowsMixing) return;
+
+    const merged = normalizeComposition(incomingToTarget.reduce((acc, candidate) => {
+      const fallback = (candidate.data?.mediumType === 'composite' ? 'product' : candidate.data?.mediumType ?? source.data.mediumType) as MediumType;
+      const composition = getEdgeComposition(candidate, fallback);
+      Object.entries(composition).forEach(([medium, share]) => {
+        acc[medium as MediumType] = (acc[medium as MediumType] ?? 0) + Number(share ?? 0);
+      });
+      return acc;
+    }, {} as Partial<Record<MediumType, number>>));
+
+    const isMixed = Object.keys(merged).length > 1;
+    const outgoing = getOutgoingEdges(target.id, edges);
+    outgoing.forEach((candidate) => {
+      if (!candidate.data) return;
+      candidate.data.composition = merged;
+      candidate.data.mixedFlow = isMixed;
+      candidate.data.mediumMode = isMixed ? 'mixed' : 'single';
+      candidate.data.mediumType = isMixed ? 'composite' : (Object.keys(merged)[0] as CompositeMediumType);
+      candidate.data.medium = candidate.data.mediumType;
+      if (isMixed) candidate.data.routeWarnings = [...new Set([...(candidate.data.routeWarnings ?? []), 'Смешанный поток сформирован явным mixing node'])];
+    });
+  });
 };
 
 const updateSensorReading = (node: SoapNode, nodeMap: Map<string, SoapNode>, edges: SoapEdge[], warnings: string[], events: EventLogEntry[], previousNode?: SoapNode) => {
@@ -186,8 +239,8 @@ const updateSensorReading = (node: SoapNode, nodeMap: Map<string, SoapNode>, edg
 
   const warnLow = Number(process.warnLow ?? process.warningLow ?? Number.NEGATIVE_INFINITY);
   const warnHigh = Number(process.warnHigh ?? process.warningHigh ?? Number.POSITIVE_INFINITY);
-  const alarmLow = Number(process.alarmLow ?? process.alarmLow ?? Number.NEGATIVE_INFINITY);
-  const alarmHigh = Number(process.alarmHigh ?? process.alarmHigh ?? Number.POSITIVE_INFINITY);
+  const alarmLow = Number(process.alarmLow ?? Number.NEGATIVE_INFINITY);
+  const alarmHigh = Number(process.alarmHigh ?? Number.POSITIVE_INFINITY);
   const prevAlarm = previousNode?.data.alarms?.join('|') ?? '';
 
   node.data.alarms = [];
@@ -225,7 +278,7 @@ export const runSimulationStep = (project: ProjectDocument, dt: number): Simulat
   instrumentCallsite('route recomputation', {
     callsite: 'runSimulationStep',
     when: 'Runs on every animation-frame simulation tick while simulation is enabled.',
-    why: 'It recomputes edge flow, blockage, and route-state propagation across the graph.',
+    why: 'It recomputes edge flow, blockage, explicit direction state, and mixing propagation across the graph.',
     repeatable: true,
     guidance: 'throttle',
     details: { dt, running: project.simulation.running, edgeCount: project.edges.length },
@@ -262,7 +315,8 @@ export const runSimulationStep = (project: ProjectDocument, dt: number): Simulat
       if (!source || !target) return;
       const evaluation = evaluateEdge(edge, nodeMap, nextEdges, project.simulation.speed);
       const previousState = edge.data?.routeState;
-      const currentEdgeData = edge.data ?? { mediumType: source.data.mediumType, medium: source.data.medium, flowLpm: 0, flowRate: 0, flowActive: false, blocked: false, routeState: 'idle', pressure: 0, nominalDiameter: 'DN50' as const };
+      const currentEdgeData = edge.data ?? { mediumType: source.data.mediumType, medium: source.data.mediumType, flowLpm: 0, flowRate: 0, flowActive: false, blocked: false, routeState: 'idle', pressure: 0, directionMode: 'derived', nominalDiameter: 'DN50', mediumMode: 'single', lineRole: 'process' } as any;
+      const baseMedium = (currentEdgeData.mediumType === 'composite' ? source.data.mediumType : currentEdgeData.mediumType ?? source.data.mediumType) as MediumType;
       edge.animated = evaluation.active;
       edge.data = {
         ...currentEdgeData,
@@ -278,6 +332,10 @@ export const runSimulationStep = (project: ProjectDocument, dt: number): Simulat
         targetLabel: target.data.visibleName,
         blockedBy: evaluation.blockedBy,
         stateLabel: evaluation.stateLabel,
+        direction: evaluation.resolvedDirection,
+        routeWarnings: evaluation.routeWarnings,
+        composition: currentEdgeData.composition ?? { [baseMedium]: 1 },
+        lineRole: currentEdgeData.lineRole ?? (baseMedium === 'cip' ? 'CIP' : baseMedium === 'waste' ? 'drain' : 'process'),
       };
       if (previousState !== evaluation.routeState) changed = true;
 
@@ -285,7 +343,7 @@ export const runSimulationStep = (project: ProjectDocument, dt: number): Simulat
       target.data.simulation.routeState = evaluation.routeState;
       if (evaluation.active) {
         totalActiveFlow += evaluation.flowRate;
-        activeMediums.add((edge.data.mediumType ?? edge.data.medium) || source.data.mediumType);
+        activeMediums.add(((edge.data?.mediumType ?? edge.data?.medium) || source.data.mediumType) as string);
         source.data.simulation.active = true;
         target.data.simulation.active = true;
         source.data.simulation.flow = Math.max(source.data.simulation.flow, evaluation.flowRate);
@@ -307,6 +365,9 @@ export const runSimulationStep = (project: ProjectDocument, dt: number): Simulat
     });
     if (!changed) break;
   }
+
+  applyMixingState(nodeMap, nextEdges, warnings);
+  updatePortOccupancy(nextNodes, nextEdges);
 
   nextNodes.forEach((node) => {
     const previousNode = previousNodeMap.get(node.id);
@@ -368,30 +429,16 @@ export const runSimulationStep = (project: ProjectDocument, dt: number): Simulat
   nextEdges.forEach((edge) => {
     const previousEdge = previousEdgeMap.get(edge.id);
     if ((previousEdge?.data?.routeState ?? 'idle') !== edge.data?.routeState) {
-      if (edge.data?.routeState === 'blocked' || edge.data?.routeState === 'starved' || edge.data?.routeState === 'alarm') {
-        pushEvent(events, 'route', `${edge.data?.sourceLabel} → ${edge.data?.targetLabel}: маршрут заблокирован.`, 'warning', edge.id);
-      }
-      if ((previousEdge?.data?.routeState === 'blocked' || previousEdge?.data?.routeState === 'starved' || previousEdge?.data?.routeState === 'alarm') && edge.data?.routeState === 'flowing') {
-        pushEvent(events, 'route', `${edge.data?.sourceLabel} → ${edge.data?.targetLabel}: маршрут восстановлен.`, 'info', edge.id);
-      }
+      if (edge.data?.routeState === 'blocked' || edge.data?.routeState === 'starved' || edge.data?.routeState === 'alarm') pushEvent(events, 'route', `${edge.data?.sourceLabel} → ${edge.data?.targetLabel}: маршрут заблокирован.`, 'warning', edge.id);
+      if ((previousEdge?.data?.routeState === 'blocked' || previousEdge?.data?.routeState === 'starved' || previousEdge?.data?.routeState === 'alarm') && edge.data?.routeState === 'flowing') pushEvent(events, 'route', `${edge.data?.sourceLabel} → ${edge.data?.targetLabel}: маршрут восстановлен.`, 'info', edge.id);
     }
   });
 
   const latestEvent = events.length > 0 ? events[events.length - 1] : undefined;
   const lastEvent = latestEvent?.message ?? warnings[0] ?? (totalActiveFlow > 0 ? `Активный поток ${Math.round(totalActiveFlow)} л/мин` : 'Схема в режиме ожидания');
-  if (project.simulation.lastEvent !== lastEvent) {
-    pushEvent(events, 'simulation', lastEvent, warnings.length ? 'warning' : 'info');
-  }
+  if (project.simulation.lastEvent !== lastEvent) pushEvent(events, 'simulation', lastEvent, warnings.length ? 'warning' : 'info');
 
-  return {
-    nodes: nextNodes,
-    edges: nextEdges,
-    warnings: Array.from(new Set(warnings)),
-    events,
-    activeMedium: activeMediums.size === 0 ? 'none' : activeMediums.size === 1 ? [...activeMediums][0] as any : 'mixed',
-    totalActiveFlow,
-    lastEvent,
-  };
+  return { nodes: nextNodes, edges: nextEdges, warnings: Array.from(new Set(warnings)), events, activeMedium: activeMediums.size === 0 ? 'none' : activeMediums.size === 1 ? [...activeMediums][0] as any : 'mixed', totalActiveFlow, lastEvent };
 };
 
 export const getMediumColor = (medium: SoapNodeData['medium']) => mediumPalette[medium].base;
