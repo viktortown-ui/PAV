@@ -6,6 +6,7 @@ type SimulationPanelPlacement = 'left' | 'center' | 'right';
 
 type SimulationPanelProps = {
   placement?: SimulationPanelPlacement;
+  focusMode?: boolean;
 };
 
 const speedOptions = [0.5, 1, 1.5, 2, 3];
@@ -26,7 +27,7 @@ const cyclePanelMode = (mode: SimulationPanelMode) => {
   return panelModeOrder[(currentIndex + 1) % panelModeOrder.length];
 };
 
-export const SimulationPanel = ({ placement = 'center' }: SimulationPanelProps) => {
+export const SimulationPanel = ({ placement = 'center', focusMode = false }: SimulationPanelProps) => {
   const project = useAppStore((state) => state.project);
   const selectedNodeId = useAppStore((state) => state.selectedNodeId);
   const selectedEdgeId = useAppStore((state) => state.selectedEdgeId);
@@ -74,7 +75,7 @@ export const SimulationPanel = ({ placement = 'center' }: SimulationPanelProps) 
   const modeIcon = panelMode === 'expanded' ? '▾' : panelMode === 'compact' ? '▴' : '◱';
 
   return (
-    <div className={`simulation-panel-shell placement-${placement} mode-${panelMode}`} data-panel-mode={panelMode}>
+    <div className={`simulation-panel-shell placement-${placement} mode-${panelMode} ${focusMode ? 'is-focus-mode' : ''}`} data-panel-mode={panelMode}>
       <div className="simulation-panel-toggle-rail" role="toolbar" aria-label="Режим панели диагностики">
         <button
           type="button"
@@ -127,7 +128,7 @@ export const SimulationPanel = ({ placement = 'center' }: SimulationPanelProps) 
               <div className="sim-header">
                 <div>
                   <strong>Диагностика технологической схемы</strong>
-                  <span>Панель расширяется только по запросу, чтобы сохранить читаемость канвы и мгновенно вернуть компактный док.</span>
+                  <span>Мини-док раскрывается только по запросу, чтобы не перекрывать рабочую область диаграммы.</span>
                 </div>
                 <div className="sim-pills">
                   <span className="sim-pill">{project.simulation.running ? 'Симуляция включена' : 'Режим редактирования'}</span>

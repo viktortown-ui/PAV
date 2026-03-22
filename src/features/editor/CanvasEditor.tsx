@@ -31,7 +31,7 @@ const debugLog = (scope: string, message: string, payload?: unknown) => {
   else console.debug(`[perf:${scope}] ${message}`, payload);
 };
 
-const CanvasEditorComponent = () => {
+const CanvasEditorComponent = ({ focusMode = false }: { focusMode?: boolean }) => {
   const {
     nodes: projectNodes,
     edges: projectEdges,
@@ -239,7 +239,7 @@ const CanvasEditorComponent = () => {
   }, [applyViewport, flow, view.hasManualViewport]);
 
   return (
-    <div className="canvas-shell" ref={shellRef}>
+    <div className={`canvas-shell ${focusMode ? 'is-focus-mode' : ''}`} ref={shellRef}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -279,8 +279,8 @@ const CanvasEditorComponent = () => {
         <Controls showInteractive={false} />
         <Panel position="top-right"><DebugPanel /></Panel>
       </ReactFlow>
-      <div className={`canvas-overlay simulation-overlay placement-${panelPlacement}`}>
-        <SimulationPanel placement={panelPlacement} />
+      <div className={`canvas-overlay simulation-overlay placement-${panelPlacement} ${focusMode ? 'is-focus-mode' : ''}`}>
+        <SimulationPanel placement={panelPlacement} focusMode={focusMode} />
       </div>
     </div>
   );
