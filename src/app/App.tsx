@@ -48,7 +48,8 @@ class EditorErrorBoundary extends Component<{ children: ReactNode }, { error?: E
 export const App = () => {
   const loadProject = useAppStore((state) => state.loadProject);
   const saveProject = useAppStore((state) => state.saveProject);
-  const project = useAppStore((state) => state.project);
+  const projectRevision = useAppStore((state) => state.projectRevision);
+  const persistedRevision = useAppStore((state) => state.persistedRevision);
   const startupState = useAppStore((state) => state.startupState);
   const startupNotice = useAppStore((state) => state.startupNotice);
   const dismissStartupNotice = useAppStore((state) => state.dismissStartupNotice);
@@ -56,9 +57,10 @@ export const App = () => {
   useEffect(() => { void loadProject(); }, [loadProject]);
   useEffect(() => {
     if (startupState !== 'ready') return;
-    const handle = window.setTimeout(() => { void saveProject(); }, 1000);
+    if (projectRevision === persistedRevision) return;
+    const handle = window.setTimeout(() => { void saveProject(); }, 1200);
     return () => window.clearTimeout(handle);
-  }, [project, saveProject, startupState]);
+  }, [persistedRevision, projectRevision, saveProject, startupState]);
 
   return (
     <div className="app-shell">
