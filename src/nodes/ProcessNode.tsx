@@ -16,10 +16,12 @@ export const ProcessNode = memo(({ data, selected }: NodeProps<SoapNodeData>) =>
   const vesselLike = className === 'major';
   const level = Math.round(Number(data.visual.fill ?? 0));
   const flow = Math.round(Number(data.process.flowRate ?? data.simulation.flow ?? 0));
+  const branchCapable = data.kind === 'tee' || data.kind === 'splitter' || data.kind === 'drainBranch';
 
   return (
     <div className={[ 'process-node', `class-${className}`, selected ? 'is-selected' : '' ].join(' ')} style={{ ['--accent' as string]: palette.base, ['--route' as string]: routeTone[data.simulation.routeState] }}>
       {data.ports.inputs > 0 && <Handle type="target" position={Position.Left} className="port-handle" />}
+      {branchCapable && <Handle id="branch-out" type="source" position={Position.Top} className="port-handle branch-port-handle" />}
       <div className="node-shell">
         <div className="node-icon"><IndustrialIcon kind={data.kind} active={data.simulation.active} />{vesselLike ? <div className="vessel-fill" style={{ height: `${level}%`, background: `linear-gradient(180deg, ${palette.glow}, ${palette.fill})` }}><span className="vessel-wave" /></div> : null}</div>
         <div className="node-copy">
