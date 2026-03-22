@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import { useReactFlow } from 'reactflow';
 import { EdgeLabelMode } from '../../domain/schemas/types';
 import { useAppStore } from '../../store/useAppStore';
@@ -8,6 +9,11 @@ const edgeLabelModes: Array<{ value: EdgeLabelMode; label: string }> = [
   { value: 'active', label: 'Только активные' },
   { value: 'all', label: 'Все компактно' },
 ];
+
+const logFitView = () => {
+  if (!import.meta.env.DEV) return;
+  console.debug('[perf:viewport] explicit fitView requested from toolbar');
+};
 
 export const TopToolbar = () => {
   const rf = useReactFlow();
@@ -22,7 +28,7 @@ export const TopToolbar = () => {
   const edgeLabelMode = useAppStore((state) => state.edgeLabelMode);
   const setEdgeLabelMode = useAppStore((state) => state.setEdgeLabelMode);
 
-  const onExport = () => {
+  const onExport = useCallback(() => {
     const blob = new Blob([exportProject()], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -30,7 +36,12 @@ export const TopToolbar = () => {
     link.download = 'soapflow-project.json';
     link.click();
     URL.revokeObjectURL(url);
-  };
+  }, [exportProject]);
+
+  const onFitView = useCallback(() => {
+    logFitView();
+    void rf.fitView({ padding: 0.22, duration: 250 });
+  }, [rf]);
 
   return (
     <header className="top-toolbar">
@@ -47,7 +58,7 @@ export const TopToolbar = () => {
           <span>Подписи линий</span>
           <select value={edgeLabelMode} onChange={(e) => setEdgeLabelMode(e.target.value as EdgeLabelMode)}>{edgeLabelModes.map((mode) => <option key={mode.value} value={mode.value}>{mode.label}</option>)}</select>
         </label>
-        <button onClick={() => rf.fitView({ padding: 0.22, duration: 500 })}>Вписать схему</button>
+        <button onClick={onFitView}>Вписать схему</button>
         <button onClick={runValidation}>Проверить</button>
         <button onClick={() => void resetProject()}>Сброс</button>
         <button onClick={() => void clearLocalDataAndLoadDemo()}>Очистить локальные данные</button>

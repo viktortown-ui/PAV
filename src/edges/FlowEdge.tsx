@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { BaseEdge, EdgeLabelRenderer, EdgeProps, getSmoothStepPath, useStore } from 'reactflow';
 import { MediumType, RouteState } from '../domain/schemas/types';
 import { mediumPalette, routeTone } from '../domain/visual/tokens';
@@ -21,7 +22,7 @@ const mediumLabel: Record<MediumType, string> = {
   waste: 'Сток',
 };
 
-export const FlowEdge = ({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data, selected }: EdgeProps) => {
+const FlowEdgeComponent = ({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data, selected }: EdgeProps) => {
   const [path, labelX, labelY] = getSmoothStepPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, borderRadius: 18, offset: 18 });
   const zoom = useStore((state) => state.transform[2]);
   const mediumKey = (data?.medium ?? 'water') as MediumType;
@@ -68,3 +69,5 @@ export const FlowEdge = ({ id, sourceX, sourceY, targetX, targetY, sourcePositio
     </>
   );
 };
+
+export const FlowEdge = memo(FlowEdgeComponent);
