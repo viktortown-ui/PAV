@@ -17,6 +17,8 @@ const isDev = import.meta.env.DEV;
 const nodeTypes = { processNode: ProcessNode };
 const edgeTypes = { flowEdge: FlowEdge };
 
+type SimulationPanelPlacement = 'left' | 'center' | 'right';
+
 const sameViewport = (a: Viewport, b: Viewport) => (
   Math.abs(a.x - b.x) < VIEWPORT_POSITION_EPSILON
   && Math.abs(a.y - b.y) < VIEWPORT_POSITION_EPSILON
@@ -35,6 +37,7 @@ const CanvasEditorComponent = () => {
     edges: projectEdges,
     view,
     selectedNodeId,
+    selectedEdgeId,
     issues,
     pathSelection,
     showProblematicOnly,
@@ -54,6 +57,7 @@ const CanvasEditorComponent = () => {
     edges: state.project.edges,
     view: state.project.view,
     selectedNodeId: state.selectedNodeId,
+    selectedEdgeId: state.selectedEdgeId,
     issues: state.issues,
     pathSelection: state.pathSelection,
     showProblematicOnly: state.showProblematicOnly,
@@ -77,10 +81,46 @@ const CanvasEditorComponent = () => {
   const resizeTimerRef = useRef<number | null>(null);
   const latestViewRef = useRef(view);
   const [flow, setFlow] = useState<ReactFlowInstance | null>(null);
+  const [panelPlacement, setPanelPlacement] = useState<SimulationPanelPlacement>('center');
 
   useEffect(() => {
     latestViewRef.current = view;
   }, [view]);
+
+  useEffect(() => {
+    if (!shellRef.current) return;
+
+    const updatePlacement = () => {
+      const selectedNode = projectNodes.find((node) => node.id === selectedNodeId);
+      const selectedEdge = projectEdges.find((edge) => edge.id === selectedEdgeId);
+      if ((!selectedNode && !selectedEdge) || !shellRef.current) {
+        setPanelPlacement('center');
+        return;
+      }
+
+      const viewport = latestViewRef.current.viewport;
+      const shellWidth = shellRef.current.clientWidth;
+      const shellHeight = shellRef.current.clientHeight;
+      const focusX = selectedNode
+        ? selectedNode.position.x * viewport.zoom + viewport.x
+        : shellWidth / 2;
+      const focusY = selectedNode
+        ? selectedNode.position.y * viewport.zoom + viewport.y
+        : shellHeight - 140;
+
+      const selectionNearBottom = focusY > shellHeight * 0.62;
+      if (!selectionNearBottom) {
+        setPanelPlacement('center');
+        return;
+      }
+
+      if (focusX < shellWidth * 0.45) setPanelPlacement('right');
+      else if (focusX > shellWidth * 0.55) setPanelPlacement('left');
+      else setPanelPlacement('right');
+    };
+
+    updatePlacement();
+  }, [projectEdges, projectNodes, selectedEdgeId, selectedNodeId, view.viewport]);
 
   const animate = useCallback((time: number) => {
     if (lastTimeRef.current != null) tickSimulation((time - lastTimeRef.current) / 1000);
@@ -237,9 +277,11 @@ const CanvasEditorComponent = () => {
         <Background color="rgba(93,117,145,0.18)" gap={24} size={1.2} />
         <MiniMap pannable zoomable className="minimap" maskColor="rgba(8,12,18,0.78)" />
         <Controls showInteractive={false} />
-        <Panel position="bottom-center"><SimulationPanel /></Panel>
         <Panel position="top-right"><DebugPanel /></Panel>
       </ReactFlow>
+      <div className={`canvas-overlay simulation-overlay placement-${panelPlacement}`}>
+        <SimulationPanel placement={panelPlacement} />
+      </div>
     </div>
   );
 };
