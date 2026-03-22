@@ -4,7 +4,7 @@ import { EdgeActionKind, useAppStore } from '../../store/useAppStore';
 
 const tabs: Array<[InspectorTab, string]> = [['main', 'Основное'], ['process', 'Процесс'], ['ports', 'Порты'], ['signals', 'КИП'], ['appearance', 'Вид'], ['alarms', 'Состояние'], ['simulation', 'Симуляция'], ['actions', 'Действия']];
 const ruMedium: Record<string, string> = { water: 'Вода', product: 'Продукт', cip: 'CIP', waste: 'Сток' };
-const ruState: Record<string, string> = { idle: 'Ожидание', primed: 'Подготовлен', flowing: 'Поток', blocked: 'Блокировка', starved: 'Нет подпитки', draining: 'Слив', cip: 'CIP', alarm: 'Авария', offline: 'Отключён' };
+const ruState: Record<string, string> = { idle: 'Ожидание', primed: 'Подготовлен', flowing: 'Поток', blocked: 'Блокировка', starved: 'Нет подпитки', draining: 'Слив', cip: 'CIP', alarm: 'Авария', maintenance: 'Ремонт', offline: 'Отключён' };
 const ruStatus: Record<EquipmentStatus, string> = { off: 'Выключен', idle: 'Ожидание', standby: 'Готовность', running: 'Работает', blocked: 'Блокирован', alarm: 'Авария', maintenance: 'Ремонт', normal: 'Норма', active: 'Активен', warning: 'Предупреждение', disabled: 'Отключён' };
 const edgeActionButtons: Array<{ label: string; action: EdgeActionKind }> = [
   { label: 'Вставить клапан', action: 'insert:shutoffValve' }, { label: 'Вставить задвижку', action: 'insert:gateValve' }, { label: 'Вставить обратный клапан', action: 'insert:checkValve' }, { label: 'Вставить расходомер', action: 'insert:flowMeter' }, { label: 'Вставить датчик', action: 'insert:pressureSensor' }, { label: 'Вставить насос', action: 'insert:pump' }, { label: 'Вставить фильтр', action: 'insert:inlineFilter' }, { label: 'Вставить тройник', action: 'insert:tee' }, { label: 'Вставить крестовину', action: 'insert:cross' }, { label: 'Вставить дренаж', action: 'insert:drainBranch' }, { label: 'Вставить точку отбора', action: 'insert:samplePoint' }, { label: 'Сделать ответвление', action: 'branch:tee' }, { label: 'Разорвать сегмент', action: 'break' }, { label: 'Переподключить', action: 'reconnect' }, { label: 'Удалить сегмент', action: 'delete' },
@@ -22,19 +22,19 @@ const getValue = (node: SoapNode, field: PropertyField) => {
 const nodeActions = (node: SoapNode) => {
   const kind = node.data.kind;
   if (kind === 'reactor' || kind === 'heatedReactor') return [
-    ['Пуск', 'reactor:start'], ['Стоп', 'reactor:stop'], ['Нагрев вкл/выкл', 'reactor:toggleHeating'], ['Мешалка вкл/выкл', 'reactor:toggleAgitator'], ['Ожидание', 'reactor:setIdle'], ['Ремонт', 'reactor:setMaintenance'],
+    ['Включить', 'reactor:start'], ['Остановить', 'reactor:stop'], ['Включить нагрев', 'reactor:heatingOn'], ['Выключить нагрев', 'reactor:heatingOff'], ['Включить мешалку', 'reactor:agitatorOn'], ['Выключить мешалку', 'reactor:agitatorOff'], ['Ожидание', 'reactor:setIdle'], ['Ремонт', 'reactor:setMaintenance'],
   ] as const;
   if (kind === 'pump' || kind === 'dosingPump') return [
-    ['Пуск', 'pump:start'], ['Стоп', 'pump:stop'], ['Вкл/выкл', 'pump:toggleEnabled'], ['Авария', 'pump:setAlarm'], ['Сброс аварии', 'pump:clearAlarm'],
+    ['Включить', 'pump:start'], ['Выключить', 'pump:stop'], ['Сброс тревоги', 'pump:clearAlarm'],
   ] as const;
   if (node.data.className === 'valve') return [
-    ['Открыть', 'valve:open'], ['Закрыть', 'valve:close'], ['Ручной/авто', 'valve:toggleMode'], ['Сменить fail-position', 'valve:toggleFailPosition'],
+    ['Открыть', 'valve:open'], ['Закрыть', 'valve:close'], ['Авто', 'valve:auto'], ['Ручной', 'valve:manual'],
   ] as const;
   if (kind === 'tank' || kind === 'bufferTank') return [
-    ['Приём вкл/выкл', 'tank:toggleReceive'], ['Выдача вкл/выкл', 'tank:toggleDischarge'],
+    ['Разрешить приём', 'tank:enableReceive'], ['Запретить приём', 'tank:disableReceive'], ['Разрешить выдачу', 'tank:enableDischarge'], ['Запретить выдачу', 'tank:disableDischarge'],
   ] as const;
   if (node.data.className === 'instrument') return [
-    ['Предупреждение', 'sensor:simulateWarning'], ['Сброс', 'sensor:clearWarning'], ['Вкл/выкл', 'sensor:toggleEnabled'],
+    ['Сброс предупреждения', 'sensor:clearWarning'], ['Включить контроль', 'sensor:enable'], ['Выключить контроль', 'sensor:disable'],
   ] as const;
   return [] as const;
 };

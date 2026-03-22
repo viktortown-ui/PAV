@@ -16,5 +16,6 @@ export const routeTone: Record<RouteState, string> = {
   draining: '#90a2b5',
   cip: '#ffd37a',
   alarm: '#ff6b6b',
+  maintenance: '#b794f4',
   offline: '#465366',
 };

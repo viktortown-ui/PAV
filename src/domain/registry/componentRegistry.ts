@@ -58,7 +58,7 @@ const simulationFields = tabs(
   { key: 'simEnabled', label: 'Участвует в симуляции', type: 'toggle' },
   { key: 'simActive', label: 'Форсировать активность', type: 'toggle' },
   { key: 'simFlow', label: 'Поток симуляции, л/мин', type: 'number', min: 0, step: 1 },
-  { key: 'routeState', label: 'Состояние маршрута', type: 'select', options: [select('Ожидание', 'idle'), select('Подготовлен', 'primed'), select('Поток', 'flowing'), select('Блокировка', 'blocked'), select('Голодание', 'starved'), select('Слив', 'draining'), select('CIP', 'cip'), select('Авария', 'alarm'), select('Отключён', 'offline')] },
+  { key: 'routeState', label: 'Состояние маршрута', type: 'select', options: [select('Ожидание', 'idle'), select('Подготовлен', 'primed'), select('Поток', 'flowing'), select('Блокировка', 'blocked'), select('Голодание', 'starved'), select('Слив', 'draining'), select('CIP', 'cip'), select('Авария', 'alarm'), select('Ремонт', 'maintenance'), select('Отключён', 'offline')] },
 );
 
 const makeDefinition = (

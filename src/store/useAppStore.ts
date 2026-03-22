@@ -86,7 +86,7 @@ const midPoint = (source: SoapNode, target: SoapNode) => ({ x: (source.position.
 const leftHandleId = DEFAULT_TARGET_HANDLE;
 const rightHandleId = DEFAULT_SOURCE_HANDLE;
 
-const logEvent = (project: ProjectDocument, message: string, targetId?: string): ProjectDocument => ({ ...project, eventLog: [...project.eventLog, { id: crypto.randomUUID(), timestamp: new Date().toISOString(), type: 'editor', message, severity: 'info' as const, targetId }] });
+const logEvent = (project: ProjectDocument, message: string, targetId?: string, severity: 'info' | 'warning' | 'error' = 'info', type = 'editor'): ProjectDocument => ({ ...project, eventLog: [...project.eventLog, { id: crypto.randomUUID(), timestamp: new Date().toISOString(), type, message, severity, targetId }] });
 
 const buildNode = (kind: SoapNodeKind, position: { x: number; y: number }): SoapNode => {
   const def = componentMap.get(kind)!;
@@ -168,30 +168,38 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   updateEdgeField: (edgeId, field, value) => set((state) => { const project = { ...state.project, edges: state.project.edges.map((edge) => { if (edge.id !== edgeId) return edge; const data: any = { ...(edge.data ?? {}) }; data[field] = value; if (field === 'mediumType') data.medium = value as any; if (field === 'flowLpm') data.flowRate = Number(value); return { ...edge, data } as SoapEdge; }) }; return { project, issues: validateProject(project), projectRevision: state.projectRevision + 1 }; }),
   executeNodeAction: (nodeId, action) => set((state) => {
+    let eventMessage = '';
+    let eventSeverity: 'info' | 'warning' | 'error' = 'info';
+    let eventType = 'operation';
     const project = { ...state.project, nodes: state.project.nodes.map((node) => {
       if (node.id !== nodeId) return node;
       const copy = structuredClone(node); const p: any = copy.data.process; const d: any = copy.data;
-      if (action === 'reactor:start') { d.status = 'running'; d.runtime.active = true; d.simulation.active = true; }
-      else if (action === 'reactor:stop') { d.status = 'off'; d.runtime.active = false; d.simulation.active = false; }
-      else if (action === 'reactor:toggleHeating') p.heatingOn = !p.heatingOn;
-      else if (action === 'reactor:toggleAgitator') p.agitatorOn = !p.agitatorOn;
-      else if (action === 'reactor:setIdle') d.status = 'idle';
-      else if (action === 'reactor:setMaintenance') d.status = 'maintenance';
-      else if (action === 'pump:start') { d.status = 'running'; p.pumpOn = true; p.actualFlowLpm = p.nominalFlowLpm ?? p.actualFlowLpm; }
-      else if (action === 'pump:stop') { d.status = 'off'; p.pumpOn = false; p.actualFlowLpm = 0; }
-      else if (action === 'pump:toggleEnabled' || action === 'sensor:toggleEnabled') { d.isEnabled = !d.isEnabled; d.visual.enabled = d.isEnabled; }
-      else if (action === 'pump:setAlarm') { d.status = 'alarm'; d.alarms = ['Авария насоса']; d.runtime.alarmText = 'Авария насоса'; }
-      else if (action === 'pump:clearAlarm' || action === 'sensor:clearWarning') { d.status = 'idle'; d.alarms = []; d.runtime.alarmText = ''; }
-      else if (action === 'valve:open') { p.isOpen = true; d.status = 'running'; }
-      else if (action === 'valve:close') { p.isOpen = false; d.status = 'blocked'; }
-      else if (action === 'valve:toggleMode') d.mode = d.mode === 'auto' ? 'manual' : 'auto';
-      else if (action === 'valve:toggleFailPosition') p.failPosition = p.failPosition === 'open' ? 'closed' : 'open';
-      else if (action === 'tank:toggleReceive') p.canReceive = !p.canReceive;
-      else if (action === 'tank:toggleDischarge') p.canDischarge = !p.canDischarge;
-      else if (action === 'sensor:simulateWarning') { d.status = 'alarm'; d.alarms = ['Контрольный сигнал']; d.runtime.alarmText = 'Контрольный сигнал'; }
+      if (action === 'reactor:start') { d.status = 'running'; d.runtime.active = true; d.simulation.active = true; d.visual.enabled = true; d.isEnabled = true; d.runtime.enabled = true; d.simulation.enabled = true; eventMessage = `${d.visibleName}: реактор включён.`; }
+      else if (action === 'reactor:stop') { d.status = 'off'; d.runtime.active = false; d.simulation.active = false; d.visual.enabled = true; eventMessage = `${d.visibleName}: реактор остановлен.`; }
+      else if (action === 'reactor:heatingOn') { p.heatingOn = true; eventMessage = `${d.visibleName}: нагрев включён.`; }
+      else if (action === 'reactor:heatingOff') { p.heatingOn = false; eventMessage = `${d.visibleName}: нагрев выключен.`; }
+      else if (action === 'reactor:agitatorOn') { p.agitatorOn = true; p.mixingOn = true; eventMessage = `${d.visibleName}: мешалка включена.`; }
+      else if (action === 'reactor:agitatorOff') { p.agitatorOn = false; p.mixingOn = false; eventMessage = `${d.visibleName}: мешалка выключена.`; }
+      else if (action === 'reactor:setIdle') { d.status = 'idle'; eventMessage = `${d.visibleName}: реактор переведён в ожидание.`; }
+      else if (action === 'reactor:setMaintenance') { d.status = 'maintenance'; d.visual.enabled = false; eventMessage = `${d.visibleName}: реактор переведён в ремонт.`; eventSeverity = 'warning'; }
+      else if (action === 'pump:start') { d.status = 'running'; d.visual.enabled = true; d.isEnabled = true; d.runtime.enabled = true; d.simulation.enabled = true; p.pumpOn = true; p.actualFlowLpm = p.nominalFlowLpm ?? p.actualFlowLpm ?? p.flowRate; eventMessage = `${d.visibleName}: насос запущен.`; }
+      else if (action === 'pump:stop') { d.status = 'off'; p.pumpOn = false; p.actualFlowLpm = 0; eventMessage = `${d.visibleName}: насос остановлен.`; }
+      else if (action === 'pump:clearAlarm') { d.status = 'idle'; d.alarms = []; d.runtime.alarmText = ''; d.simulation.alarmText = ''; eventMessage = `${d.visibleName}: тревога насоса сброшена.`; }
+      else if (action === 'valve:open') { p.isOpen = true; p.valveOpen = true; p.valveState = 'open'; d.status = 'running'; eventMessage = `${d.visibleName}: клапан открыт.`; }
+      else if (action === 'valve:close') { p.isOpen = false; p.valveOpen = false; p.valveState = 'closed'; d.status = 'blocked'; eventMessage = `${d.visibleName}: клапан закрыт.`; }
+      else if (action === 'valve:auto') { d.mode = 'auto'; p.manualOverride = false; p.valveMode = 'auto'; eventMessage = `${d.visibleName}: клапан переведён в авто.`; }
+      else if (action === 'valve:manual') { d.mode = 'manual'; p.manualOverride = true; p.valveMode = 'manual'; eventMessage = `${d.visibleName}: клапан переведён в ручной режим.`; }
+      else if (action === 'tank:enableReceive') { p.canReceive = true; eventMessage = `${d.visibleName}: приём разрешён.`; }
+      else if (action === 'tank:disableReceive') { p.canReceive = false; eventMessage = `${d.visibleName}: приём запрещён.`; eventSeverity = 'warning'; }
+      else if (action === 'tank:enableDischarge') { p.canDischarge = true; eventMessage = `${d.visibleName}: выдача разрешена.`; }
+      else if (action === 'tank:disableDischarge') { p.canDischarge = false; eventMessage = `${d.visibleName}: выдача запрещена.`; eventSeverity = 'warning'; }
+      else if (action === 'sensor:clearWarning') { d.status = 'idle'; d.alarms = []; d.runtime.alarmText = ''; d.simulation.alarmText = ''; eventMessage = `${d.visibleName}: предупреждение снято.`; }
+      else if (action === 'sensor:enable') { d.isEnabled = true; d.visual.enabled = true; d.simulation.enabled = true; d.runtime.enabled = true; eventMessage = `${d.visibleName}: контроль включён.`; }
+      else if (action === 'sensor:disable') { d.isEnabled = false; d.visual.enabled = false; d.simulation.enabled = false; d.runtime.enabled = false; eventMessage = `${d.visibleName}: контроль выключен.`; eventSeverity = 'warning'; }
       d.updatedAt = new Date().toISOString(); d.revision = Number(d.revision ?? 0) + 1; return copy;
     }) };
-    return { project, issues: validateProject(project), projectRevision: state.projectRevision + 1 };
+    const loggedProject = eventMessage ? logEvent({ ...project, simulation: { ...project.simulation, lastEvent: eventMessage } }, eventMessage, nodeId, eventSeverity, eventType) : project;
+    return { project: limitedLog(loggedProject), issues: validateProject(loggedProject), projectRevision: state.projectRevision + 1 };
   }),
   setEdgeEditorMode: (edgeEditorMode) => set({ edgeEditorMode }),
   executeEdgeAction: (action, edgeId) => {
