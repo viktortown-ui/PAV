@@ -1,47 +1,16 @@
-import { memo } from 'react';
-import { Handle, NodeProps, Position, useStore } from 'reactflow';
+import { memo, useEffect } from 'react';
+import { Handle, NodeProps, useStore, useUpdateNodeInternals } from 'reactflow';
 import { IndustrialIcon } from '../icons/IndustrialIcon';
 import { SoapNodeData } from '../domain/schemas/types';
 import { mediumPalette, routeTone } from '../domain/visual/tokens';
+import { getHandleSpecs } from '../domain/flow/handles';
 
 const routeLabel: Record<SoapNodeData['simulation']['routeState'], string> = { flowing: 'Поток', blocked: 'Блок', starved: 'Пусто', cip: 'CIP', idle: 'Ожидание', alarm: 'Авария', primed: 'Готов', draining: 'Слив', offline: 'Вне линии' };
 const mediumLabel: Record<SoapNodeData['medium'], string> = { water: 'Вода', product: 'Продукт', cip: 'CIP', waste: 'Сток' };
 
-type HandleSpec = { id: string; type: 'source' | 'target'; position: Position; className?: string };
-
-const getHandleSpecs = (data: SoapNodeData): HandleSpec[] => {
-  const base: HandleSpec[] = [];
-  const isTopology = data.className === 'topology';
-
-  if (data.ports.inputs > 0 || isTopology) base.push({ id: 'in-left', type: 'target', position: Position.Left, className: 'port-handle handle-left' });
-  if (data.ports.outputs > 0 || isTopology) base.push({ id: 'out-right', type: 'source', position: Position.Right, className: 'port-handle handle-right' });
-
-  switch (data.kind) {
-    case 'tee':
-    case 'splitter':
-    case 'drainBranch':
-      base.push({ id: 'branch-top', type: 'source', position: Position.Top, className: 'port-handle branch-port-handle handle-top' });
-      break;
-    case 'cross':
-      base.push({ id: 'branch-top', type: 'source', position: Position.Top, className: 'port-handle branch-port-handle handle-top' });
-      base.push({ id: 'branch-bottom', type: 'target', position: Position.Bottom, className: 'port-handle branch-port-handle handle-bottom' });
-      break;
-    case 'collector':
-    case 'mixingJunction':
-      base.push({ id: 'branch-top', type: 'target', position: Position.Top, className: 'port-handle branch-port-handle handle-top' });
-      break;
-    case 'samplePoint':
-      base.push({ id: 'branch-top', type: 'source', position: Position.Top, className: 'port-handle sample-port-handle handle-top' });
-      break;
-    default:
-      break;
-  }
-
-  return base;
-};
-
-export const ProcessNode = memo(({ data, selected }: NodeProps<SoapNodeData>) => {
+export const ProcessNode = memo(({ id, data, selected }: NodeProps<SoapNodeData>) => {
   const zoom = useStore((state) => state.transform[2]);
+  const updateNodeInternals = useUpdateNodeInternals();
   const far = zoom < 0.72;
   const near = zoom > 1.12 || selected;
   const palette = mediumPalette[data.medium];
@@ -51,6 +20,10 @@ export const ProcessNode = memo(({ data, selected }: NodeProps<SoapNodeData>) =>
   const flow = Math.round(Number(data.process.flowRate ?? data.simulation.flow ?? 0));
   const handles = getHandleSpecs(data);
   const compactInline = className === 'valve' || className === 'instrument' || className === 'topology';
+
+  useEffect(() => {
+    updateNodeInternals(id);
+  }, [data.className, data.kind, data.ports.inputs, data.ports.outputs, id, updateNodeInternals]);
 
   return (
     <div className={[ 'process-node', `class-${className}`, compactInline ? 'is-inline-node' : '', vesselLike ? 'is-vessel-node' : '', selected ? 'is-selected' : '' ].join(' ')} style={{ ['--accent' as string]: palette.base, ['--route' as string]: routeTone[data.simulation.routeState] }}>

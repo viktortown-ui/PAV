@@ -1,5 +1,6 @@
 import { componentMap } from '../registry/componentRegistry';
 import { demoProject } from '../templates/templates';
+import { getHandleIds, normalizeProjectEdgeHandles } from '../flow/handles';
 import { EventLogEntry, MediumType, ProjectDocument, ProjectViewState, RouteState, Severity, SimulationSettings, SoapEdge, SoapNode, SoapNodeData, SoapNodeKind, TemplateId, TemplateViewMetadata, ValidationIssue } from '../schemas/types';
 
 const TEMPLATE_IDS = new Set(['water-prep', 'soap-line', 'cip-fragment'] as const);
@@ -79,7 +80,7 @@ const sanitizeEdge = (value: unknown, nodeIds: Set<string>): SoapEdge | null => 
   if (!isObject(value) || typeof value.id !== 'string' || typeof value.source !== 'string' || typeof value.target !== 'string') return null;
   if (!nodeIds.has(value.source) || !nodeIds.has(value.target)) return null;
   const edgeData = isObject(value.data) ? value.data : {};
-  return { id: value.id, source: value.source, target: value.target, type: 'flowEdge', animated: asBoolean(value.animated, false), markerEnd: value.markerEnd as SoapEdge['markerEnd'], data: { medium: asMedium(edgeData.medium, 'water'), flowActive: asBoolean(edgeData.flowActive, false), blocked: asBoolean(edgeData.blocked, false), routeState: asRouteState(edgeData.routeState, 'idle'), flowRate: Math.max(0, asNumber(edgeData.flowRate, 0)), pressure: asNumber(edgeData.pressure, 0), selectedPath: asBoolean(edgeData.selectedPath, false), sourceLabel: typeof edgeData.sourceLabel === 'string' ? edgeData.sourceLabel : undefined, targetLabel: typeof edgeData.targetLabel === 'string' ? edgeData.targetLabel : undefined, blockedBy: Array.isArray(edgeData.blockedBy) ? edgeData.blockedBy.filter((item): item is string => typeof item === 'string') : undefined, segmentId: asString(edgeData.segmentId, value.id), direction: edgeData.direction === 'reverse' || edgeData.direction === 'bidirectional' ? edgeData.direction : 'forward', nominalDiameter: asString(edgeData.nominalDiameter, 'DN50'), stateLabel: asString(edgeData.stateLabel, 'Ожидание') } };
+  return { id: value.id, source: value.source, target: value.target, sourceHandle: typeof value.sourceHandle === 'string' ? value.sourceHandle : null, targetHandle: typeof value.targetHandle === 'string' ? value.targetHandle : null, type: 'flowEdge', animated: asBoolean(value.animated, false), markerEnd: value.markerEnd as SoapEdge['markerEnd'], data: { medium: asMedium(edgeData.medium, 'water'), flowActive: asBoolean(edgeData.flowActive, false), blocked: asBoolean(edgeData.blocked, false), routeState: asRouteState(edgeData.routeState, 'idle'), flowRate: Math.max(0, asNumber(edgeData.flowRate, 0)), pressure: asNumber(edgeData.pressure, 0), selectedPath: asBoolean(edgeData.selectedPath, false), sourceLabel: typeof edgeData.sourceLabel === 'string' ? edgeData.sourceLabel : undefined, targetLabel: typeof edgeData.targetLabel === 'string' ? edgeData.targetLabel : undefined, blockedBy: Array.isArray(edgeData.blockedBy) ? edgeData.blockedBy.filter((item): item is string => typeof item === 'string') : undefined, segmentId: asString(edgeData.segmentId, value.id), direction: edgeData.direction === 'reverse' || edgeData.direction === 'bidirectional' ? edgeData.direction : 'forward', nominalDiameter: asString(edgeData.nominalDiameter, 'DN50'), stateLabel: asString(edgeData.stateLabel, 'Ожидание') } };
 };
 
 export const restoreProjectDocument = (value: unknown): ProjectDocument => {
@@ -90,7 +91,7 @@ export const restoreProjectDocument = (value: unknown): ProjectDocument => {
   const nodeIds = new Set(nodes.map((node) => node.id));
   const edges = Array.isArray(value.edges) ? value.edges.map((edge) => sanitizeEdge(edge, nodeIds)).filter((e): e is SoapEdge => e !== null) : [];
   const templateId: TemplateId = typeof value.templateId === 'string' && TEMPLATE_IDS.has(value.templateId as TemplateId) ? value.templateId as TemplateId : fallback.templateId;
-  return { id: asString(value.id, fallback.id), name: asString(value.name, fallback.name), templateId, updatedAt: asString(value.updatedAt, new Date().toISOString()), appSchemaVersion: asNumber(value.appSchemaVersion, fallback.appSchemaVersion), projectSchemaVersion: asNumber(value.projectSchemaVersion, fallback.projectSchemaVersion), nodes, edges, view: sanitizeView(value.view, fallback.view), simulation: sanitizeSimulation(value.simulation, fallback.simulation), eventLog: sanitizeEventLog(value.eventLog, fallback.eventLog) };
+  return normalizeProjectEdgeHandles({ id: asString(value.id, fallback.id), name: asString(value.name, fallback.name), templateId, updatedAt: asString(value.updatedAt, new Date().toISOString()), appSchemaVersion: asNumber(value.appSchemaVersion, fallback.appSchemaVersion), projectSchemaVersion: asNumber(value.projectSchemaVersion, fallback.projectSchemaVersion), nodes, edges, view: sanitizeView(value.view, fallback.view), simulation: sanitizeSimulation(value.simulation, fallback.simulation), eventLog: sanitizeEventLog(value.eventLog, fallback.eventLog) });
 };
 
 export const validateProject = (project: ProjectDocument): ValidationIssue[] => {
@@ -112,6 +113,21 @@ export const validateProject = (project: ProjectDocument): ValidationIssue[] => 
     if (node.data.className === 'instrument' && inputs.length + outputs.length < 1) issues.push({ id: `instrument-${node.id}`, severity: 'warning', message: `КИП «${node.data.visibleName}» не привязан к линии или аппарату.`, nodeIds: [node.id] });
     if (BRANCH_NODES.has(node.data.kind) && outputs.length < 2) issues.push({ id: `branch-${node.id}`, severity: 'warning', message: `Узел «${node.data.visibleName}» ожидает минимум две выходящие ветви.`, nodeIds: [node.id] });
     if (MERGE_NODES.has(node.data.kind) && inputs.length < 2) issues.push({ id: `merge-${node.id}`, severity: 'warning', message: `Узел «${node.data.visibleName}» ожидает минимум две входящие линии.`, nodeIds: [node.id] });
+
+    const incomingHandleIds = new Map<string, number>();
+    const outgoingHandleIds = new Map<string, number>();
+    inputs.forEach((edge) => {
+      if (edge.targetHandle) incomingHandleIds.set(edge.targetHandle, (incomingHandleIds.get(edge.targetHandle) ?? 0) + 1);
+    });
+    outputs.forEach((edge) => {
+      if (edge.sourceHandle) outgoingHandleIds.set(edge.sourceHandle, (outgoingHandleIds.get(edge.sourceHandle) ?? 0) + 1);
+    });
+    getHandleIds(node, 'target').forEach((handleId) => {
+      if ((incomingHandleIds.get(handleId) ?? 0) > 1) issues.push({ id: `target-handle-${node.id}-${handleId}`, severity: 'error', message: `Входной порт «${handleId}» узла «${node.data.visibleName}» подключён более одного раза.`, nodeIds: [node.id] });
+    });
+    getHandleIds(node, 'source').forEach((handleId) => {
+      if ((outgoingHandleIds.get(handleId) ?? 0) > 1) issues.push({ id: `source-handle-${node.id}-${handleId}`, severity: 'error', message: `Выходной порт «${handleId}» узла «${node.data.visibleName}» подключён более одного раза.`, nodeIds: [node.id] });
+    });
   });
 
   project.edges.forEach((edge) => {

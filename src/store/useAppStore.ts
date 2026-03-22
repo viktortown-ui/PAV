@@ -6,6 +6,7 @@ import { EdgeLabelMode, InspectorTab, ProjectDocument, SimulationSettings, SoapE
 import { clearPersistedState, clearUserData, loadStoredProject, resetCurrentProjectState, saveStoredProject } from '../features/persistence/db';
 import { runSimulationStep } from '../domain/simulation/engine';
 import { restoreProjectDocument, validateProject } from '../domain/validation/validateProject';
+import { DEFAULT_SOURCE_HANDLE, DEFAULT_TARGET_HANDLE, getPreferredFreeHandleId, normalizeHandleForNode, normalizeProjectEdgeHandles } from '../domain/flow/handles';
 
 interface StartupNotice { type: 'warning' | 'info'; message: string; }
 type StartupState = 'booting' | 'ready';
@@ -16,16 +17,19 @@ const clone = (project: ProjectDocument) => structuredClone(project);
 const makeProject = () => clone(demoProject);
 const limitedLog = (project: ProjectDocument) => ({ ...project, eventLog: project.eventLog.slice(-80) });
 
-const sanitizeProjectState = (project: ProjectDocument, revision = 0, persistedRevision = revision, viewportNonce = 0) => ({
-  project,
-  projectRevision: revision,
-  persistedRevision,
-  viewportNonce,
-  issues: validateProject(project),
-  selectedNodeId: undefined,
-  selectedEdgeId: undefined,
-  pathSelection: { upstream: [], downstream: [], edges: [] },
-});
+const sanitizeProjectState = (project: ProjectDocument, revision = 0, persistedRevision = revision, viewportNonce = 0) => {
+  const normalizedProject = normalizeProjectEdgeHandles(project);
+  return {
+    project: normalizedProject,
+    projectRevision: revision,
+    persistedRevision,
+    viewportNonce,
+    issues: validateProject(normalizedProject),
+    selectedNodeId: undefined,
+    selectedEdgeId: undefined,
+    pathSelection: { upstream: [], downstream: [], edges: [] },
+  };
+};
 
 const setByPath = (node: SoapNode, path: string, value: string | number | boolean) => {
   if (path === 'visibleName' || path === 'description' || path === 'shortName' || path === 'notes' || path === 'technicalTag') (node.data as any)[path] = String(value);
@@ -76,10 +80,8 @@ const computePathSelection = (project: ProjectDocument, nodeId?: string, edgeId?
 };
 
 const midPoint = (source: SoapNode, target: SoapNode) => ({ x: (source.position.x + target.position.x) / 2, y: (source.position.y + target.position.y) / 2 });
-const leftHandleId = 'in-left';
-const rightHandleId = 'out-right';
-
-const normalizeHandleId = (handleId: string | null | undefined, fallback: string) => handleId ?? fallback;
+const leftHandleId = DEFAULT_TARGET_HANDLE;
+const rightHandleId = DEFAULT_SOURCE_HANDLE;
 
 const logEvent = (project: ProjectDocument, message: string, targetId?: string): ProjectDocument => ({ ...project, eventLog: [...project.eventLog, { id: crypto.randomUUID(), timestamp: new Date().toISOString(), type: 'editor', message, severity: 'info' as const, targetId }] });
 
@@ -129,14 +131,14 @@ interface AppState {
 
 export const useAppStore = create<AppState>((set, get) => ({
   project: makeProject(), projectRevision: 0, persistedRevision: 0, viewportNonce: 0, selectedNodeId: undefined, selectedEdgeId: undefined, search: '', inspectorTab: 'main', showProblematicOnly: false, hoveredEdgeId: undefined, edgeLabelMode: 'selected', edgeEditorMode: undefined, issues: validateProject(makeProject()), pathSelection: { upstream: [], downstream: [], edges: [] }, startupState: 'booting', startupNotice: undefined, startupError: undefined,
-  onNodesChange: (changes) => set((state) => { const project = { ...state.project, nodes: applyNodeChanges(changes, state.project.nodes) }; return { project, issues: validateProject(project), projectRevision: state.projectRevision + 1 }; }),
-  onEdgesChange: (changes) => set((state) => { const project = { ...state.project, edges: applyEdgeChanges(changes, state.project.edges) }; return { project, issues: validateProject(project), projectRevision: state.projectRevision + 1 }; }),
-  onConnect: (connection) => set((state) => { const source = state.project.nodes.find((node) => node.id === connection.source); const target = state.project.nodes.find((node) => node.id === connection.target); if (!source || !target) return state; const sourceHandle = normalizeHandleId(connection.sourceHandle, rightHandleId); const targetHandle = normalizeHandleId(connection.targetHandle, leftHandleId); const project = { ...state.project, edges: addEdge(buildEdge(source.id, target.id, target.data.medium || source.data.medium, 'DN50', { sourceHandle, targetHandle }), state.project.edges) }; return { project: logEvent(project, `Создан новый сегмент между «${source.data.visibleName}» и «${target.data.visibleName}».`), issues: validateProject(project), projectRevision: state.projectRevision + 1 }; }),
+  onNodesChange: (changes) => set((state) => { const project = normalizeProjectEdgeHandles({ ...state.project, nodes: applyNodeChanges(changes, state.project.nodes) }); return { project, issues: validateProject(project), projectRevision: state.projectRevision + 1 }; }),
+  onEdgesChange: (changes) => set((state) => { const project = normalizeProjectEdgeHandles({ ...state.project, edges: applyEdgeChanges(changes, state.project.edges) }); return { project, issues: validateProject(project), projectRevision: state.projectRevision + 1 }; }),
+  onConnect: (connection) => set((state) => { const source = state.project.nodes.find((node) => node.id === connection.source); const target = state.project.nodes.find((node) => node.id === connection.target); if (!source || !target) return state; const sourceHandle = getPreferredFreeHandleId(source, 'source', state.project.edges, connection.sourceHandle) ?? normalizeHandleForNode(source, 'source', connection.sourceHandle); const targetHandle = getPreferredFreeHandleId(target, 'target', state.project.edges, connection.targetHandle) ?? normalizeHandleForNode(target, 'target', connection.targetHandle); if (!sourceHandle || !targetHandle) return state; const project = { ...state.project, edges: addEdge(buildEdge(source.id, target.id, target.data.medium || source.data.medium, 'DN50', { sourceHandle, targetHandle }), state.project.edges) }; const loggedProject = logEvent(project, `Создан новый сегмент между «${source.data.visibleName}» и «${target.data.visibleName}».`, source.id); return { project: loggedProject, issues: validateProject(loggedProject), projectRevision: state.projectRevision + 1 }; }),
   setViewport: (viewport, options) => set((state) => ({ project: { ...state.project, view: { ...state.project.view, viewport, hasManualViewport: options?.manual ?? true } }, projectRevision: options?.manual ? state.projectRevision + 1 : state.projectRevision })),
   addNode: (type, position = { x: 200, y: 200 }) => set((state) => { const node = buildNode(type, position); const project = { ...state.project, nodes: [...state.project.nodes, node] }; return { project: logEvent(project, `Добавлен элемент «${node.data.visibleName}».`, node.id), selectedNodeId: node.id, issues: validateProject(project), projectRevision: state.projectRevision + 1 }; }),
   selectNode: (selectedNodeId) => set((state) => ({ selectedNodeId, selectedEdgeId: undefined, hoveredEdgeId: undefined, edgeEditorMode: undefined, pathSelection: computePathSelection(state.project, selectedNodeId, undefined) })),
   selectEdge: (selectedEdgeId) => set((state) => ({ selectedEdgeId, selectedNodeId: undefined, hoveredEdgeId: selectedEdgeId ?? state.hoveredEdgeId, edgeEditorMode: selectedEdgeId ? 'actions' : undefined, pathSelection: computePathSelection(state.project, undefined, selectedEdgeId) })),
-  updateNodeField: (nodeId, path, value) => set((state) => { const project = { ...state.project, nodes: state.project.nodes.map((node) => node.id !== nodeId ? node : (() => { const copy = structuredClone(node); setByPath(copy, path, value); return copy; })()) }; return { project, issues: validateProject(project), projectRevision: state.projectRevision + 1 }; }),
+  updateNodeField: (nodeId, path, value) => set((state) => { const project = normalizeProjectEdgeHandles({ ...state.project, nodes: state.project.nodes.map((node) => node.id !== nodeId ? node : (() => { const copy = structuredClone(node); setByPath(copy, path, value); return copy; })()) }); return { project, issues: validateProject(project), projectRevision: state.projectRevision + 1 }; }),
   setSearch: (search) => set({ search }), setInspectorTab: (inspectorTab) => set({ inspectorTab }),
   setSimulationRunning: (running) => set((state) => ({ project: { ...state.project, simulation: { ...state.project.simulation, running } }, projectRevision: state.projectRevision + 1 })),
   setSimulationSpeed: (speed) => set((state) => ({ project: { ...state.project, simulation: { ...state.project.simulation, speed } }, projectRevision: state.projectRevision + 1 })),
@@ -165,9 +167,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     const edge = state.project.edges.find((item) => item.id === activeEdgeId); if (!edge) return state;
     const source = state.project.nodes.find((item) => item.id === edge.source); const target = state.project.nodes.find((item) => item.id === edge.target); if (!source || !target) return state;
     const node = buildNode(kind, midPoint(source, target));
-    const upstreamHandle = normalizeHandleId(edge.sourceHandle, rightHandleId);
-    const downstreamHandle = normalizeHandleId(edge.targetHandle, leftHandleId);
-    const newEdges = [buildEdge(source.id, node.id, edge.data?.medium ?? source.data.medium, edge.data?.nominalDiameter ?? 'DN50', { sourceHandle: upstreamHandle, targetHandle: leftHandleId }), buildEdge(node.id, target.id, edge.data?.medium ?? target.data.medium, edge.data?.nominalDiameter ?? 'DN50', { sourceHandle: rightHandleId, targetHandle: downstreamHandle })];
+    const upstreamHandle = normalizeHandleForNode(source, 'source', edge.sourceHandle) ?? rightHandleId;
+    const downstreamHandle = normalizeHandleForNode(target, 'target', edge.targetHandle) ?? leftHandleId;
+    const insertTargetHandle = normalizeHandleForNode(node, 'target', leftHandleId) ?? leftHandleId;
+    const insertSourceHandle = normalizeHandleForNode(node, 'source', rightHandleId) ?? rightHandleId;
+    const newEdges = [buildEdge(source.id, node.id, edge.data?.medium ?? source.data.medium, edge.data?.nominalDiameter ?? 'DN50', { sourceHandle: upstreamHandle, targetHandle: insertTargetHandle }), buildEdge(node.id, target.id, edge.data?.medium ?? target.data.medium, edge.data?.nominalDiameter ?? 'DN50', { sourceHandle: insertSourceHandle, targetHandle: downstreamHandle })];
     const project = logEvent({ ...state.project, nodes: [...state.project.nodes, node], edges: state.project.edges.filter((item) => item.id !== edge.id).concat(newEdges) }, `В линию вставлен элемент «${node.data.visibleName}».`, node.id);
     return { project, selectedNodeId: node.id, selectedEdgeId: undefined, edgeEditorMode: undefined, pathSelection: computePathSelection(project, node.id, undefined), issues: validateProject(project), projectRevision: state.projectRevision + 1 };
   }),
@@ -176,9 +180,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     const edge = state.project.edges.find((item) => item.id === activeEdgeId); if (!edge) return state;
     const source = state.project.nodes.find((item) => item.id === edge.source); const target = state.project.nodes.find((item) => item.id === edge.target); if (!source || !target) return state;
     const center = midPoint(source, target); const branchNode = buildNode(kind, center);
-    const upstreamHandle = normalizeHandleId(edge.sourceHandle, rightHandleId);
-    const downstreamHandle = normalizeHandleId(edge.targetHandle, leftHandleId);
-    const newEdges = [buildEdge(source.id, branchNode.id, edge.data?.medium ?? source.data.medium, edge.data?.nominalDiameter ?? 'DN50', { sourceHandle: upstreamHandle, targetHandle: leftHandleId }), buildEdge(branchNode.id, target.id, edge.data?.medium ?? target.data.medium, edge.data?.nominalDiameter ?? 'DN50', { sourceHandle: rightHandleId, targetHandle: downstreamHandle })];
+    const upstreamHandle = normalizeHandleForNode(source, 'source', edge.sourceHandle) ?? rightHandleId;
+    const downstreamHandle = normalizeHandleForNode(target, 'target', edge.targetHandle) ?? leftHandleId;
+    const branchInputHandle = getPreferredFreeHandleId(branchNode, 'target', state.project.edges, leftHandleId, edge.id) ?? normalizeHandleForNode(branchNode, 'target', leftHandleId) ?? leftHandleId;
+    const inlineBranchEdge = buildEdge(source.id, branchNode.id, edge.data?.medium ?? source.data.medium, edge.data?.nominalDiameter ?? 'DN50', { sourceHandle: upstreamHandle, targetHandle: branchInputHandle });
+    const selectedFreeSourceHandle = getPreferredFreeHandleId(branchNode, 'source', [inlineBranchEdge], rightHandleId) ?? normalizeHandleForNode(branchNode, 'source', rightHandleId) ?? rightHandleId;
+    const newEdges = [inlineBranchEdge, buildEdge(branchNode.id, target.id, edge.data?.medium ?? target.data.medium, edge.data?.nominalDiameter ?? 'DN50', { sourceHandle: selectedFreeSourceHandle, targetHandle: downstreamHandle })];
     const project = logEvent({ ...state.project, nodes: [...state.project.nodes, branchNode], edges: state.project.edges.filter((item) => item.id !== edge.id).concat(newEdges) }, `Создано ответвление через узел «${branchNode.data.visibleName}». Потяните свободный порт, чтобы сразу продолжить ветвь.`, branchNode.id);
     return { project, selectedNodeId: branchNode.id, selectedEdgeId: undefined, edgeEditorMode: undefined, pathSelection: computePathSelection(project, branchNode.id, undefined), issues: validateProject(project), projectRevision: state.projectRevision + 1 };
   }),
@@ -188,6 +195,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   }),
   reconnectSelectedEdge: (edgeId) => set((state) => {
     const activeEdgeId = edgeId ?? state.selectedEdgeId;
-    const edge = state.project.edges.find((item) => item.id === activeEdgeId); if (!edge) return state; const source = state.project.nodes.find((item) => item.id === edge.source); const target = state.project.nodes.find((item) => item.id === edge.target); if (!source || !target) return state; const rerouted: SoapEdge = { ...edge, type: 'flowEdge', sourceHandle: normalizeHandleId(edge.sourceHandle, rightHandleId), targetHandle: normalizeHandleId(edge.targetHandle, leftHandleId), data: { ...edge.data!, stateLabel: 'Переподключён', medium: edge.data?.medium || 'water', flowActive: edge.data?.flowActive || false, blocked: edge.data?.blocked || false, routeState: edge.data?.routeState || 'idle', flowRate: edge.data?.flowRate || 0, pressure: edge.data?.pressure || 0 } }; const project = logEvent({ ...state.project, edges: state.project.edges.map((item) => item.id === edge.id ? rerouted : item) }, `Сегмент «${source.data.shortName} → ${target.data.shortName}» отмечен для переподключения.`, edge.id); return { project, issues: validateProject(project), projectRevision: state.projectRevision + 1 };
+    const edge = state.project.edges.find((item) => item.id === activeEdgeId); if (!edge) return state; const source = state.project.nodes.find((item) => item.id === edge.source); const target = state.project.nodes.find((item) => item.id === edge.target); if (!source || !target) return state; const rerouted: SoapEdge = { ...edge, type: 'flowEdge', sourceHandle: normalizeHandleForNode(source, 'source', edge.sourceHandle), targetHandle: normalizeHandleForNode(target, 'target', edge.targetHandle), data: { ...edge.data!, stateLabel: 'Переподключён', medium: edge.data?.medium || 'water', flowActive: edge.data?.flowActive || false, blocked: edge.data?.blocked || false, routeState: edge.data?.routeState || 'idle', flowRate: edge.data?.flowRate || 0, pressure: edge.data?.pressure || 0 } }; const project = logEvent({ ...state.project, edges: state.project.edges.map((item) => item.id === edge.id ? rerouted : item) }, `Сегмент «${source.data.shortName} → ${target.data.shortName}» отмечен для переподключения.`, edge.id); return { project, issues: validateProject(project), projectRevision: state.projectRevision + 1 };
   }),
 }));
