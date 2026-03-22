@@ -9,7 +9,8 @@ import { restoreProjectDocument, validateProject } from '../domain/validation/va
 import { DEFAULT_SOURCE_HANDLE, DEFAULT_TARGET_HANDLE, getPreferredFreeHandleId, normalizeHandleForNode, normalizeProjectEdgeHandles } from '../domain/flow/handles';
 import { executeNodeCommand } from '../domain/commands/nodeCommands';
 import { createBranchFromEdge as createBranchTopology, insertNodeIntoEdge as insertNodeTopology, reconnectSegment, removeSegment } from '../domain/topology/edgeOperations';
-import { buildEdge, buildNode, cloneProject, makeProject } from '../domain/entities/projectFactory';
+import { buildEdge, buildNode, cloneProject, makeProject, midPoint } from '../domain/entities/projectFactory';
+import { EquipmentWizardGroupId, applyWizardValuesToNode, buildWizardInitialValues, generateTechnicalTag, inferWizardContext, wizardSubtypeMap } from '../features/equipmentWizard/schema';
 
 interface StartupNotice { type: 'warning' | 'info'; message: string; }
 type StartupState = 'booting' | 'ready';
@@ -210,9 +211,9 @@ const rightHandleId = DEFAULT_SOURCE_HANDLE;
 const logEvent = (project: ProjectDocument, message: string, targetId?: string, severity: 'info' | 'warning' | 'error' = 'info', type = 'editor'): ProjectDocument => ({ ...project, eventLog: [...project.eventLog, { id: crypto.randomUUID(), timestamp: new Date().toISOString(), type, message, severity, targetId }] });
 
 interface AppState {
-  project: ProjectDocument; projectRevision: number; persistedRevision: number; viewportNonce: number; selectedNodeId?: string; selectedEdgeId?: string; search: string; inspectorTab: InspectorTab; showProblematicOnly: boolean; hoveredEdgeId?: string; edgeLabelMode: EdgeLabelMode; edgeEditorMode?: EdgeEditorMode; issues: ValidationIssue[]; pathSelection: { upstream: string[]; downstream: string[]; edges: string[] }; startupState: StartupState; startupNotice?: StartupNotice; startupError?: string; lastCommand?: string;
+  project: ProjectDocument; projectRevision: number; persistedRevision: number; viewportNonce: number; selectedNodeId?: string; selectedEdgeId?: string; search: string; inspectorTab: InspectorTab; showProblematicOnly: boolean; hoveredEdgeId?: string; edgeLabelMode: EdgeLabelMode; edgeEditorMode?: EdgeEditorMode; issues: ValidationIssue[]; pathSelection: { upstream: string[]; downstream: string[]; edges: string[] }; startupState: StartupState; startupNotice?: StartupNotice; startupError?: string; lastCommand?: string; wizard: { open: boolean; groupId?: EquipmentWizardGroupId; kind?: SoapNodeKind; values: Record<string, string | number | boolean>; namingRule: string; };
   onNodesChange: (changes: NodeChange[]) => void; onEdgesChange: (changes: EdgeChange[]) => void; onConnect: (connection: Connection) => void; setViewport: (viewport: Viewport, options?: { manual?: boolean }) => void; addNode: (type: SoapNodeKind, position?: { x: number; y: number }) => void; selectNode: (nodeId?: string) => void; selectEdge: (edgeId?: string) => void; updateNodeField: (nodeId: string, path: string, value: string | number | boolean) => void; setSearch: (search: string) => void; setInspectorTab: (tab: InspectorTab) => void; setSimulationRunning: (running: boolean) => void; setSimulationSpeed: (speed: number) => void; resetSimulation: () => void; tickSimulation: (dt: number) => void;
-  resetProject: () => Promise<void>; resetUserData: () => Promise<void>; clearLocalDataAndLoadDemo: () => Promise<void>; newProject: () => void; loadTemplate: (templateId: TemplateId) => Promise<void>; saveProject: (reason?: 'autosave' | 'manual') => Promise<void>; loadProject: (id?: string) => Promise<void>; exportProject: () => string; importProject: (json: string) => void; runValidation: () => void; toggleProblematicOnly: () => void; hoverEdge: (edgeId?: string) => void; setEdgeLabelMode: (mode: EdgeLabelMode) => void; loadSafeDemo: () => Promise<void>; dismissStartupNotice: () => void; setStartupError: (message?: string) => void;
+  resetProject: () => Promise<void>; resetUserData: () => Promise<void>; clearLocalDataAndLoadDemo: () => Promise<void>; newProject: () => void; loadTemplate: (templateId: TemplateId) => Promise<void>; saveProject: (reason?: 'autosave' | 'manual') => Promise<void>; loadProject: (id?: string) => Promise<void>; exportProject: () => string; importProject: (json: string) => void; runValidation: () => void; toggleProblematicOnly: () => void; hoverEdge: (edgeId?: string) => void; setEdgeLabelMode: (mode: EdgeLabelMode) => void; loadSafeDemo: () => Promise<void>; dismissStartupNotice: () => void; setStartupError: (message?: string) => void; openEquipmentWizard: (options?: { groupId?: EquipmentWizardGroupId; kind?: SoapNodeKind }) => void; closeEquipmentWizard: () => void; setWizardGroup: (groupId: EquipmentWizardGroupId) => void; setWizardKind: (kind: SoapNodeKind) => void; updateWizardValue: (key: string, value: string | number | boolean) => void; regenerateWizardTag: () => void; createEquipmentFromWizard: () => void;
   updateEdgeField: (edgeId: string, field: string, value: string | number | boolean) => void; executeNodeAction: (nodeId: string, action: string) => void;
   setEdgeEditorMode: (mode?: EdgeEditorMode) => void; executeEdgeAction: (action: EdgeActionKind, edgeId?: string) => void; insertNodeIntoEdge: (kind: SoapNodeKind, edgeId?: string) => void; createBranchFromEdge: (kind?: SoapNodeKind, edgeId?: string) => void; removeSelectedSegment: (edgeId?: string) => void; reconnectSelectedEdge: (edgeId?: string) => void;
 }
@@ -220,7 +221,7 @@ interface AppState {
 export type { AppState };
 
 export const useAppStore = create<AppState>((set, get) => ({
-  project: makeProject(), projectRevision: 0, persistedRevision: 0, viewportNonce: 0, selectedNodeId: undefined, selectedEdgeId: undefined, search: '', inspectorTab: 'main', showProblematicOnly: false, hoveredEdgeId: undefined, edgeLabelMode: 'selected', edgeEditorMode: undefined, issues: validateProject(makeProject()), pathSelection: { upstream: [], downstream: [], edges: [] }, startupState: 'booting', startupNotice: undefined, startupError: undefined, lastCommand: undefined,
+  project: makeProject(), projectRevision: 0, persistedRevision: 0, viewportNonce: 0, selectedNodeId: undefined, selectedEdgeId: undefined, search: '', inspectorTab: 'main', showProblematicOnly: false, hoveredEdgeId: undefined, edgeLabelMode: 'selected', edgeEditorMode: undefined, issues: validateProject(makeProject()), pathSelection: { upstream: [], downstream: [], edges: [] }, startupState: 'booting', startupNotice: undefined, startupError: undefined, lastCommand: undefined, wizard: { open: false, groupId: undefined, kind: undefined, values: {}, namingRule: '{prefix}-{seq}' },
   onNodesChange: (changes) => set((state) => { const project = normalizeProjectEdgeHandles({ ...state.project, nodes: applyNodeChanges(changes, state.project.nodes) }); return { project, issues: validateProject(project), projectRevision: state.projectRevision + 1 }; }),
   onEdgesChange: (changes) => set((state) => { const project = normalizeProjectEdgeHandles({ ...state.project, edges: applyEdgeChanges(changes, state.project.edges) }); return { project, issues: validateProject(project), projectRevision: state.projectRevision + 1 }; }),
   onConnect: (connection) => set((state) => { const source = state.project.nodes.find((node) => node.id === connection.source); const target = state.project.nodes.find((node) => node.id === connection.target); if (!source || !target) return state; const sourceHandle = getPreferredFreeHandleId(source, 'source', state.project.edges, connection.sourceHandle) ?? normalizeHandleForNode(source, 'source', connection.sourceHandle); const targetHandle = getPreferredFreeHandleId(target, 'target', state.project.edges, connection.targetHandle) ?? normalizeHandleForNode(target, 'target', connection.targetHandle); if (!sourceHandle || !targetHandle) return state; const project = { ...state.project, edges: addEdge(buildEdge(source.id, target.id, target.data.medium || source.data.medium, 'DN50', { sourceHandle, targetHandle }), state.project.edges) }; const loggedProject = logEvent(project, `Создан новый сегмент между «${source.data.visibleName}» и «${target.data.visibleName}».`, source.id); return { project: loggedProject, issues: validateProject(loggedProject), projectRevision: state.projectRevision + 1 }; }),
@@ -252,6 +253,45 @@ export const useAppStore = create<AppState>((set, get) => ({
   runValidation: () => set((state) => ({ issues: validateProject(state.project) })), toggleProblematicOnly: () => set((state) => ({ showProblematicOnly: !state.showProblematicOnly })), hoverEdge: (hoveredEdgeId) => set({ hoveredEdgeId }), setEdgeLabelMode: (edgeLabelMode) => set({ edgeLabelMode }),
   loadSafeDemo: async () => { const project = cloneProject(demoProject); const revision = get().projectRevision + 1; set({ ...sanitizeProjectState(project, revision, revision, get().viewportNonce + 1), startupState: 'ready', startupError: undefined }); await saveStoredProject(project); },
   dismissStartupNotice: () => set({ startupNotice: undefined }), setStartupError: (startupError) => set({ startupError }),
+  openEquipmentWizard: (options) => set((state) => {
+    const groupId = options?.groupId ?? (options?.kind ? wizardSubtypeMap.get(options.kind) : undefined) ?? state.wizard.groupId ?? 'pumps';
+    const kind = options?.kind ?? state.wizard.kind ?? (groupId ? [...wizardSubtypeMap.entries()].find(([, value]) => value === groupId)?.[0] : undefined) ?? 'pump';
+    const context = inferWizardContext(state.project, state.selectedNodeId, state.selectedEdgeId);
+    return { wizard: { open: true, groupId, kind, namingRule: state.wizard.namingRule, values: buildWizardInitialValues(state.project, groupId, kind, context) } };
+  }),
+  closeEquipmentWizard: () => set((state) => ({ wizard: { ...state.wizard, open: false } })),
+  setWizardGroup: (groupId) => set((state) => {
+    const kind = [...wizardSubtypeMap.entries()].find(([, value]) => value === groupId)?.[0] ?? 'pump';
+    const context = inferWizardContext(state.project, state.selectedNodeId, state.selectedEdgeId);
+    return { wizard: { ...state.wizard, open: true, groupId, kind, values: buildWizardInitialValues(state.project, groupId, kind, context) } };
+  }),
+  setWizardKind: (kind) => set((state) => {
+    const groupId = wizardSubtypeMap.get(kind) ?? state.wizard.groupId ?? 'pumps';
+    const context = inferWizardContext(state.project, state.selectedNodeId, state.selectedEdgeId);
+    return { wizard: { ...state.wizard, open: true, groupId, kind, values: buildWizardInitialValues(state.project, groupId, kind, context) } };
+  }),
+  updateWizardValue: (key, value) => set((state) => ({ wizard: { ...state.wizard, values: { ...state.wizard.values, [key]: value } } })),
+  regenerateWizardTag: () => set((state) => {
+    if (!state.wizard.kind) return state;
+    return { wizard: { ...state.wizard, values: { ...state.wizard.values, technicalTag: generateTechnicalTag(state.project, state.wizard.kind, state.wizard.namingRule) } } };
+  }),
+  createEquipmentFromWizard: () => set((state) => {
+    const { groupId, kind, values } = state.wizard;
+    if (!groupId || !kind) return state;
+    const selectedNode = state.project.nodes.find((node) => node.id === state.selectedNodeId);
+    const selectedEdge = state.project.edges.find((edge) => edge.id === state.selectedEdgeId);
+    const position = selectedEdge ? (() => {
+      const source = state.project.nodes.find((node) => node.id === selectedEdge.source);
+      const target = state.project.nodes.find((node) => node.id === selectedEdge.target);
+      return source && target ? midPoint(source, target) : { x: 280, y: 220 };
+    })() : selectedNode ? { x: selectedNode.position.x + 220, y: selectedNode.position.y } : { x: 280, y: 220 };
+    let node = buildNode(kind, position);
+    node = applyWizardValuesToNode(node, values);
+    const updatedRevision = state.projectRevision + 1;
+    const project = reapplyDerivedState({ ...state.project, nodes: [...state.project.nodes, node] });
+    scheduleSafePersist(project, updatedRevision);
+    return { project: logEvent(project, `Добавлен элемент «${node.data.visibleName}» через мастер.`, node.id), selectedNodeId: node.id, selectedEdgeId: undefined, wizard: { ...state.wizard, open: false }, issues: validateProject(project), projectRevision: updatedRevision, inspectorTab: 'main' };
+  }),
 
   updateEdgeField: (edgeId, field, value) => set((state) => { const updatedRevision = state.projectRevision + 1; const project = reapplyDerivedState({ ...state.project, edges: state.project.edges.map((edge) => { if (edge.id !== edgeId) return edge; const data: any = { ...(edge.data ?? {}) }; data[field] = value; if (field === 'mediumType') data.medium = value as any; if (field === 'flowLpm') data.flowRate = Number(value); return { ...edge, data } as SoapEdge; }) }); scheduleSafePersist(project, updatedRevision); return { project, issues: validateProject(project), projectRevision: updatedRevision }; }),
   executeNodeAction: (nodeId, action) => set((state) => {
