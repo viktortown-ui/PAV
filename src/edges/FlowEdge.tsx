@@ -4,7 +4,7 @@ import { MediumType, RouteState } from '../domain/schemas/types';
 import { mediumPalette, routeTone } from '../domain/visual/tokens';
 import { EdgeActionKind, useAppStore } from '../store/useAppStore';
 
-const routeStateLabel: Record<RouteState, string> = { idle: 'Ожидание', primed: 'Подготовлен', flowing: 'Поток', blocked: 'Блокировка', starved: 'Нет подпитки', draining: 'Слив', cip: 'CIP', alarm: 'Авария', offline: 'Отключён' };
+const routeStateLabel: Record<RouteState, string> = { idle: 'Ожидание', primed: 'Подготовлен', flowing: 'Поток', blocked: 'Блокировка', starved: 'Нет подпитки', draining: 'Слив', cip: 'CIP', alarm: 'Авария', maintenance: 'Ремонт', offline: 'Отключён' };
 const mediumLabel: Record<MediumType, string> = { water: 'Вода', product: 'Продукт', cip: 'CIP', waste: 'Сток' };
 const insertableActions: Array<{ label: string; action: EdgeActionKind }> = [
   { label: 'Клапан', action: 'insert:shutoffValve' },

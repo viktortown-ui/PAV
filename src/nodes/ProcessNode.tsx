@@ -5,7 +5,7 @@ import { SoapNodeData } from '../domain/schemas/types';
 import { mediumPalette, routeTone } from '../domain/visual/tokens';
 import { getHandleSpecs } from '../domain/flow/handles';
 
-const routeLabel: Record<SoapNodeData['simulation']['routeState'], string> = { flowing: 'Поток', blocked: 'Блок', starved: 'Пусто', cip: 'CIP', idle: 'Ожидание', alarm: 'Авария', primed: 'Готов', draining: 'Слив', offline: 'Вне линии' };
+const routeLabel: Record<SoapNodeData['simulation']['routeState'], string> = { flowing: 'Поток', blocked: 'Блок', starved: 'Пусто', cip: 'CIP', idle: 'Ожидание', alarm: 'Авария', primed: 'Готов', draining: 'Слив', maintenance: 'Ремонт', offline: 'Вне линии' };
 const mediumLabel: Record<SoapNodeData['medium'], string> = { water: 'Вода', product: 'Продукт', cip: 'CIP', waste: 'Сток' };
 
 export const ProcessNode = memo(({ id, data, selected }: NodeProps<SoapNodeData>) => {

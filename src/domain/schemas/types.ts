@@ -54,7 +54,7 @@ export type SignalQuality = 'good' | 'uncertain' | 'bad';
 export type TopologyMode = 'distribution' | 'collection' | 'mixing' | 'drain';
 export type ValveType = 'manual' | 'shutoff' | 'solenoid' | 'check' | 'control' | 'gate' | 'drain' | 'relief';
 export type JunctionType = 'tee' | 'cross' | 'collector' | 'splitter' | 'mixing' | 'drain' | 'sample';
-export type RouteState = 'idle' | 'primed' | 'flowing' | 'blocked' | 'starved' | 'draining' | 'cip' | 'alarm' | 'offline';
+export type RouteState = 'idle' | 'primed' | 'flowing' | 'blocked' | 'starved' | 'draining' | 'cip' | 'alarm' | 'maintenance' | 'offline';
 
 export interface PropertyField {
   key: string;
