@@ -1,10 +1,27 @@
 import { componentMap } from '../../domain/registry/componentRegistry';
 import { InspectorTab, PropertyField, SoapNode } from '../../domain/schemas/types';
-import { useAppStore } from '../../store/useAppStore';
+import { EdgeActionKind, useAppStore } from '../../store/useAppStore';
 
 const tabs: Array<[InspectorTab, string]> = [['main', 'Основное'], ['process', 'Процесс'], ['ports', 'Порты'], ['signals', 'КИП'], ['appearance', 'Вид'], ['alarms', 'Арматура'], ['simulation', 'Симуляция']];
 const ruMedium: Record<string, string> = { water: 'Вода', product: 'Продукт', cip: 'CIP', waste: 'Сток' };
 const ruState: Record<string, string> = { idle: 'Ожидание', primed: 'Подготовлен', flowing: 'Поток', blocked: 'Блокировка', starved: 'Нет подпитки', draining: 'Слив', cip: 'CIP', alarm: 'Авария', offline: 'Отключён' };
+const edgeActionButtons: Array<{ label: string; action: EdgeActionKind }> = [
+  { label: 'Вставить клапан', action: 'insert:shutoffValve' },
+  { label: 'Вставить задвижку', action: 'insert:gateValve' },
+  { label: 'Вставить обратный клапан', action: 'insert:checkValve' },
+  { label: 'Вставить расходомер', action: 'insert:flowMeter' },
+  { label: 'Вставить датчик', action: 'insert:pressureSensor' },
+  { label: 'Вставить насос', action: 'insert:pump' },
+  { label: 'Вставить фильтр', action: 'insert:inlineFilter' },
+  { label: 'Вставить тройник', action: 'insert:tee' },
+  { label: 'Вставить крестовину', action: 'insert:cross' },
+  { label: 'Вставить дренаж', action: 'insert:drainBranch' },
+  { label: 'Вставить точку отбора', action: 'insert:samplePoint' },
+  { label: 'Сделать ответвление', action: 'branch:tee' },
+  { label: 'Разорвать сегмент', action: 'break' },
+  { label: 'Переподключить', action: 'reconnect' },
+  { label: 'Удалить сегмент', action: 'delete' },
+];
 
 const getValue = (node: SoapNode, field: PropertyField) => {
   if (field.key in node.data) return (node.data as any)[field.key];
@@ -27,10 +44,7 @@ export const InspectorPanel = () => {
   const setInspectorTab = useAppStore((state) => state.setInspectorTab);
   const updateNodeField = useAppStore((state) => state.updateNodeField);
   const issues = useAppStore((state) => state.issues);
-  const insertNodeIntoEdge = useAppStore((state) => state.insertNodeIntoEdge);
-  const createBranchFromEdge = useAppStore((state) => state.createBranchFromEdge);
-  const removeSelectedSegment = useAppStore((state) => state.removeSelectedSegment);
-  const reconnectSelectedEdge = useAppStore((state) => state.reconnectSelectedEdge);
+  const executeEdgeAction = useAppStore((state) => state.executeEdgeAction);
   const node = project.nodes.find((item) => item.id === selectedNodeId);
   const edge = project.edges.find((item) => item.id === selectedEdgeId);
 
@@ -39,7 +53,7 @@ export const InspectorPanel = () => {
   if (edge) {
     const source = project.nodes.find((item) => item.id === edge.source);
     const target = project.nodes.find((item) => item.id === edge.target);
-    return <aside className="panel inspector-panel"><div className="panel-title">Инспектор сегмента</div><div className="route-card"><strong>{source?.data.visibleName} → {target?.data.visibleName}</strong><span>Среда: {ruMedium[edge.data?.medium ?? 'water']}</span><span>Состояние: {ruState[edge.data?.routeState ?? 'idle']}</span><span>Расход: {Math.round(Number(edge.data?.flowRate ?? 0))} л/мин</span><span>Направление: {edge.data?.direction === 'reverse' ? 'Обратное' : edge.data?.direction === 'bidirectional' ? 'Двунаправленное' : 'Прямое'}</span><span>Диаметр условный: {edge.data?.nominalDiameter ?? 'DN50'}</span><span>Upstream объект: {source?.data.technicalTag ?? '—'}</span><span>Downstream объект: {target?.data.technicalTag ?? '—'}</span></div><div className="line-actions"><strong>Действия с линией</strong><div className="action-grid"><button onClick={() => insertNodeIntoEdge('shutoffValve')}>Вставить клапан</button><button onClick={() => insertNodeIntoEdge('gateValve')}>Вставить задвижку</button><button onClick={() => insertNodeIntoEdge('checkValve')}>Вставить обратный клапан</button><button onClick={() => insertNodeIntoEdge('flowMeter')}>Вставить расходомер</button><button onClick={() => insertNodeIntoEdge('pressureSensor')}>Вставить датчик</button><button onClick={() => insertNodeIntoEdge('pump')}>Вставить насос</button><button onClick={() => insertNodeIntoEdge('inlineFilter')}>Вставить фильтр</button><button onClick={() => insertNodeIntoEdge('tee')}>Вставить тройник</button><button onClick={() => insertNodeIntoEdge('cross')}>Вставить крестовину</button><button onClick={() => insertNodeIntoEdge('drainBranch')}>Вставить дренаж</button><button onClick={() => insertNodeIntoEdge('samplePoint')}>Вставить точку отбора</button><button onClick={() => createBranchFromEdge('tee')}>Сделать ответвление</button><button onClick={reconnectSelectedEdge}>Переподключить</button><button onClick={removeSelectedSegment}>Удалить сегмент</button></div></div></aside>;
+    return <aside className="panel inspector-panel"><div className="panel-title">Инспектор сегмента</div><div className="route-card"><strong>{source?.data.visibleName} → {target?.data.visibleName}</strong><span>Среда: {ruMedium[edge.data?.medium ?? 'water']}</span><span>Состояние: {ruState[edge.data?.routeState ?? 'idle']}</span><span>Расход: {Math.round(Number(edge.data?.flowRate ?? 0))} л/мин</span><span>Направление: {edge.data?.direction === 'reverse' ? 'Обратное' : edge.data?.direction === 'bidirectional' ? 'Двунаправленное' : 'Прямое'}</span><span>Диаметр условный: {edge.data?.nominalDiameter ?? 'DN50'}</span><span>Upstream объект: {source?.data.technicalTag ?? '—'}</span><span>Downstream объект: {target?.data.technicalTag ?? '—'}</span><span>Source handle: {edge.sourceHandle ?? 'out-right'}</span><span>Target handle: {edge.targetHandle ?? 'in-left'}</span></div><div className="line-actions"><strong>Действия с линией</strong><div className="action-grid">{edgeActionButtons.map((item) => <button key={item.action} onClick={() => executeEdgeAction(item.action, edge.id)}>{item.label}</button>)}</div></div></aside>;
   }
 
   const definition = componentMap.get(node!.data.kind);

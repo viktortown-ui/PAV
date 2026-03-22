@@ -23,10 +23,12 @@ const node = (id: string, type: SoapNodeKind, x: number, y: number, visibleName?
   };
 };
 
-const edge = (id: string, source: string, target: string, medium: import('../schemas/types').MediumType = 'water', nominalDiameter = 'DN50'): SoapEdge => ({
+const edge = (id: string, source: string, target: string, medium: import('../schemas/types').MediumType = 'water', nominalDiameter = 'DN50', sourceHandle = 'out-right', targetHandle = 'in-left'): SoapEdge => ({
   id,
   source,
   target,
+  sourceHandle,
+  targetHandle,
   type: 'flowEdge',
   markerEnd: { type: MarkerType.ArrowClosed },
   data: { medium, flowActive: false, blocked: false, routeState: 'idle', flowRate: 0, pressure: 0, nominalDiameter, direction: 'forward', stateLabel: 'Ожидание', segmentId: id },

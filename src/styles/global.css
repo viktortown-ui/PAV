@@ -89,9 +89,9 @@ input[type='checkbox'] { width: 18px; height: 18px; }
 .edge-badge.is-focus { border-color: rgba(125, 230, 255, 0.32); }
 .edge-badge.is-active { background: rgba(6, 20, 28, 0.96); }
 .edge-badge.is-warning { border-color: rgba(255, 154, 91, 0.4); }
-.edge-hitbox { position: absolute; width: 34px; height: 34px; border: none; border-radius: 999px; background: rgba(125, 230, 255, 0.001); box-shadow: 0 0 0 1px rgba(255,255,255,0.04); }
+.edge-hitbox { position: absolute; z-index: 10; width: 34px; height: 34px; border: none; border-radius: 999px; background: rgba(125, 230, 255, 0.001); box-shadow: 0 0 0 1px rgba(255,255,255,0.04); pointer-events: auto; }
 .edge-hitbox.is-selected { background: rgba(125, 230, 255, 0.14); box-shadow: 0 0 0 1px rgba(125, 230, 255, 0.44), 0 0 0 8px rgba(125, 230, 255, 0.08); }
-.edge-editor-popover { position: absolute; min-width: 180px; padding: 8px; border-radius: 16px; background: rgba(7, 14, 23, 0.98); border: 1px solid rgba(120, 164, 217, 0.22); box-shadow: 0 16px 38px rgba(0,0,0,0.35); }
+.edge-editor-popover { position: absolute; z-index: 30; min-width: 180px; padding: 8px; border-radius: 16px; background: rgba(7, 14, 23, 0.98); border: 1px solid rgba(120, 164, 217, 0.22); box-shadow: 0 16px 38px rgba(0,0,0,0.35); pointer-events: auto; }
 .edge-toolbar, .edge-picker { display: grid; gap: 6px; }
 .edge-toolbar button, .edge-picker button { border: 1px solid rgba(122,150,183,0.18); background: linear-gradient(180deg, #132335, #0d1825); color: #edf7ff; border-radius: 12px; padding: 8px 10px; text-align: left; }
 .edge-picker { grid-template-columns: repeat(2, minmax(0, 1fr)); min-width: 300px; }
@@ -137,10 +137,25 @@ input[type='checkbox'] { width: 18px; height: 18px; }
 .line-actions { margin-top: 16px; padding: 14px; border-radius: 16px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); }
 .action-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
 .action-grid button { border: 1px solid rgba(122,150,183,0.15); background: #102032; color: #eef7ff; border-radius: 12px; padding: 9px 10px; text-align: left; }
-.class-major { min-width: 166px; }
-.class-line { min-width: 116px; padding: 7px 10px; border-radius: 15px; }
-.class-valve { min-width: 96px; padding: 5px 8px; border-radius: 999px; background: rgba(8, 14, 22, 0.96); }
-.class-instrument { min-width: 90px; padding: 4px 7px; border-radius: 12px; }
-.class-topology { min-width: 74px; padding: 3px 6px; border-radius: 10px; }
-.class-valve .node-icon, .class-instrument .node-icon, .class-topology .node-icon { width: 28px; height: 28px; border-radius: 999px; background: transparent; }
-.class-topology .node-inline-meta, .class-topology .node-summary { display: none; }
+.edge-toolbar button, .edge-picker button, .edge-editor-popover { pointer-events: auto; }
+.react-flow__edge-textwrapper, .react-flow__edge-label-renderer { pointer-events: none; }
+.react-flow__edge-label-renderer .edge-hitbox, .react-flow__edge-label-renderer .edge-editor-popover { pointer-events: auto; }
+.class-major { min-width: 176px; padding: 10px 12px; }
+.class-line { min-width: 112px; padding: 6px 9px; border-radius: 14px; }
+.class-valve { min-width: 68px; padding: 3px 6px; border-radius: 999px; box-shadow: 0 4px 10px rgba(0,0,0,0.14); }
+.class-instrument { min-width: 56px; padding: 2px 5px; border-radius: 999px; background: rgba(8, 14, 22, 0.92); }
+.class-topology { min-width: 42px; padding: 1px 3px; border-radius: 10px; background: rgba(8, 14, 22, 0.78); border-style: dashed; }
+.class-valve .node-shell, .class-instrument .node-shell, .class-topology .node-shell { gap: 6px; }
+.class-valve .node-copy, .class-instrument .node-copy, .class-topology .node-copy { gap: 2px; }
+.class-valve .node-icon { width: 20px; height: 20px; }
+.class-valve .node-icon svg { width: 14px; height: 14px; }
+.class-instrument .node-icon { width: 18px; height: 18px; border-width: 1px; }
+.class-instrument .node-icon svg { width: 12px; height: 12px; }
+.class-topology .node-icon { width: 16px; height: 16px; border: none; }
+.class-topology .node-icon svg { width: 14px; height: 14px; }
+.class-valve .node-title, .class-instrument .node-title, .class-topology .node-title { font-size: 10px; line-height: 1; }
+.class-valve .node-subtitle, .class-instrument .node-subtitle, .class-topology .node-subtitle, .class-valve .inline-flow, .class-instrument .inline-flow { display: none; }
+.class-instrument .node-badges, .class-topology .node-badges { gap: 4px; }
+.handle-top { top: -7px; }
+.handle-bottom { bottom: -7px; top: auto; }
+.sample-port-handle { width: 10px; height: 10px; background: #7ef0c5; }
