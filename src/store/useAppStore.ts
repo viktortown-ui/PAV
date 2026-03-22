@@ -3,6 +3,7 @@ import { addEdge, applyEdgeChanges, applyNodeChanges, Connection, EdgeChange, No
 import { APP_SCHEMA_VERSION, PROJECT_SCHEMA_VERSION, demoProject, templates } from '../domain/templates/templates';
 import { EdgeLabelMode, InspectorTab, ProjectDocument, SimulationSettings, SoapEdge, SoapNode, SoapNodeKind, TemplateId, ValidationIssue } from '../domain/schemas/types';
 import { clearPersistedState, clearUserData, loadStoredProject, resetCurrentProjectState, saveStoredProject } from '../features/persistence/db';
+import { mediumPalette } from '../ui/tokens/tokens';
 import { runSimulationStep } from '../domain/simulation/engine';
 import { restoreProjectDocument, validateProject } from '../domain/validation/validateProject';
 import { DEFAULT_SOURCE_HANDLE, DEFAULT_TARGET_HANDLE, getPreferredFreeHandleId, normalizeHandleForNode, normalizeProjectEdgeHandles } from '../domain/flow/handles';
@@ -16,6 +17,114 @@ export type EdgeEditorMode = 'actions' | 'insert';
 export type EdgeActionKind = 'insert:shutoffValve' | 'insert:gateValve' | 'insert:checkValve' | 'insert:flowMeter' | 'insert:pressureSensor' | 'insert:pump' | 'insert:inlineFilter' | 'insert:tee' | 'insert:cross' | 'insert:drainBranch' | 'insert:samplePoint' | 'branch:tee' | 'break' | 'reconnect' | 'delete';
 
 const limitedLog = (project: ProjectDocument) => ({ ...project, eventLog: project.eventLog.slice(-80) });
+
+const INSPECTOR_PERSIST_DELAY_MS = 180;
+let persistTimer: number | undefined;
+let persistInFlight: Promise<void> = Promise.resolve();
+
+const scheduleSafePersist = (project: ProjectDocument, revision: number) => {
+  if (typeof window === 'undefined') return;
+  if (persistTimer) window.clearTimeout(persistTimer);
+  const snapshot = cloneProject(project);
+  persistTimer = window.setTimeout(() => {
+    persistInFlight = persistInFlight
+      .catch(() => undefined)
+      .then(async () => {
+        await saveStoredProject({
+          ...snapshot,
+          updatedAt: new Date().toISOString(),
+          appSchemaVersion: APP_SCHEMA_VERSION,
+          projectSchemaVersion: PROJECT_SCHEMA_VERSION,
+        });
+        const current = useAppStore.getState();
+        if (current.projectRevision === revision) useAppStore.setState({ persistedRevision: revision });
+      });
+  }, INSPECTOR_PERSIST_DELAY_MS);
+};
+
+const syncNodePresentation = (node: SoapNode) => {
+  const process = node.data.process as any;
+  if (process.mediumType || process.medium) {
+    const medium = (process.mediumType ?? process.medium ?? node.data.mediumType) as SoapNode['data']['medium'];
+    node.data.medium = medium;
+    node.data.mediumType = medium;
+    process.medium = medium;
+    process.mediumType = medium;
+  }
+
+  if (process.capacity !== undefined) process.capacityLiters = Number(process.capacity);
+  if (process.capacityLiters !== undefined && process.capacity === undefined) process.capacity = Number(process.capacityLiters);
+  if (process.level !== undefined) process.currentLevelLiters = Number(process.level);
+  if (process.currentLevelLiters !== undefined && process.level === undefined) process.level = Number(process.currentLevelLiters);
+  if (process.temperature !== undefined) process.temperatureC = Number(process.temperature);
+  if (process.temperatureC !== undefined && process.temperature === undefined) process.temperature = Number(process.temperatureC);
+  if (process.pressure !== undefined) process.pressureBar = Number(process.pressure);
+  if (process.pressureBar !== undefined && process.pressure === undefined) process.pressure = Number(process.pressureBar);
+  if (process.flowRate !== undefined) {
+    const flow = Number(process.flowRate);
+    if (node.data.kind === 'pump' || node.data.kind === 'dosingPump') {
+      process.nominalFlowLpm = flow;
+      if (process.pumpOn !== false) process.actualFlowLpm = flow;
+    }
+    node.data.runtime.flow = flow;
+    node.data.runtime.flowLpm = flow;
+    node.data.simulation.flow = flow;
+    node.data.simulation.flowLpm = flow;
+  }
+
+  if (process.warningLow !== undefined) process.warnLow = Number(process.warningLow);
+  if (process.warningHigh !== undefined) process.warnHigh = Number(process.warningHigh);
+  if (process.signalUnit !== undefined) process.unit = process.signalUnit;
+  if (process.unit !== undefined && process.signalUnit === undefined) process.signalUnit = process.unit;
+  if (process.signalValue !== undefined) process.currentValue = Number(process.signalValue);
+  if (process.currentValue !== undefined && process.signalValue === undefined) process.signalValue = Number(process.currentValue);
+  if (process.signalType !== undefined && process.measuredProperty === undefined) process.measuredProperty = process.signalType;
+
+  if (node.data.className === 'valve') {
+    const valveOpen = Boolean(process.isOpen ?? process.valveOpen ?? process.valveState !== 'closed');
+    process.isOpen = valveOpen;
+    process.valveOpen = valveOpen;
+    process.valveState = valveOpen ? 'open' : 'closed';
+    node.data.status = valveOpen ? 'running' : 'blocked';
+  }
+
+  if (node.data.kind === 'pump' || node.data.kind === 'dosingPump') {
+    const inferredPumpOn = process.pumpOn ?? ((Number(process.actualFlowLpm ?? 0) > 0) || (Number(process.flowRate ?? 0) > 0));
+    const pumpOn = Boolean(inferredPumpOn);
+    process.pumpOn = pumpOn;
+    if (!pumpOn) process.actualFlowLpm = 0;
+    else if (process.actualFlowLpm === undefined) process.actualFlowLpm = Number(process.nominalFlowLpm ?? process.flowRate ?? 0);
+    node.data.status = pumpOn ? 'running' : 'off';
+    node.data.runtime.active = pumpOn;
+    node.data.simulation.active = pumpOn;
+  }
+
+  const capacity = Number(process.capacityLiters ?? process.capacity ?? 0);
+  const level = Number(process.currentLevelLiters ?? process.level ?? 0);
+  process.levelPercent = capacity > 0 ? Math.max(0, Math.min(100, (level / capacity) * 100)) : 0;
+  node.data.visual.fill = process.levelPercent ?? node.data.visual.fill;
+  node.data.visual.accent = node.data.visual.accent || mediumPalette[node.data.medium].base;
+  node.data.isEnabled = node.data.visual.enabled;
+  node.data.runtime.enabled = node.data.visual.enabled && node.data.simulation.enabled;
+  node.data.simulation.enabled = node.data.simulation.enabled && node.data.visual.enabled;
+  node.data.simulationEnabled = node.data.simulation.enabled;
+};
+
+const reapplyDerivedState = (project: ProjectDocument) => {
+  const simulationResult = runSimulationStep({ ...project, simulation: { ...project.simulation } }, 0);
+  return {
+    ...project,
+    nodes: simulationResult.nodes,
+    edges: simulationResult.edges,
+    simulation: {
+      ...project.simulation,
+      warnings: simulationResult.warnings,
+      activeMedium: simulationResult.activeMedium,
+      totalActiveFlow: simulationResult.totalActiveFlow,
+      lastEvent: simulationResult.lastEvent,
+    },
+  };
+};
 
 const sanitizeProjectState = (project: ProjectDocument, revision = 0, persistedRevision = revision, viewportNonce = 0) => {
   const normalizedProject = normalizeProjectEdgeHandles(project);
@@ -36,8 +145,21 @@ const setByPath = (node: SoapNode, path: string, value: string | number | boolea
   if (['visibleName', 'description', 'shortName', 'notes', 'technicalTag', 'status', 'mode'].includes(path)) data[path] = value;
   else if (path === 'medium' || path === 'mediumType') { data.medium = value; data.mediumType = value; data.process.medium = value; data.process.mediumType = value; }
   else if (path === 'inputs' || path === 'outputs' || path === 'preferredDirection' || path === 'inline') data.ports[path] = path === 'inputs' || path === 'outputs' ? Number(value) : value;
-  else if (path === 'accent' || path === 'fill' || path === 'enabled' || path === 'showLabel') { data.visual[path === 'enabled' ? 'enabled' : path] = value; if (path === 'enabled') data.isEnabled = Boolean(value); }
-  else if (path === 'simEnabled') { data.simulation.enabled = Boolean(value); data.runtime.enabled = Boolean(value); data.simulationEnabled = Boolean(value); }
+  else if (path === 'accent' || path === 'fill' || path === 'enabled' || path === 'showLabel') {
+    data.visual[path === 'enabled' ? 'enabled' : path] = value;
+    if (path === 'enabled') {
+      const enabled = Boolean(value);
+      data.isEnabled = enabled;
+      data.runtime.enabled = enabled && data.simulation.enabled;
+      data.simulationEnabled = enabled && data.simulation.enabled;
+    }
+  }
+  else if (path === 'simEnabled') {
+    const enabled = Boolean(value);
+    data.simulation.enabled = enabled;
+    data.runtime.enabled = enabled && data.visual.enabled;
+    data.simulationEnabled = enabled;
+  }
   else if (path === 'simActive') { data.simulation.active = Boolean(value); data.runtime.active = Boolean(value); }
   else if (path === 'simFlow') { data.simulation.flow = Number(value); data.runtime.flow = Number(value); data.runtime.flowLpm = Number(value); }
   else if (path === 'alarmText') { data.simulation.alarmText = String(value); data.runtime.alarmText = String(value); }
@@ -106,7 +228,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   addNode: (type, position = { x: 200, y: 200 }) => set((state) => { const node = buildNode(type, position); const project = { ...state.project, nodes: [...state.project.nodes, node] }; return { project: logEvent(project, `Добавлен элемент «${node.data.visibleName}».`, node.id), selectedNodeId: node.id, issues: validateProject(project), projectRevision: state.projectRevision + 1 }; }),
   selectNode: (selectedNodeId) => set((state) => ({ selectedNodeId, selectedEdgeId: undefined, hoveredEdgeId: undefined, edgeEditorMode: undefined, pathSelection: computePathSelection(state.project, selectedNodeId, undefined) })),
   selectEdge: (selectedEdgeId) => set((state) => ({ selectedEdgeId, selectedNodeId: undefined, hoveredEdgeId: selectedEdgeId ?? state.hoveredEdgeId, edgeEditorMode: selectedEdgeId ? 'actions' : undefined, pathSelection: computePathSelection(state.project, undefined, selectedEdgeId) })),
-  updateNodeField: (nodeId, path, value) => set((state) => { const project = normalizeProjectEdgeHandles({ ...state.project, nodes: state.project.nodes.map((node) => node.id !== nodeId ? node : (() => { const copy = structuredClone(node); setByPath(copy, path, value); return copy; })()) }); return { project, issues: validateProject(project), projectRevision: state.projectRevision + 1 }; }),
+  updateNodeField: (nodeId, path, value) => set((state) => { const updatedRevision = state.projectRevision + 1; const project = reapplyDerivedState(normalizeProjectEdgeHandles({ ...state.project, nodes: state.project.nodes.map((node) => node.id !== nodeId ? node : (() => { const copy = structuredClone(node); setByPath(copy, path, value); syncNodePresentation(copy); return copy; })()) })); scheduleSafePersist(project, updatedRevision); return { project, issues: validateProject(project), projectRevision: updatedRevision }; }),
   setSearch: (search) => set({ search }), setInspectorTab: (inspectorTab) => set({ inspectorTab }),
   setSimulationRunning: (running) => set((state) => ({ project: { ...state.project, simulation: { ...state.project.simulation, running } }, projectRevision: state.projectRevision + 1 })),
   setSimulationSpeed: (speed) => set((state) => ({ project: { ...state.project, simulation: { ...state.project.simulation, speed } }, projectRevision: state.projectRevision + 1 })),
@@ -131,11 +253,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   loadSafeDemo: async () => { const project = cloneProject(demoProject); const revision = get().projectRevision + 1; set({ ...sanitizeProjectState(project, revision, revision, get().viewportNonce + 1), startupState: 'ready', startupError: undefined }); await saveStoredProject(project); },
   dismissStartupNotice: () => set({ startupNotice: undefined }), setStartupError: (startupError) => set({ startupError }),
 
-  updateEdgeField: (edgeId, field, value) => set((state) => { const project = { ...state.project, edges: state.project.edges.map((edge) => { if (edge.id !== edgeId) return edge; const data: any = { ...(edge.data ?? {}) }; data[field] = value; if (field === 'mediumType') data.medium = value as any; if (field === 'flowLpm') data.flowRate = Number(value); return { ...edge, data } as SoapEdge; }) }; return { project, issues: validateProject(project), projectRevision: state.projectRevision + 1 }; }),
+  updateEdgeField: (edgeId, field, value) => set((state) => { const updatedRevision = state.projectRevision + 1; const project = reapplyDerivedState({ ...state.project, edges: state.project.edges.map((edge) => { if (edge.id !== edgeId) return edge; const data: any = { ...(edge.data ?? {}) }; data[field] = value; if (field === 'mediumType') data.medium = value as any; if (field === 'flowLpm') data.flowRate = Number(value); return { ...edge, data } as SoapEdge; }) }); scheduleSafePersist(project, updatedRevision); return { project, issues: validateProject(project), projectRevision: updatedRevision }; }),
   executeNodeAction: (nodeId, action) => set((state) => {
     const result = executeNodeCommand(state.project, nodeId, action);
     if (!result.changed) return state;
-    return { project: result.project, issues: validateProject(result.project), projectRevision: state.projectRevision + 1, lastCommand: result.lastCommand };
+    const updatedRevision = state.projectRevision + 1;
+    const project = reapplyDerivedState(result.project);
+    scheduleSafePersist(project, updatedRevision);
+    return { project, issues: validateProject(project), projectRevision: updatedRevision, lastCommand: result.lastCommand };
   }),
   setEdgeEditorMode: (edgeEditorMode) => set({ edgeEditorMode }),
   executeEdgeAction: (action, edgeId) => {
@@ -149,24 +274,33 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!activeEdgeId) return state;
     const result = insertNodeTopology(state.project, activeEdgeId, kind);
     if (!result) return state;
-    return { project: result.project, selectedNodeId: result.nodeId, selectedEdgeId: undefined, edgeEditorMode: undefined, pathSelection: computePathSelection(result.project, result.nodeId, undefined), issues: validateProject(result.project), projectRevision: state.projectRevision + 1, lastCommand: `insert:${kind}` };
+    const updatedRevision = state.projectRevision + 1;
+    const project = reapplyDerivedState(result.project);
+    scheduleSafePersist(project, updatedRevision);
+    return { project, selectedNodeId: result.nodeId, selectedEdgeId: undefined, edgeEditorMode: undefined, pathSelection: computePathSelection(project, result.nodeId, undefined), issues: validateProject(project), projectRevision: updatedRevision, lastCommand: `insert:${kind}` };
   }),
   createBranchFromEdge: (kind = 'tee', edgeId) => set((state) => {
     const activeEdgeId = edgeId ?? state.selectedEdgeId;
     if (!activeEdgeId) return state;
     const result = createBranchTopology(state.project, activeEdgeId, kind);
     if (!result) return state;
-    return { project: result.project, selectedNodeId: result.nodeId, selectedEdgeId: undefined, edgeEditorMode: undefined, pathSelection: computePathSelection(result.project, result.nodeId, undefined), issues: validateProject(result.project), projectRevision: state.projectRevision + 1, lastCommand: `branch:${kind}` };
+    const updatedRevision = state.projectRevision + 1;
+    const project = reapplyDerivedState(result.project);
+    scheduleSafePersist(project, updatedRevision);
+    return { project, selectedNodeId: result.nodeId, selectedEdgeId: undefined, edgeEditorMode: undefined, pathSelection: computePathSelection(project, result.nodeId, undefined), issues: validateProject(project), projectRevision: updatedRevision, lastCommand: `branch:${kind}` };
   }),
   removeSelectedSegment: (edgeId) => set((state) => {
     const activeEdgeId = edgeId ?? state.selectedEdgeId;
-    if (!activeEdgeId) return state; const project = removeSegment(state.project, activeEdgeId); return { project, selectedEdgeId: state.selectedEdgeId === activeEdgeId ? undefined : state.selectedEdgeId, edgeEditorMode: state.selectedEdgeId === activeEdgeId ? undefined : state.edgeEditorMode, issues: validateProject(project), projectRevision: state.projectRevision + 1, lastCommand: 'edge:delete' };
+    if (!activeEdgeId) return state; const updatedRevision = state.projectRevision + 1; const project = reapplyDerivedState(removeSegment(state.project, activeEdgeId)); scheduleSafePersist(project, updatedRevision); return { project, selectedEdgeId: state.selectedEdgeId === activeEdgeId ? undefined : state.selectedEdgeId, edgeEditorMode: state.selectedEdgeId === activeEdgeId ? undefined : state.edgeEditorMode, issues: validateProject(project), projectRevision: updatedRevision, lastCommand: 'edge:delete' };
   }),
   reconnectSelectedEdge: (edgeId) => set((state) => {
     const activeEdgeId = edgeId ?? state.selectedEdgeId;
     if (!activeEdgeId) return state;
     const project = reconnectSegment(state.project, activeEdgeId);
     if (!project) return state;
-    return { project, issues: validateProject(project), projectRevision: state.projectRevision + 1, lastCommand: 'edge:reconnect' };
+    const updatedRevision = state.projectRevision + 1;
+    const liveProject = reapplyDerivedState(project);
+    scheduleSafePersist(liveProject, updatedRevision);
+    return { project: liveProject, issues: validateProject(liveProject), projectRevision: updatedRevision, lastCommand: 'edge:reconnect' };
   }),
 }));
