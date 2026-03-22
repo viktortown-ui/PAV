@@ -1,13 +1,13 @@
 import { componentMap } from '../registry/componentRegistry';
 import { demoProject } from '../templates/templates';
-import { EventLogEntry, MediumType, ProjectDocument, RouteState, Severity, SimulationSettings, SoapEdge, SoapNode, SoapNodeData, SoapNodeKind, TemplateId, ValidationIssue } from '../schemas/types';
+import { EventLogEntry, MediumType, ProjectDocument, ProjectViewState, RouteState, Severity, SimulationSettings, SoapEdge, SoapNode, SoapNodeData, SoapNodeKind, TemplateId, TemplateViewMetadata, ValidationIssue } from '../schemas/types';
 
 const TEMPLATE_IDS = new Set(['water-prep', 'soap-line', 'cip-fragment'] as const);
 const MEDIUM_TYPES = new Set<MediumType>(['water', 'product', 'cip', 'waste']);
 const ROUTE_STATES = new Set<RouteState>(['idle', 'primed', 'flowing', 'blocked', 'starved', 'draining', 'cip', 'alarm', 'offline']);
 const NODE_KINDS = new Set<SoapNodeKind>(['inlet', 'filter', 'ro', 'tank', 'reactor', 'heatedReactor', 'pump', 'valve', 'sensor', 'filling', 'drain']);
 const STATUSES = new Set(['normal', 'active', 'warning', 'alarm', 'disabled']);
-const PERSISTENCE_SCHEMA_VERSION = 2;
+const PERSISTENCE_SCHEMA_VERSION = 3;
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
 const isFiniteNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
@@ -24,6 +24,35 @@ const sanitizeViewport = (value: unknown) => {
     x: asNumber(viewport.x, 60),
     y: asNumber(viewport.y, 40),
     zoom: Math.min(2, Math.max(0.2, asNumber(viewport.zoom, 0.82))),
+  };
+};
+
+const sanitizeTemplateViewMetadata = (value: unknown, fallback: TemplateViewMetadata): TemplateViewMetadata => {
+  const view = isObject(value) ? value : {};
+  const center = isObject(view.center) ? view.center : {};
+  const focusBounds = isObject(view.focusBounds) ? view.focusBounds : undefined;
+  return {
+    defaultZoom: Math.min(2, Math.max(0.2, asNumber(view.defaultZoom, fallback.defaultZoom))),
+    minZoom: Math.min(2, Math.max(0.2, asNumber(view.minZoom, fallback.minZoom ?? fallback.defaultZoom))),
+    maxZoom: Math.min(2, Math.max(0.2, asNumber(view.maxZoom, fallback.maxZoom ?? fallback.defaultZoom))),
+    preferredPadding: Math.min(0.35, Math.max(0.04, asNumber(view.preferredPadding, fallback.preferredPadding))),
+    center: { x: asNumber(center.x, fallback.center.x), y: asNumber(center.y, fallback.center.y) },
+    focusNodeId: typeof view.focusNodeId === 'string' ? view.focusNodeId : fallback.focusNodeId,
+    focusBounds: focusBounds ? {
+      x: asNumber(focusBounds.x, fallback.focusBounds?.x ?? fallback.center.x - 120),
+      y: asNumber(focusBounds.y, fallback.focusBounds?.y ?? fallback.center.y - 120),
+      width: Math.max(80, asNumber(focusBounds.width, fallback.focusBounds?.width ?? 240)),
+      height: Math.max(80, asNumber(focusBounds.height, fallback.focusBounds?.height ?? 240)),
+    } : fallback.focusBounds,
+  };
+};
+
+const sanitizeView = (value: unknown, fallback: ProjectViewState): ProjectViewState => {
+  const view = isObject(value) ? value : {};
+  return {
+    viewport: sanitizeViewport(view.viewport),
+    metadata: sanitizeTemplateViewMetadata(view.metadata, fallback.metadata),
+    hasManualViewport: asBoolean(view.hasManualViewport, fallback.hasManualViewport),
   };
 };
 
@@ -150,7 +179,7 @@ export const restoreProjectDocument = (value: unknown): ProjectDocument => {
     updatedAt: asString(value.updatedAt, new Date().toISOString()),
     nodes,
     edges,
-    viewport: sanitizeViewport(value.viewport),
+    view: sanitizeView(value.view, fallback.view),
     simulation: sanitizeSimulation(value.simulation, fallback.simulation),
     eventLog: sanitizeEventLog(value.eventLog, fallback.eventLog),
   };
