@@ -27,6 +27,11 @@ class SoapFlowDatabase extends Dexie {
 
 export const db = new SoapFlowDatabase();
 export const getPersistenceSchemaVersion = () => APP_SCHEMA_VERSION * 100 + PROJECT_SCHEMA_VERSION;
+export const isStoredProjectCompatible = (stored: Pick<StoredProject, 'persistenceVersion' | 'appSchemaVersion' | 'projectSchemaVersion'>, expectedVersion = getPersistenceSchemaVersion()) => (
+  stored.persistenceVersion === expectedVersion
+  && stored.appSchemaVersion === APP_SCHEMA_VERSION
+  && stored.projectSchemaVersion === PROJECT_SCHEMA_VERSION
+);
 const getStoredVersion = () => Number(globalThis.localStorage?.getItem(STORAGE_VERSION_KEY) ?? 0);
 const setStoredVersion = (version: number) => globalThis.localStorage?.setItem(STORAGE_VERSION_KEY, String(version));
 
@@ -66,7 +71,7 @@ export const loadStoredProject = async (id?: string): Promise<LoadStoredProjectR
     return { recovered: false };
   }
 
-  if (stored.persistenceVersion !== expectedVersion || stored.appSchemaVersion !== APP_SCHEMA_VERSION || stored.projectSchemaVersion !== PROJECT_SCHEMA_VERSION) {
+  if (!isStoredProjectCompatible(stored, expectedVersion)) {
     await clearPersistedState();
     return { recovered: true, resetReason: 'version-mismatch' };
   }

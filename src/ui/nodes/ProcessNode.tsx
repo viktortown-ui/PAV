@@ -1,9 +1,9 @@
 import { memo, useEffect } from 'react';
 import { Handle, NodeProps, useStore, useUpdateNodeInternals } from 'reactflow';
-import { IndustrialIcon } from '../icons/IndustrialIcon';
-import { RouteState, SoapNodeData } from '../domain/schemas/types';
-import { mediumPalette, routeTone } from '../domain/visual/tokens';
-import { getHandleSpecs } from '../domain/flow/handles';
+import { IndustrialIcon } from '../../icons/IndustrialIcon';
+import { RouteState, SoapNodeData } from '../../domain/schemas/types';
+import { mediumPalette, routeTone } from '../tokens/tokens';
+import { getHandleSpecs } from '../../domain/flow/handles';
 
 const routeLabel: Record<SoapNodeData['simulation']['routeState'], string> = { flowing: 'Поток', blocked: 'Блок', starved: 'Пусто', cip: 'CIP', idle: 'Ожидание', alarm: 'Авария', primed: 'Готов', draining: 'Слив', maintenance: 'Ремонт', offline: 'Вне линии' };
 const mediumLabel: Record<SoapNodeData['medium'], string> = { water: 'Вода', product: 'Продукт', cip: 'CIP', waste: 'Сток' };

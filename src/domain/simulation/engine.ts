@@ -1,4 +1,4 @@
-import { mediumPalette } from '../visual/tokens';
+import { mediumPalette } from '../../ui/tokens/tokens';
 import { EventLogEntry, MediumType, ProjectDocument, RouteState, SimulationSettings, SoapEdge, SoapNode, SoapNodeData } from '../schemas/types';
 import { instrumentCallsite } from '../../utils/instrumentation';
 
