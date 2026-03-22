@@ -5,6 +5,7 @@ import { mediumPalette, routeTone } from '../domain/visual/tokens';
 import { EdgeActionKind, useAppStore } from '../store/useAppStore';
 
 const routeStateLabel: Record<RouteState, string> = { idle: 'Ожидание', primed: 'Подготовлен', flowing: 'Поток', blocked: 'Блокировка', starved: 'Нет подпитки', draining: 'Слив', cip: 'CIP', alarm: 'Авария', maintenance: 'Ремонт', offline: 'Отключён' };
+const routeParticleMode: Record<RouteState, string> = { idle: 'idle', primed: 'waiting', flowing: 'flowing', blocked: 'blocked', starved: 'starved', draining: 'draining', cip: 'cip', alarm: 'alarm', maintenance: 'idle', offline: 'idle' };
 const mediumLabel: Record<MediumType, string> = { water: 'Вода', product: 'Продукт', cip: 'CIP', waste: 'Сток' };
 const insertableActions: Array<{ label: string; action: EdgeActionKind }> = [
   { label: 'Клапан', action: 'insert:shutoffValve' },
@@ -41,6 +42,8 @@ const FlowEdgeComponent = ({ id, sourceX, sourceY, targetX, targetY, sourcePosit
   const routeColor = routeTone[routeKey];
   const active = Boolean(data?.flowActive);
   const blocked = Boolean(data?.blocked);
+  const isAlarm = routeKey === 'alarm';
+  const isStarved = routeKey === 'starved';
   const emphasis = Boolean(data?.selectedPath || selected);
   const hovered = Boolean(data?.hovered);
   const visibleMode = data?.labelMode ?? 'selected';
@@ -51,8 +54,10 @@ const FlowEdgeComponent = ({ id, sourceX, sourceY, targetX, targetY, sourcePosit
   return <>
     <BaseEdge id={id} path={path} style={{ stroke: '#122131', strokeWidth: 14, opacity: emphasis ? 1 : 0.55 }} />
     <BaseEdge id={`${id}-pipe`} path={path} style={{ stroke: routeColor, strokeWidth: active ? 8 : 6, opacity: emphasis ? 1 : 0.8 }} />
-    <path d={path} className={`pipe-glow ${active ? 'is-active' : ''} ${blocked ? 'is-blocked' : ''}`} style={{ stroke: medium.glow }} />
-    <path d={path} className={`pipe-fluid ${active ? 'is-active' : ''} ${blocked ? 'is-blocked' : ''}`} style={{ stroke: medium.base, ['--flow-speed' as string]: `${Math.max(0.6, 2.4 - Number(data?.flowRate ?? 0) / 30)}s` }} />
+    <path d={path} className={`pipe-shell route-${routeKey} ${hovered ? 'is-hovered' : ''}`} style={{ stroke: routeColor }} />
+    <path d={path} className={`pipe-glow ${active ? 'is-active' : ''} ${blocked ? 'is-blocked' : ''} ${isAlarm ? 'is-alarm' : ''}`} style={{ stroke: medium.glow }} />
+    <path d={path} className={`pipe-fluid mode-${routeParticleMode[routeKey]} ${active ? 'is-active' : ''} ${blocked ? 'is-blocked' : ''} ${isStarved ? 'is-starved' : ''} ${isAlarm ? 'is-alarm' : ''}`} style={{ stroke: medium.base, ['--flow-speed' as string]: `${Math.max(0.7, 2.6 - Number(data?.flowRate ?? 0) / 36)}s` }} />
+    <path d={path} className={`pipe-fluid pipe-fluid-secondary mode-${routeParticleMode[routeKey]} ${active ? 'is-active' : ''} ${blocked ? 'is-blocked' : ''} ${isStarved ? 'is-starved' : ''} ${isAlarm ? 'is-alarm' : ''}`} style={{ stroke: medium.glow, ['--flow-speed' as string]: `${Math.max(0.9, 3.2 - Number(data?.flowRate ?? 0) / 44)}s` }} />
     <EdgeLabelRenderer>
       <button
         type="button"
