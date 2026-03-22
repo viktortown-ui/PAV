@@ -32,6 +32,29 @@ export interface PropertyField {
   options?: Array<{ label: string; value: string }>;
 }
 
+export interface TemplateViewportBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface TemplateViewMetadata {
+  defaultZoom: number;
+  minZoom?: number;
+  maxZoom?: number;
+  preferredPadding: number;
+  center: { x: number; y: number };
+  focusNodeId?: string;
+  focusBounds?: TemplateViewportBounds;
+}
+
+export interface ProjectViewState {
+  viewport: Viewport;
+  metadata: TemplateViewMetadata;
+  hasManualViewport: boolean;
+}
+
 export interface SoapNodeData {
   kind: SoapNodeKind;
   label: string;
@@ -127,7 +150,7 @@ export interface ProjectDocument {
   updatedAt: string;
   nodes: SoapNode[];
   edges: SoapEdge[];
-  viewport: Viewport;
+  view: ProjectViewState;
   simulation: SimulationSettings;
   eventLog: EventLogEntry[];
 }

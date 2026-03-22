@@ -32,7 +32,7 @@ interface AppState {
   onNodesChange: (changes: NodeChange[]) => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
   onConnect: (connection: Connection) => void;
-  setViewport: (viewport: Viewport) => void;
+  setViewport: (viewport: Viewport, options?: { manual?: boolean }) => void;
   addNode: (type: SoapNodeKind, position?: { x: number; y: number }) => void;
   selectNode: (nodeId?: string) => void;
   selectEdge: (edgeId?: string) => void;
@@ -154,7 +154,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     };
     return { project, issues: validateProject(project) };
   }),
-  setViewport: (viewport) => set((state) => ({ project: { ...state.project, viewport } })),
+  setViewport: (viewport, options) => set((state) => ({ project: { ...state.project, view: { ...state.project.view, viewport, hasManualViewport: options?.manual ?? true } } })),
   addNode: (type, position = { x: 200, y: 200 }) => {
     const def = componentMap.get(type);
     if (!def) return;
