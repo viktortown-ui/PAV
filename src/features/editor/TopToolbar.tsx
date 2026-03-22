@@ -1,5 +1,13 @@
 import { useReactFlow } from 'reactflow';
+import { EdgeLabelMode } from '../../domain/schemas/types';
 import { useAppStore } from '../../store/useAppStore';
+
+const edgeLabelModes: Array<{ value: EdgeLabelMode; label: string }> = [
+  { value: 'hidden', label: 'Скрыть линии' },
+  { value: 'selected', label: 'Только выбранные' },
+  { value: 'active', label: 'Только активные' },
+  { value: 'all', label: 'Все компактно' },
+];
 
 export const TopToolbar = () => {
   const rf = useReactFlow();
@@ -11,6 +19,8 @@ export const TopToolbar = () => {
   const runValidation = useAppStore((state) => state.runValidation);
   const resetProject = useAppStore((state) => state.resetProject);
   const clearLocalDataAndLoadDemo = useAppStore((state) => state.clearLocalDataAndLoadDemo);
+  const edgeLabelMode = useAppStore((state) => state.edgeLabelMode);
+  const setEdgeLabelMode = useAppStore((state) => state.setEdgeLabelMode);
 
   const onExport = () => {
     const blob = new Blob([exportProject()], { type: 'application/json' });
@@ -33,6 +43,10 @@ export const TopToolbar = () => {
         <button onClick={() => void loadProject()}>Открыть</button>
         <button onClick={onExport}>Экспорт JSON</button>
         <label className="import-button">Импорт JSON<input type="file" accept="application/json" onChange={(e) => e.target.files?.[0]?.text().then(importProject)} hidden /></label>
+        <label className="toolbar-select">
+          <span>Подписи линий</span>
+          <select value={edgeLabelMode} onChange={(e) => setEdgeLabelMode(e.target.value as EdgeLabelMode)}>{edgeLabelModes.map((mode) => <option key={mode.value} value={mode.value}>{mode.label}</option>)}</select>
+        </label>
         <button onClick={() => rf.fitView({ padding: 0.22, duration: 500 })}>Вписать схему</button>
         <button onClick={runValidation}>Проверить</button>
         <button onClick={() => void resetProject()}>Сброс</button>

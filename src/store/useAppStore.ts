@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { addEdge, applyEdgeChanges, applyNodeChanges, Connection, EdgeChange, NodeChange, Viewport } from 'reactflow';
 import { componentMap } from '../domain/registry/componentRegistry';
 import { demoProject, templates } from '../domain/templates/templates';
-import { InspectorTab, ProjectDocument, SimulationSettings, SoapNode, SoapNodeKind, TemplateId, ValidationIssue } from '../domain/schemas/types';
+import { EdgeLabelMode, InspectorTab, ProjectDocument, SimulationSettings, SoapNode, SoapNodeKind, TemplateId, ValidationIssue } from '../domain/schemas/types';
 import { clearPersistedState, loadStoredProject, saveStoredProject } from '../features/persistence/db';
 import { runSimulationStep } from '../domain/simulation/engine';
 import { restoreProjectDocument, validateProject } from '../domain/validation/validateProject';
@@ -22,6 +22,8 @@ interface AppState {
   inspectorTab: InspectorTab;
   validationFocus: boolean;
   showProblematicOnly: boolean;
+  hoveredEdgeId?: string;
+  edgeLabelMode: EdgeLabelMode;
   issues: ValidationIssue[];
   pathSelection: { upstream: string[]; downstream: string[]; edges: string[] };
   startupState: StartupState;
@@ -49,6 +51,8 @@ interface AppState {
   importProject: (json: string) => void;
   runValidation: () => void;
   toggleProblematicOnly: () => void;
+  hoverEdge: (edgeId?: string) => void;
+  setEdgeLabelMode: (mode: EdgeLabelMode) => void;
   clearLocalDataAndLoadDemo: () => Promise<void>;
   loadSafeDemo: () => Promise<void>;
   dismissStartupNotice: () => void;
@@ -121,6 +125,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   inspectorTab: 'main',
   validationFocus: false,
   showProblematicOnly: false,
+  hoveredEdgeId: undefined,
+  edgeLabelMode: 'selected',
   issues: validateProject(makeProject()),
   pathSelection: { upstream: [], downstream: [], edges: [] },
   startupState: 'booting',
@@ -159,8 +165,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       return { project, selectedNodeId: id, issues: validateProject(project) };
     });
   },
-  selectNode: (selectedNodeId) => set((state) => ({ selectedNodeId, selectedEdgeId: undefined, pathSelection: computePathSelection(state.project, selectedNodeId, undefined) })),
-  selectEdge: (selectedEdgeId) => set((state) => ({ selectedEdgeId, selectedNodeId: undefined, pathSelection: computePathSelection(state.project, undefined, selectedEdgeId) })),
+  selectNode: (selectedNodeId) => set((state) => ({ selectedNodeId, selectedEdgeId: undefined, hoveredEdgeId: undefined, pathSelection: computePathSelection(state.project, selectedNodeId, undefined) })),
+  selectEdge: (selectedEdgeId) => set((state) => ({ selectedEdgeId, selectedNodeId: undefined, hoveredEdgeId: selectedEdgeId ?? state.hoveredEdgeId, pathSelection: computePathSelection(state.project, undefined, selectedEdgeId) })),
   updateNodeField: (nodeId, path, value) => set((state) => {
     const project = { ...state.project, nodes: state.project.nodes.map((node) => {
       if (node.id !== nodeId) return node;
@@ -240,6 +246,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   runValidation: () => set((state) => ({ issues: validateProject(state.project), validationFocus: true })),
   toggleProblematicOnly: () => set((state) => ({ showProblematicOnly: !state.showProblematicOnly })),
+  hoverEdge: (hoveredEdgeId) => set((state) => (state.hoveredEdgeId === hoveredEdgeId ? state : { hoveredEdgeId })),
+  setEdgeLabelMode: (edgeLabelMode) => set({ edgeLabelMode }),
   clearLocalDataAndLoadDemo: async () => {
     await clearPersistedState();
     const project = makeProject();
