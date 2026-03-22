@@ -38,7 +38,9 @@ export type SoapNodeKind =
   | 'drainBranch'
   | 'samplePoint'
   | 'consumer'
-  | 'utilityDrain';
+  | 'utilityDrain'
+  | 'offPageConnector'
+  | 'serviceTerminal';
 
 export type MediumType = 'water' | 'product' | 'cip' | 'waste';
 export type CompositeMediumType = MediumType | 'composite';

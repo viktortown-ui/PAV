@@ -49,7 +49,7 @@ button.primary, .toolbox-actions .primary { background: linear-gradient(180deg, 
 .library-chip.is-active { border-color: rgba(120, 166, 255, 0.45); }
 .toolbox-list { display: flex; flex-direction: column; gap: 10px; }
 .toolbox-item { --family-glow: rgba(122, 150, 183, 0.18); position: relative; display: grid; grid-template-columns: 52px 1fr; gap: 12px; align-items: start; border: 1px solid rgba(122, 150, 183, 0.14); background: linear-gradient(180deg, #111d2e, #0c1522); border-radius: 16px; padding: 12px; text-align: left; color: inherit; overflow: visible; }
-.toolbox-item-row { grid-template-columns: 44px 1fr; padding: 10px; }
+.toolbox-item-row { grid-template-columns: 44px 1fr; padding: 10px 10px 12px; }
 .toolbox-item:hover { border-color: rgba(168, 206, 255, 0.3); box-shadow: 0 12px 28px rgba(0,0,0,0.22), 0 0 0 1px var(--family-glow); }
 .toolbox-item.family-vessel { --family-glow: rgba(117, 160, 255, 0.22); }
 .toolbox-item.family-machinery { --family-glow: rgba(255, 181, 90, 0.24); }
@@ -59,10 +59,16 @@ button.primary, .toolbox-actions .primary { background: linear-gradient(180deg, 
 .toolbox-item.family-terminal { --family-glow: rgba(157, 168, 184, 0.22); }
 .toolbox-icon { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 14px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); }
 .toolbox-icon svg { width: 28px; height: 28px; }
-.toolbox-copy strong { display: block; margin-bottom: 4px; }
+.toolbox-copy { display: grid; gap: 6px; }
+.toolbox-copy-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px; }
+.toolbox-copy strong { display: block; margin: 0; }
 .toolbox-copy span, .toolbox-copy small { display: block; color: #89a0bf; }
-.toolbox-copy small { margin-top: 4px; font-size: 12px; line-height: 1.35; }
-.toolbox-preview { pointer-events: none; position: absolute; left: calc(100% + 12px); top: -6px; width: 260px; padding: 14px; border-radius: 18px; background: linear-gradient(180deg, rgba(11,20,32,0.98), rgba(10,18,28,0.98)); border: 1px solid rgba(168, 206, 255, 0.18); box-shadow: 0 20px 40px rgba(0,0,0,0.35); z-index: 30; }
+.toolbox-copy small { font-size: 12px; line-height: 1.35; }
+.toolbox-code { font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; }
+.toolbox-meta-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.toolbox-meta-pill { border: 1px solid rgba(255,255,255,0.06); background: rgba(255,255,255,0.03); color: #b8c8da; border-radius: 999px; padding: 4px 8px; font-size: 11px; line-height: 1.2; }
+.toolbox-meta-pill.is-compatible { border-color: rgba(110, 223, 192, 0.35); color: #b9f4de; }
+.toolbox-preview { pointer-events: none; position: absolute; left: calc(100% + 12px); top: -6px; width: 280px; padding: 14px; border-radius: 18px; background: linear-gradient(180deg, rgba(11,20,32,0.98), rgba(10,18,28,0.98)); border: 1px solid rgba(168, 206, 255, 0.18); box-shadow: 0 20px 40px rgba(0,0,0,0.35); z-index: 30; display: grid; gap: 10px; }
 .toolbox-preview-head { display: grid; grid-template-columns: 64px 1fr; gap: 12px; align-items: center; margin-bottom: 10px; }
 .toolbox-preview-icon { width: 64px; height: 64px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.03); display: grid; place-items: center; }
 .toolbox-preview-icon svg { width: 46px; height: 46px; }
@@ -98,15 +104,15 @@ button.primary, .toolbox-actions .primary { background: linear-gradient(180deg, 
 .process-node.is-terminal-node { min-width: 150px; border-style: dashed; }
 .node-shell { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; position: relative; z-index: 1; }
 .is-inline-node .node-shell { gap: 6px; }
-.node-icon { position: relative; width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); overflow: hidden; }
+.node-icon { position: relative; width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); overflow: hidden; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02); }
 .is-vessel-node .node-icon { width: 58px; height: 58px; border-radius: 16px; }
-.is-inline-node .node-icon { width: 24px; height: 24px; border-radius: 999px; background: transparent; border-color: color-mix(in srgb, var(--accent) 45%, rgba(255,255,255,0.08)); }
-.node-icon.is-valve-icon { border-radius: 8px; }
-.node-icon.is-instrument-icon { border-radius: 999px; background: rgba(110, 223, 192, 0.06); }
-.node-icon.is-terminal-icon { border-style: dashed; }
+.is-inline-node .node-icon { width: 30px; height: 30px; border-radius: 10px; background: rgba(255,255,255,0.015); border-color: color-mix(in srgb, var(--accent) 45%, rgba(255,255,255,0.08)); }
+.node-icon.is-valve-icon { border-radius: 8px; background: rgba(255, 220, 120, 0.05); }
+.node-icon.is-instrument-icon { border-radius: 999px; background: rgba(110, 223, 192, 0.08); }
+.node-icon.is-terminal-icon { border-style: dashed; background: rgba(180, 196, 214, 0.04); }
 .node-icon svg { width: 26px; height: 26px; position: relative; z-index: 2; }
 .is-vessel-node .node-icon svg { width: 36px; height: 36px; }
-.is-inline-node .node-icon svg { width: 15px; height: 15px; }
+.is-inline-node .node-icon svg { width: 20px; height: 20px; }
 .node-icon.is-live { box-shadow: inset 0 0 22px rgba(255,255,255,0.02), 0 0 18px rgba(125, 230, 255, 0.22); }
 .node-icon.is-mixing svg { animation: spin 1.5s linear infinite; }
 .node-copy { min-width: 0; }
