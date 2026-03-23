@@ -134,12 +134,38 @@ The test suite verifies that:
 
 ## How to add a new equipment type
 
-1. Add the new `SoapNodeKind` in `src/domain/schemas/types.ts`.
-2. Register the definition, defaults, and inspector fields in `src/domain/registry/componentRegistry.ts`.
-3. If the equipment has business commands, add them in `src/domain/commands/nodeCommands.ts`.
-4. If it affects simulation, extend `src/domain/simulation/engine.ts`.
-5. Ensure `ProcessNode` has the visual affordances it needs in `src/ui/nodes/ProcessNode.tsx`.
-6. Add or update tests in `src/tests/unit` and `src/tests/integration`.
+Future equipment should be added through a documented contract, not by inventing structure ad hoc. Before implementing a new type, fill out `docs/equipment-spec-template.md` and use `docs/equipment-implementation-checklist.md` as the delivery checklist. These files standardize classification, naming, data model, inspector tabs, runtime behavior, visuals, validation, persistence, and tests.
+
+### Required workflow
+
+1. Fill out the reusable equipment specification in `docs/equipment-spec-template.md`.
+2. Add the new `SoapNodeKind` in `src/domain/schemas/types.ts`.
+3. Register the definition, defaults, aliases, search metadata, and inspector fields in `src/domain/registry/componentRegistry.ts`.
+4. If the equipment has business commands, add them in `src/domain/commands/nodeCommands.ts`.
+5. If it affects runtime behavior or flow, extend `src/domain/simulation/engine.ts`.
+6. If it is inline or topology-sensitive, update the relevant handle/topology/validation modules in `src/domain/flow`, `src/domain/topology`, and `src/domain/validation`.
+7. Ensure `ProcessNode` and related styles provide the required visual affordances in `src/ui/nodes/ProcessNode.tsx` and `src/styles/global.css`.
+8. Add or update tests in `src/tests/unit` and `src/tests/integration` for creation, searchability, insertion, save/load, and runtime behavior.
+
+### Required equipment contract
+
+Every new equipment type should explicitly define:
+
+- classification: family, subtype, visual class, insertion mode, and placement category;
+- naming: Russian visible name, short name, technical prefix, aliases, and search tags;
+- data model: required fields, optional fields, defaults, and inherited context;
+- inspector schema: tabs, visible fields, advanced fields, and validation rules;
+- runtime behavior: supported states, commands, and flow/simulation effects;
+- visuals: icon family, size class, badges, and inline insertion behavior;
+- validation: legal/illegal connections, direction rules, and mixing constraints;
+- persistence: serialization shape, migration notes, and import/export compatibility;
+- tests: creation, searchability, insertion, save/load, and runtime-state coverage.
+
+### Guardrails
+
+- Preserve the existing RU-first industrial UI conventions.
+- Keep the implementation developer-facing; do **not** add in-app AI, AI buttons, or AI workflows.
+- Prefer consistency with neighboring equipment families over one-off exceptions.
 
 ## How to add a new inline device
 
