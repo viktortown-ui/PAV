@@ -167,19 +167,21 @@ button.primary, .toolbox-actions .primary { background: linear-gradient(180deg, 
 .simulation-launcher-button { min-width: 240px; display: grid; gap: 3px; justify-items: start; padding: 9px 15px 11px; border-radius: 16px 16px 0 0; border: 1px solid rgba(124, 157, 192, 0.18); border-bottom: 0; background: linear-gradient(180deg, rgba(15, 28, 43, 0.98), rgba(9, 18, 29, 0.94)); box-shadow: 0 -10px 30px rgba(0,0,0,0.24); }
 .launcher-title { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #dce8f8; }
 .launcher-meta { font-size: 12px; line-height: 1.3; color: #8ea4bf; }
-.simulation-dock-panel { display: grid; gap: 10px; padding: 8px 12px 12px; border: 1px solid rgba(124, 157, 192, 0.16); border-bottom-color: rgba(124, 157, 192, 0.08); border-radius: 18px 18px 0 0; background: linear-gradient(180deg, rgba(11, 20, 33, 0.98), rgba(7, 13, 21, 0.98)); backdrop-filter: blur(16px); box-shadow: 0 -22px 46px rgba(0,0,0,0.32); transform-origin: bottom center; transition: min-height 180ms ease, transform 180ms ease, opacity 180ms ease; min-height: 100px; }
-.simulation-dock.is-mini .simulation-dock-panel { min-height: 100px; }
-.simulation-dock.is-compact .simulation-dock-panel { min-height: 166px; }
+.simulation-dock-panel { display: grid; gap: 10px; padding: 8px 12px 12px; border: 1px solid rgba(124, 157, 192, 0.16); border-bottom: 0; border-radius: 18px 18px 0 0; background: linear-gradient(180deg, rgba(11, 20, 33, 0.98), rgba(7, 13, 21, 0.98)); backdrop-filter: blur(16px); box-shadow: 0 -22px 46px rgba(0,0,0,0.32); transform-origin: bottom center; transition: min-height 180ms ease, transform 180ms ease, opacity 180ms ease; }
+.simulation-dock.is-mini-dock .simulation-dock-panel { min-height: 104px; }
+.simulation-dock.is-compact .simulation-dock-panel { min-height: 188px; }
 .simulation-dock.is-expanded .simulation-dock-panel { min-height: 360px; }
 .simulation-dock.is-hidden .simulation-dock-panel { opacity: 0; transform: translateY(18px); pointer-events: none; }
-.simulation-dock.is-hidden .simulation-dock-panel,
-.simulation-dock.is-mini .simulation-dock-row-summary,
-.simulation-dock.is-mini .simulation-dock-sheet,
-.simulation-dock.is-compact .simulation-dock-sheet { display: none; }
+.simulation-dock.is-hidden .simulation-dock-panel { display: none; }
 .simulation-dock-grab { width: 52px; height: 4px; border-radius: 999px; margin: 0 auto; background: rgba(190, 211, 238, 0.18); }
 .simulation-dock-toolbar, .simulation-dock-row { display: grid; gap: 10px; }
 .simulation-dock-toolbar { grid-template-columns: minmax(0, 1fr) auto; align-items: end; }
+.simulation-dock-toolbar-actions { display: flex; align-items: center; gap: 8px; }
 .simulation-dock-titleblock { display: grid; gap: 2px; }
+.simulation-dock-state-label { border: 1px solid rgba(143, 181, 226, 0.16); border-radius: 999px; padding: 6px 10px; font-size: 11px; line-height: 1; color: #cfdef2; background: rgba(255,255,255,0.03); }
+.simulation-dock-close { border: 1px solid rgba(143, 181, 226, 0.16); background: #102033; color: #edf4ff; border-radius: 10px; padding: 8px 10px; font-size: 12px; line-height: 1.2; }
+.simulation-dock-close-inline { min-height: 70px; }
+.simulation-dock-state-note { display: none; }
 .simulation-dock-kicker, .dock-zone-label, .metric-label, .dock-field-label { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; line-height: 1.2; text-transform: uppercase; color: #7289a8; }
 .simulation-dock-titleblock strong { font-size: 15px; line-height: 1.15; color: #eef5ff; }
 .simulation-dock-titleblock small { font-size: 12px; line-height: 1.3; color: #8ea4bf; }
@@ -188,8 +190,10 @@ button.primary, .toolbox-actions .primary { background: linear-gradient(180deg, 
 .simulation-dock-mode-switch button, .dock-filter-chips button, .dock-speed-options button, .dock-controls-cluster button, .dock-expand-button, .sheet-focus-button { border: 1px solid rgba(143, 181, 226, 0.16); background: #102033; color: #edf4ff; border-radius: 10px; padding: 8px 10px; font-size: 12px; line-height: 1.2; }
 .simulation-dock-mode-switch button { padding: 7px 10px; border-radius: 999px; background: transparent; font-size: 11px; font-weight: 600; }
 .simulation-dock-mode-switch button.is-active, .dock-filter-chips button.is-active, .dock-speed-options button.is-selected { background: linear-gradient(180deg, rgba(43, 93, 163, 0.92), rgba(25, 50, 90, 0.96)); border-color: rgba(129, 180, 255, 0.5); }
-.simulation-dock-row-primary { grid-template-columns: minmax(320px, 1.1fr) minmax(360px, 1.4fr) 148px; align-items: stretch; }
+.simulation-dock-row-primary { grid-template-columns: minmax(280px, 1.1fr) minmax(280px, 1fr) 180px; align-items: stretch; }
+.simulation-dock.is-mini-dock .simulation-dock-row-primary { grid-template-columns: minmax(320px, 1.2fr) minmax(220px, 0.9fr) 164px; }
 .simulation-dock-row-summary { grid-template-columns: minmax(248px, 0.82fr) minmax(420px, 1.18fr); }
+.simulation-dock.is-compact .simulation-dock-row-summary { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 .dock-zone { display: grid; gap: 8px; align-content: start; padding: 10px; border: 1px solid rgba(255,255,255,0.05); background: rgba(255,255,255,0.025); border-radius: 12px; min-width: 0; }
 .dock-zone-controls { background: linear-gradient(180deg, rgba(15, 29, 45, 0.86), rgba(10, 19, 31, 0.82)); }
 .dock-zone-status, .dock-zone-summary { background: rgba(255,255,255,0.03); }
@@ -198,6 +202,8 @@ button.primary, .toolbox-actions .primary { background: linear-gradient(180deg, 
 .dock-speed-field { display: grid; gap: 6px; min-width: 172px; padding-left: 4px; }
 .dock-speed-field > span, .dock-status-item > span, .dock-summary-grid span, .sheet-overview-grid span, .sheet-last-event span, .sheet-section-head span, .sheet-journal-item span, .sheet-journal-item small { color: #8ea4bf; }
 .dock-status-strip, .dock-summary-grid, .sheet-overview-grid { display: grid; gap: 8px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.simulation-dock.is-mini-dock .dock-status-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.dock-summary-grid-compact { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .dock-status-item, .dock-summary-grid > div, .sheet-overview-grid > div, .sheet-warning-item, .sheet-last-event { border: 1px solid rgba(255,255,255,0.06); background: rgba(255,255,255,0.03); border-radius: 10px; padding: 8px 10px; display: grid; gap: 4px; min-width: 0; }
 .dock-status-item-wide, .dock-summary-grid .is-wide, .sheet-overview-grid .is-wide { grid-column: span 2; }
 .dock-status-item strong, .dock-summary-grid strong, .sheet-overview-grid strong, .sheet-last-event strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -205,6 +211,7 @@ button.primary, .toolbox-actions .primary { background: linear-gradient(180deg, 
 .dock-status-item-wide strong { font-size: 14px; line-height: 1.2; }
 .dock-summary-grid strong, .sheet-overview-grid strong, .sheet-warning-item, .sheet-last-event strong { font-size: 13px; line-height: 1.3; font-weight: 600; color: #edf4ff; }
 .warning-state strong { color: #ffd27f; }
+.dock-expand-actions { display: grid; gap: 8px; height: 100%; }
 .dock-expand-button { height: 100%; min-height: 70px; display: grid; gap: 3px; align-content: center; justify-items: start; background: linear-gradient(180deg, rgba(18, 34, 52, 0.94), rgba(11, 20, 33, 0.96)); }
 .dock-expand-button span { font-size: 12px; line-height: 1.2; color: #c3d4e8; }
 .dock-expand-button strong { font-size: 15px; line-height: 1; }
