@@ -1,32 +1,33 @@
 import { describe, expect, it } from 'vitest';
-import { coercePanelMode, cyclePanelMode, getExpandToggleTarget, getLastOpenPanelMode, getOpenPanelMode } from '../../features/simulation/panelMode';
+import {
+  coerceDiagnosticsPanelState,
+  getLastOpenDiagnosticsPanelState,
+  transitionDiagnosticsPanelState,
+} from '../../features/simulation/panelMode';
 
 describe('simulation panel mode helpers', () => {
-  it('cycles through all panel states in a stable order', () => {
-    expect(cyclePanelMode('hidden')).toBe('mini');
-    expect(cyclePanelMode('mini')).toBe('compact');
-    expect(cyclePanelMode('compact')).toBe('expanded');
-    expect(cyclePanelMode('expanded')).toBe('hidden');
+  it('allows only the declared forward and backward transitions', () => {
+    expect(transitionDiagnosticsPanelState('hidden', 'launcher')).toBe('miniDock');
+    expect(transitionDiagnosticsPanelState('miniDock', 'step-expand')).toBe('compact');
+    expect(transitionDiagnosticsPanelState('compact', 'step-expand')).toBe('expanded');
+    expect(transitionDiagnosticsPanelState('expanded', 'step-collapse')).toBe('compact');
+    expect(transitionDiagnosticsPanelState('compact', 'close')).toBe('hidden');
+    expect(transitionDiagnosticsPanelState('expanded', 'close')).toBe('hidden');
   });
 
-  it('restores the last open state instead of forcing mini mode', () => {
-    expect(getOpenPanelMode('compact')).toBe('compact');
-    expect(getOpenPanelMode('expanded')).toBe('expanded');
-    expect(getOpenPanelMode('hidden')).toBe('mini');
-    expect(getOpenPanelMode(null)).toBe('mini');
+  it('rejects invalid intermediate transitions by staying in the current state', () => {
+    expect(transitionDiagnosticsPanelState('hidden', 'close')).toBe('hidden');
+    expect(transitionDiagnosticsPanelState('hidden', 'step-expand')).toBe('hidden');
+    expect(transitionDiagnosticsPanelState('miniDock', 'close')).toBe('miniDock');
+    expect(transitionDiagnosticsPanelState('miniDock', 'step-collapse')).toBe('miniDock');
+    expect(transitionDiagnosticsPanelState('compact', 'step-collapse')).toBe('compact');
+    expect(transitionDiagnosticsPanelState('expanded', 'step-expand')).toBe('expanded');
   });
 
-  it('collapses and expands without invalid intermediate transitions', () => {
-    expect(getExpandToggleTarget('hidden')).toBe('expanded');
-    expect(getExpandToggleTarget('mini')).toBe('expanded');
-    expect(getExpandToggleTarget('compact')).toBe('mini');
-    expect(getExpandToggleTarget('expanded')).toBe('compact');
-  });
-
-  it('sanitizes stored mode values safely', () => {
-    expect(coercePanelMode('compact')).toBe('compact');
-    expect(coercePanelMode('mystery')).toBe('mini');
-    expect(getLastOpenPanelMode('hidden')).toBe('mini');
-    expect(getLastOpenPanelMode('expanded')).toBe('expanded');
+  it('restores and sanitizes persisted state safely', () => {
+    expect(coerceDiagnosticsPanelState('compact')).toBe('compact');
+    expect(coerceDiagnosticsPanelState('mystery')).toBe('miniDock');
+    expect(getLastOpenDiagnosticsPanelState('hidden')).toBe('miniDock');
+    expect(getLastOpenDiagnosticsPanelState('expanded')).toBe('expanded');
   });
 });
