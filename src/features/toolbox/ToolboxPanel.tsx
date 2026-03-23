@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { KeyboardEvent, useEffect, useMemo, useState } from 'react';
 import { componentRegistry } from '../../domain/registry/componentRegistry';
 import { hasWizardSubtype } from '../equipmentWizard/schema';
 import { IndustrialIcon } from '../../icons/IndustrialIcon';
 import { useAppStore } from '../../store/useAppStore';
+import { groupSearchResultsByFamily, searchLibraryItems, summarizeMatchReason, ToolboxSearchScope } from './librarySearch';
 
 type ToolboxPanelProps = {
   collapsed?: boolean;
@@ -11,7 +12,7 @@ type ToolboxPanelProps = {
 };
 
 type FamilyKey = 'library' | 'sources' | 'vessels' | 'machines' | 'valves' | 'instrumentation' | 'topology' | 'terminals' | 'favorites';
-type FilterKey = 'all' | 'group' | 'compatible' | 'favorites' | 'recent';
+type FilterKey = 'all' | 'compatible' | 'favorites' | 'recent';
 
 type RegistryItem = typeof componentRegistry[number];
 
@@ -45,9 +46,10 @@ const CloseIcon = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 
 
 const recentlyUsedFallback = ['pump', 'shutoffValve', 'pressureSensor', 'tee', 'tank', 'offPageConnector'];
 const favoriteKinds = ['pump', 'tank', 'shutoffValve', 'pressureSensor', 'tee', 'offPageConnector'];
+const emptyStateSuggestions = ['тройник', 'коллектор', 'клапан', 'расходомер', 'дренаж'];
 
 const familyDefinitions: FamilyDefinition[] = [
-  { key: 'library', label: 'Библиотека', description: 'Общий доступ к инженерным семействам и быстрым сценариям вставки.', tooltip: 'Библиотека', match: () => true, icon: (active) => <MenuIcon active={active} /> },
+  { key: 'library', label: 'Библиотека', description: 'Глобальный поиск по всему каталогу и инженерным семействам.', tooltip: 'Библиотека', match: () => true, icon: (active) => <MenuIcon active={active} /> },
   { key: 'sources', label: 'Источники', description: 'Питание, подготовка среды и входные точки процесса.', tooltip: 'Источники', match: (item) => item.type === 'source' || item.type === 'roSkid' || item.type === 'waterFilter', icon: (active) => <SourceIcon active={active} /> },
   { key: 'vessels', label: 'Аппараты', description: 'Основное емкостное и реакторное оборудование схемы.', tooltip: 'Аппараты', match: (item) => item.family === 'vessel', icon: (active) => <VesselIcon active={active} /> },
   { key: 'machines', label: 'Линейные узлы', description: 'Насосы, смесители и элементы, которые ставятся на линию.', tooltip: 'Линейные узлы', match: (item) => item.family === 'machinery', icon: (active) => <MachineIcon active={active} /> },
@@ -60,7 +62,6 @@ const familyDefinitions: FamilyDefinition[] = [
 
 const filterChips: Array<{ key: FilterKey; label: string }> = [
   { key: 'all', label: 'Все' },
-  { key: 'group', label: 'В текущей группе' },
   { key: 'compatible', label: 'Совместимые' },
   { key: 'favorites', label: 'Избранное' },
   { key: 'recent', label: 'Недавние' },
@@ -74,6 +75,16 @@ const insertionHint = (item: RegistryItem) => item.placementNote
       : 'Подходит для вставки в поток'
   : 'Готов к вставке на схему';
 
+const applySecondaryFilter = (items: RegistryItem[], activeFilter: FilterKey, compatibleKinds: Set<string>) => {
+  switch (activeFilter) {
+    case 'compatible': return items.filter((item) => compatibleKinds.has(item.type));
+    case 'favorites': return items.filter((item) => favoriteKinds.includes(item.type));
+    case 'recent': return items.filter((item) => recentlyUsedFallback.includes(item.type));
+    case 'all':
+    default: return items;
+  }
+};
+
 export const ToolboxPanel = ({ collapsed = false, drawerOpen = true, onToggleDrawer }: ToolboxPanelProps) => {
   const search = useAppStore((state) => state.search);
   const setSearch = useAppStore((state) => state.setSearch);
@@ -81,14 +92,19 @@ export const ToolboxPanel = ({ collapsed = false, drawerOpen = true, onToggleDra
   const openEquipmentWizard = useAppStore((state) => state.openEquipmentWizard);
   const selectedNodeId = useAppStore((state) => state.selectedNodeId);
   const project = useAppStore((state) => state.project);
-  const [activeFamily, setActiveFamily] = useState<FamilyKey>('library');
+  const [activeFamily, setActiveFamily] = useState<FamilyKey>('favorites');
   const [activeFilter, setActiveFilter] = useState<FilterKey>('all');
+  const [searchScope, setSearchScope] = useState<ToolboxSearchScope>('global');
+  const [activeResultIndex, setActiveResultIndex] = useState(0);
 
   useEffect(() => {
-    if (collapsed) return;
-    if (!drawerOpen) return;
+    if (collapsed || !drawerOpen) return;
     if (activeFamily === 'library') setActiveFamily('favorites');
   }, [activeFamily, collapsed, drawerOpen]);
+
+  useEffect(() => {
+    setActiveResultIndex(0);
+  }, [search, activeFamily, activeFilter, searchScope]);
 
   const compatibleKinds = useMemo(() => {
     const selectedNode = project.nodes.find((node) => node.id === selectedNodeId);
@@ -99,32 +115,26 @@ export const ToolboxPanel = ({ collapsed = false, drawerOpen = true, onToggleDra
   }, [project.nodes, selectedNodeId]);
 
   const family = familyDefinitions.find((item) => item.key === activeFamily) ?? familyDefinitions[0];
+  const normalizedSearch = search.trim();
+  const globalSearchActive = normalizedSearch.length > 0 && searchScope === 'global';
 
-  const filteredItems = useMemo(() => {
-    const normalizedSearch = search.trim().toLowerCase();
-    let base = componentRegistry.filter((item) => family.match(item));
-    if (activeFamily === 'library') base = componentRegistry.filter((item) => favoriteKinds.includes(item.type) || compatibleKinds.has(item.type));
-    if (normalizedSearch) {
-      base = base.filter((item) => `${item.label} ${item.category} ${item.shortName} ${item.familyLabel} ${item.technicalPrefix} ${item.ruDescriptionShort}`.toLowerCase().includes(normalizedSearch));
-    }
-    switch (activeFilter) {
-      case 'group':
-        return base;
-      case 'compatible':
-        return base.filter((item) => compatibleKinds.has(item.type));
-      case 'favorites':
-        return base.filter((item) => favoriteKinds.includes(item.type));
-      case 'recent':
-        return base.filter((item) => recentlyUsedFallback.includes(item.type));
-      case 'all':
-      default:
-        return base;
-    }
-  }, [activeFamily, activeFilter, compatibleKinds, family, search]);
+  const baseFamilyItems = useMemo(() => {
+    let items = componentRegistry.filter((item) => family.match(item));
+    if (activeFamily === 'favorites') items = items.filter((item) => favoriteKinds.includes(item.type));
+    return applySecondaryFilter(items, activeFilter, compatibleKinds);
+  }, [activeFamily, activeFilter, compatibleKinds, family]);
+
+  const familySearchResults = useMemo(() => searchLibraryItems(baseFamilyItems, normalizedSearch), [baseFamilyItems, normalizedSearch]);
+  const globalSearchResults = useMemo(() => searchLibraryItems(componentRegistry, normalizedSearch), [normalizedSearch]);
+  const groupedGlobalResults = useMemo(() => groupSearchResultsByFamily(globalSearchResults), [globalSearchResults]);
+
+  const flatResults = useMemo(
+    () => (globalSearchActive ? groupedGlobalResults.flatMap((group) => group.results) : familySearchResults),
+    [familySearchResults, globalSearchActive, groupedGlobalResults],
+  );
 
   const handleFamilySelect = (nextFamily: FamilyKey) => {
     setActiveFamily(nextFamily);
-    setActiveFilter(nextFamily === 'library' ? 'all' : 'group');
     if (!drawerOpen) onToggleDrawer?.();
   };
 
@@ -132,6 +142,48 @@ export const ToolboxPanel = ({ collapsed = false, drawerOpen = true, onToggleDra
     if (hasWizardSubtype(item.type)) openEquipmentWizard({ kind: item.type });
     else addNode(item.type);
   };
+
+  const handleKeyNavigation = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (!flatResults.length) return;
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setActiveResultIndex((value) => (value + 1) % flatResults.length);
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setActiveResultIndex((value) => (value - 1 + flatResults.length) % flatResults.length);
+    }
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      const target = flatResults[activeResultIndex];
+      if (target) handleInsert(target.item);
+    }
+  };
+
+  const renderItemButton = (item: RegistryItem, options?: { reason?: string; active?: boolean }) => (
+    <button
+      key={item.type}
+      className={`toolbox-item toolbox-item-compact family-${item.family} ${options?.active ? 'is-active' : ''}`}
+      onClick={() => handleInsert(item)}
+      title={`${item.label}. ${item.ruDescriptionShort}`}
+    >
+      <span className="toolbox-icon"><IndustrialIcon kind={item.type} definition={item} /></span>
+      <div className="toolbox-copy">
+        <div className="toolbox-copy-head">
+          <strong>{item.label}</strong>
+          <span className="toolbox-code">{item.technicalPrefix}</span>
+        </div>
+        <small>{item.ruDescriptionShort}</small>
+        {options?.reason ? <div className="toolbox-match-reason">{options.reason}</div> : null}
+        <div className="toolbox-meta-row">
+          <span className="toolbox-meta-pill">{item.category}</span>
+          <span className="toolbox-meta-pill">{item.subtypeLabel}</span>
+          <span className="toolbox-meta-pill">{insertionHint(item)}</span>
+          {compatibleKinds.has(item.type) ? <span className="toolbox-meta-pill is-compatible">Совместимо</span> : null}
+        </div>
+      </div>
+    </button>
+  );
 
   return (
     <aside className={`toolbox-shell ${collapsed ? 'is-collapsed' : ''}`} aria-label="Левая навигация библиотеки">
@@ -168,53 +220,73 @@ export const ToolboxPanel = ({ collapsed = false, drawerOpen = true, onToggleDra
               </button>
             </div>
 
+            <div className="toolbox-search-mode" role="tablist" aria-label="Режим поиска">
+              <button type="button" className={`library-chip ${searchScope === 'global' ? 'is-active' : ''}`} onClick={() => setSearchScope('global')}>Глобально по библиотеке</button>
+              <button type="button" className={`library-chip ${searchScope === 'family' ? 'is-active' : ''}`} onClick={() => setSearchScope('family')}>Только в текущем семействе</button>
+            </div>
+
             <input
               className="panel-search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Поиск по названию и назначению"
+              onKeyDown={handleKeyNavigation}
+              placeholder={searchScope === 'global' ? 'Например: тройник, коллектор, клапан, расходомер…' : `Фильтр внутри семейства «${family.label}»`}
               aria-label="Поиск по библиотеке"
             />
 
-            <div className="library-chip-row" role="tablist" aria-label="Фильтры библиотеки">
-              {filterChips.map((chip) => (
-                <button
-                  key={chip.key}
-                  type="button"
-                  className={`library-chip ${activeFilter === chip.key ? 'is-active' : ''}`}
-                  onClick={() => setActiveFilter(chip.key)}
-                >
-                  {chip.label}
-                </button>
-              ))}
+            <div className="toolbox-search-caption panel-caption">
+              {searchScope === 'global'
+                ? 'Глобальный поиск проверяет весь каталог и группирует результаты по семействам.'
+                : `Локальный режим сужает результаты только внутри «${family.label}».`}
             </div>
 
+            {!globalSearchActive ? (
+              <div className="library-chip-row" role="tablist" aria-label="Фильтры библиотеки">
+                {filterChips.map((chip) => (
+                  <button
+                    key={chip.key}
+                    type="button"
+                    className={`library-chip ${activeFilter === chip.key ? 'is-active' : ''}`}
+                    onClick={() => setActiveFilter(chip.key)}
+                  >
+                    {chip.label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+
             <div className="toolbox-list toolbox-list-dense">
-              {filteredItems.length ? filteredItems.map((item) => (
-                <button
-                  key={item.type}
-                  className={`toolbox-item toolbox-item-compact family-${item.family}`}
-                  onClick={() => handleInsert(item)}
-                  title={`${item.label}. ${item.ruDescriptionShort}`}
-                >
-                  <span className="toolbox-icon"><IndustrialIcon kind={item.type} definition={item} /></span>
-                  <div className="toolbox-copy">
-                    <div className="toolbox-copy-head">
-                      <strong>{item.label}</strong>
-                      <span className="toolbox-code">{item.technicalPrefix}</span>
+              {globalSearchActive ? (
+                groupedGlobalResults.length ? groupedGlobalResults.map((group) => (
+                  <section key={group.family} className="toolbox-result-group">
+                    <div className="toolbox-result-group-head">
+                      <strong>{group.familyLabel}</strong>
+                      <span>{group.results.length} результатов</span>
                     </div>
-                    <small>{item.ruDescriptionShort}</small>
-                    <div className="toolbox-meta-row">
-                      <span className="toolbox-meta-pill">{item.category}</span>
-                      <span className="toolbox-meta-pill">{insertionHint(item)}</span>
-                      {compatibleKinds.has(item.type) ? <span className="toolbox-meta-pill is-compatible">Совместимо</span> : null}
+                    <div className="toolbox-group-items">
+                      {group.results.map((result) => renderItemButton(result.item, {
+                        reason: summarizeMatchReason(result.matchDetails[0]),
+                        active: flatResults[activeResultIndex]?.item.type === result.item.type,
+                      }))}
+                    </div>
+                  </section>
+                )) : (
+                  <div className="toolbox-empty-state">
+                    <strong>Ничего не найдено во всей библиотеке</strong>
+                    <span>Попробуйте один из инженерных терминов ниже или переключитесь на локальный фильтр.</span>
+                    <div className="toolbox-suggestion-row">
+                      {emptyStateSuggestions.map((suggestion) => <button key={suggestion} type="button" className="library-chip" onClick={() => setSearch(suggestion)}>{suggestion}</button>)}
                     </div>
                   </div>
-                </button>
-              )) : (
+                )
+              ) : familySearchResults.length ? familySearchResults.map((result) => renderItemButton(result.item, {
+                reason: normalizedSearch ? summarizeMatchReason(result.matchDetails[0]) : undefined,
+                active: flatResults[activeResultIndex]?.item.type === result.item.type,
+              })) : (
                 <div className="toolbox-empty-state">
-                  <strong>Ничего не найдено</strong>
-                  <span>Измените поиск или выберите другой фильтр.</span>
+                  <strong>{normalizedSearch ? 'В текущем семействе совпадений нет' : 'Семейство пока пустое'}</strong>
+                  <span>{normalizedSearch ? 'Переключите режим на глобальный поиск или попробуйте другой термин.' : 'Выберите другое семейство или создайте новый элемент.'}</span>
+                  {normalizedSearch ? <div className="toolbox-suggestion-row"><button type="button" className="library-chip" onClick={() => setSearchScope('global')}>Искать во всей библиотеке</button></div> : null}
                 </div>
               )}
             </div>

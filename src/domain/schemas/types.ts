@@ -303,6 +303,15 @@ export interface ComponentDefinition {
   className: EquipmentClass;
   family: SymbolFamily;
   familyLabel: string;
+  subtype: string;
+  subtypeLabel: string;
+  libraryTags: string[];
+  tags: string[];
+  aliases: string[];
+  synonyms: string[];
+  insertionContextHints: string[];
+  compatibilityHints: string[];
+  searchMetadata: string[];
   ruDescriptionShort: string;
   placementNote?: string;
   auditNote: string;
