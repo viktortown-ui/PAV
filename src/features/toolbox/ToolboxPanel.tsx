@@ -210,38 +210,35 @@ export const ToolboxPanel = ({ collapsed = false, drawerOpen = true, onToggleDra
         <>
           <button type="button" className="toolbox-overlay-scrim" aria-label="Закрыть библиотеку" onClick={onToggleDrawer} />
           <div className="toolbox-drawer panel" role="dialog" aria-modal="false" aria-label={family.label}>
-            <div className="toolbox-drawer-head">
-              <div>
-                <div className="panel-title">{family.label}</div>
-                <p className="panel-caption toolbox-family-description">{family.description}</p>
+            <div className="toolbox-drawer-header">
+              <div className="toolbox-drawer-head">
+                <div className="panel-title toolbox-family-title">{family.label}</div>
+                <button type="button" className="toolbox-close-button" onClick={onToggleDrawer} aria-label="Закрыть библиотеку" title="Закрыть библиотеку">
+                  <CloseIcon />
+                </button>
               </div>
-              <button type="button" className="toolbox-close-button" onClick={onToggleDrawer} aria-label="Закрыть библиотеку" title="Закрыть библиотеку">
-                <CloseIcon />
-              </button>
-            </div>
 
-            <div className="toolbox-search-mode" role="tablist" aria-label="Режим поиска">
-              <button type="button" className={`library-chip ${searchScope === 'global' ? 'is-active' : ''}`} onClick={() => setSearchScope('global')}>Глобально по библиотеке</button>
-              <button type="button" className={`library-chip ${searchScope === 'family' ? 'is-active' : ''}`} onClick={() => setSearchScope('family')}>Только в текущем семействе</button>
-            </div>
+              <p className="panel-caption toolbox-family-description">{family.description}</p>
 
-            <input
-              className="panel-search"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              onKeyDown={handleKeyNavigation}
-              placeholder={searchScope === 'global' ? 'Например: тройник, коллектор, клапан, расходомер…' : `Фильтр внутри семейства «${family.label}»`}
-              aria-label="Поиск по библиотеке"
-            />
+              <div className="toolbox-search-mode" role="tablist" aria-label="Режим поиска">
+                <button type="button" className={`library-chip library-chip-primary ${searchScope === 'global' ? 'is-active' : ''}`} onClick={() => setSearchScope('global')}>
+                  Вся библиотека
+                </button>
+                <button type="button" className={`library-chip library-chip-primary ${searchScope === 'family' ? 'is-active' : ''}`} onClick={() => setSearchScope('family')}>
+                  Это семейство
+                </button>
+              </div>
 
-            <div className="toolbox-search-caption panel-caption">
-              {searchScope === 'global'
-                ? 'Глобальный поиск проверяет весь каталог и группирует результаты по семействам.'
-                : `Локальный режим сужает результаты только внутри «${family.label}».`}
-            </div>
+              <input
+                className="panel-search"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                onKeyDown={handleKeyNavigation}
+                placeholder={searchScope === 'global' ? 'Например: тройник, коллектор, клапан, расходомер…' : `Фильтр внутри семейства «${family.label}»`}
+                aria-label="Поиск по библиотеке"
+              />
 
-            {!globalSearchActive ? (
-              <div className="library-chip-row" role="tablist" aria-label="Фильтры библиотеки">
+              <div className="library-chip-row library-chip-row-secondary" role="tablist" aria-label="Фильтры библиотеки">
                 {filterChips.map((chip) => (
                   <button
                     key={chip.key}
@@ -253,7 +250,7 @@ export const ToolboxPanel = ({ collapsed = false, drawerOpen = true, onToggleDra
                   </button>
                 ))}
               </div>
-            ) : null}
+            </div>
 
             <div className="toolbox-list toolbox-list-dense">
               {globalSearchActive ? (
