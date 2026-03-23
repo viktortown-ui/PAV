@@ -16,8 +16,6 @@ const isDev = import.meta.env.DEV;
 const nodeTypes = { processNode: ProcessNode };
 const edgeTypes = { flowEdge: FlowEdge };
 
-type SimulationPanelPlacement = 'left' | 'center' | 'right';
-
 const sameViewport = (a: Viewport, b: Viewport) => (
   Math.abs(a.x - b.x) < VIEWPORT_POSITION_EPSILON
   && Math.abs(a.y - b.y) < VIEWPORT_POSITION_EPSILON
@@ -81,46 +79,10 @@ const CanvasEditorComponent = ({ focusMode = false }: { focusMode?: boolean }) =
   const resizeTimerRef = useRef<number | null>(null);
   const latestViewRef = useRef(view);
   const [flow, setFlow] = useState<ReactFlowInstance | null>(null);
-  const [panelPlacement, setPanelPlacement] = useState<SimulationPanelPlacement>('center');
 
   useEffect(() => {
     latestViewRef.current = view;
   }, [view]);
-
-  useEffect(() => {
-    if (!shellRef.current) return;
-
-    const updatePlacement = () => {
-      const selectedNode = projectNodes.find((node) => node.id === selectedNodeId);
-      const selectedEdge = projectEdges.find((edge) => edge.id === selectedEdgeId);
-      if ((!selectedNode && !selectedEdge) || !shellRef.current) {
-        setPanelPlacement('center');
-        return;
-      }
-
-      const viewport = latestViewRef.current.viewport;
-      const shellWidth = shellRef.current.clientWidth;
-      const shellHeight = shellRef.current.clientHeight;
-      const focusX = selectedNode
-        ? selectedNode.position.x * viewport.zoom + viewport.x
-        : shellWidth / 2;
-      const focusY = selectedNode
-        ? selectedNode.position.y * viewport.zoom + viewport.y
-        : shellHeight - 140;
-
-      const selectionNearBottom = focusY > shellHeight * 0.62;
-      if (!selectionNearBottom) {
-        setPanelPlacement('center');
-        return;
-      }
-
-      if (focusX < shellWidth * 0.45) setPanelPlacement('right');
-      else if (focusX > shellWidth * 0.55) setPanelPlacement('left');
-      else setPanelPlacement('right');
-    };
-
-    updatePlacement();
-  }, [projectEdges, projectNodes, selectedEdgeId, selectedNodeId, view.viewport]);
 
   const animate = useCallback((time: number) => {
     if (lastTimeRef.current != null) tickSimulation((time - lastTimeRef.current) / 1000);
@@ -282,8 +244,8 @@ const CanvasEditorComponent = ({ focusMode = false }: { focusMode?: boolean }) =
           <ControlButton title={focusMode ? 'Режим схемы включён' : 'Режим схемы выключен'} disabled>{focusMode ? 'Ф' : 'Р'}</ControlButton>
         </Controls>
       </ReactFlow>
-      <div className={`canvas-overlay simulation-overlay placement-${panelPlacement} ${focusMode ? 'is-focus-mode' : ''}`}>
-        <SimulationPanel placement={panelPlacement} focusMode={focusMode} />
+      <div className={`canvas-overlay simulation-overlay ${focusMode ? 'is-focus-mode' : ''}`}>
+        <SimulationPanel focusMode={focusMode} />
       </div>
     </div>
   );

@@ -159,28 +159,60 @@ button.primary, .toolbox-actions .primary { background: linear-gradient(180deg, 
 .equipment-spinner { animation: spin 2s linear infinite; }
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
-.simulation-overlay { position: absolute; left: 12px; right: 12px; bottom: 12px; pointer-events: none; }
-.is-focus-mode .simulation-overlay { left: 10px; right: 10px; bottom: 10px; }
-.simulation-panel-shell { pointer-events: auto; margin: 0 auto; max-width: min(1040px, calc(100% - 40px)); }
-.simulation-panel-shell[data-panel-mode="hidden"] { width: fit-content; margin-right: 0; }
-.simulation-panel-shell.is-focus-mode { max-width: min(620px, calc(100% - 20px)); }
-.simulation-panel-toggle-rail { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 8px; }
-.is-focus-mode .simulation-panel-toggle-rail { margin-bottom: 4px; }
-.simulation-panel { border: 1px solid rgba(122, 150, 183, 0.16); background: rgba(8, 16, 25, 0.88); backdrop-filter: blur(14px); border-radius: 18px; padding: 12px; box-shadow: 0 18px 38px rgba(0,0,0,0.24); }
-.is-focus-mode .simulation-panel.mode-compact { padding: 10px; }
-.is-focus-mode .sim-compact-bar { grid-template-columns: auto 1fr; gap: 10px; }
-.is-focus-mode .sim-compact-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.is-focus-mode .compact-metric-event { display: none; }
-.sim-compact-bar { display: grid; grid-template-columns: auto 1fr; gap: 16px; align-items: center; }
-.sim-control-group, .sim-speed-group, .sim-pills, .sim-diagnostics-actions, .warning-strip { display: flex; flex-wrap: wrap; gap: 8px; }
-.sim-compact-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
-.compact-metric, .status-card, .sim-pill, .warning-pill, .event-log-item { border: 1px solid rgba(255,255,255,0.06); background: rgba(255,255,255,0.03); border-radius: 12px; padding: 10px 12px; }
-.compact-metric { display: grid; gap: 6px; }
-.compact-metric-event strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sim-expanded-content { display: grid; gap: 14px; margin-top: 14px; }
-.sim-header { display: flex; justify-content: space-between; gap: 14px; align-items: start; }
-.status-grid.diagnostics-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
-.event-log-list { display: grid; gap: 8px; max-height: 220px; overflow: auto; }
+.simulation-overlay { position: absolute; left: 0; right: 0; bottom: 0; pointer-events: none; padding: 0 14px calc(env(safe-area-inset-bottom, 0px) + 10px); }
+.is-focus-mode .simulation-overlay { padding-left: 10px; padding-right: 10px; padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 8px); }
+.simulation-dock { pointer-events: auto; width: min(1240px, 100%); margin: 0 auto; display: grid; justify-items: stretch; align-items: end; }
+.simulation-dock-launcher { display: flex; justify-content: center; padding-top: 10px; transform: translateY(calc(100% - 18px)); transition: transform 180ms ease; }
+.simulation-dock.is-hidden .simulation-dock-launcher { transform: translateY(0); }
+.simulation-launcher-button { min-width: 240px; display: grid; gap: 2px; justify-items: start; padding: 10px 16px 12px; border-radius: 16px 16px 0 0; border: 1px solid rgba(124, 157, 192, 0.18); border-bottom: 0; background: linear-gradient(180deg, rgba(15, 28, 43, 0.98), rgba(9, 18, 29, 0.94)); box-shadow: 0 -10px 30px rgba(0,0,0,0.24); }
+.launcher-title { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: #dce8f8; }
+.launcher-meta { font-size: 12px; color: #8ea4bf; }
+.simulation-dock-panel { display: grid; gap: 12px; padding: 10px 14px 14px; border: 1px solid rgba(124, 157, 192, 0.16); border-bottom-color: rgba(124, 157, 192, 0.08); border-radius: 18px 18px 0 0; background: linear-gradient(180deg, rgba(11, 20, 33, 0.98), rgba(7, 13, 21, 0.98)); backdrop-filter: blur(16px); box-shadow: 0 -22px 46px rgba(0,0,0,0.32); transform-origin: bottom center; transition: min-height 180ms ease, transform 180ms ease, opacity 180ms ease; min-height: 112px; }
+.simulation-dock.is-mini .simulation-dock-panel { min-height: 112px; }
+.simulation-dock.is-compact .simulation-dock-panel { min-height: 182px; }
+.simulation-dock.is-expanded .simulation-dock-panel { min-height: 400px; }
+.simulation-dock.is-hidden .simulation-dock-panel { opacity: 0; transform: translateY(18px); pointer-events: none; }
+.simulation-dock.is-hidden .simulation-dock-panel,
+.simulation-dock.is-mini .simulation-dock-row-summary,
+.simulation-dock.is-mini .simulation-dock-sheet,
+.simulation-dock.is-compact .simulation-dock-sheet { display: none; }
+.simulation-dock-grab { width: 56px; height: 4px; border-radius: 999px; margin: 0 auto; background: rgba(190, 211, 238, 0.22); }
+.simulation-dock-toolbar, .simulation-dock-row { display: grid; gap: 12px; }
+.simulation-dock-toolbar { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+.simulation-dock-titleblock { display: grid; gap: 3px; }
+.simulation-dock-kicker, .dock-zone-label { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #7289a8; }
+.simulation-dock-titleblock strong { font-size: 15px; }
+.simulation-dock-mode-switch, .dock-controls-cluster, .dock-speed-options, .dock-filter-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.simulation-dock-mode-switch { padding: 4px; border-radius: 999px; background: rgba(255,255,255,0.03); border: 1px solid rgba(124, 157, 192, 0.1); }
+.simulation-dock-mode-switch button, .dock-filter-chips button, .dock-speed-options button, .dock-controls-cluster button, .dock-expand-button, .sheet-focus-button { border: 1px solid rgba(143, 181, 226, 0.16); background: #102033; color: #edf4ff; border-radius: 12px; padding: 10px 12px; }
+.simulation-dock-mode-switch button { padding: 8px 12px; border-radius: 999px; background: transparent; }
+.simulation-dock-mode-switch button.is-active, .dock-filter-chips button.is-active, .dock-speed-options button.is-selected { background: linear-gradient(180deg, rgba(43, 93, 163, 0.92), rgba(25, 50, 90, 0.96)); border-color: rgba(129, 180, 255, 0.5); }
+.simulation-dock-row-primary { grid-template-columns: minmax(340px, 1.15fr) minmax(360px, 1.3fr) 160px; align-items: stretch; }
+.simulation-dock-row-summary { grid-template-columns: minmax(260px, 0.9fr) minmax(420px, 1.3fr); }
+.dock-zone { display: grid; gap: 10px; align-content: start; padding: 12px; border: 1px solid rgba(255,255,255,0.05); background: rgba(255,255,255,0.025); border-radius: 14px; min-width: 0; }
+.dock-zone-controls { background: linear-gradient(180deg, rgba(15, 29, 45, 0.86), rgba(10, 19, 31, 0.82)); }
+.dock-zone-status, .dock-zone-summary { background: rgba(255,255,255,0.03); }
+.dock-controls-cluster { align-items: center; }
+.dock-controls-cluster > .is-primary { background: linear-gradient(180deg, #2a6df4, #1f55c4); border-color: rgba(120, 166, 255, 0.55); }
+.dock-speed-field { display: grid; gap: 8px; min-width: 190px; }
+.dock-speed-field > span, .dock-status-item > span, .dock-summary-grid span, .sheet-overview-grid span, .sheet-last-event span, .sheet-section-head span, .sheet-journal-item span, .sheet-journal-item small { color: #8ea4bf; }
+.dock-status-strip, .dock-summary-grid, .sheet-overview-grid { display: grid; gap: 10px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.dock-status-item, .dock-summary-grid > div, .sheet-overview-grid > div, .sheet-journal-item, .sheet-warning-item, .sheet-last-event { border: 1px solid rgba(255,255,255,0.06); background: rgba(255,255,255,0.03); border-radius: 12px; padding: 10px 12px; display: grid; gap: 6px; min-width: 0; }
+.dock-status-item-wide, .dock-summary-grid .is-wide, .sheet-overview-grid .is-wide { grid-column: span 2; }
+.dock-status-item strong, .dock-summary-grid strong, .sheet-overview-grid strong, .sheet-journal-item strong, .sheet-last-event strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.warning-state strong { color: #ffd27f; }
+.dock-expand-button { height: 100%; min-height: 78px; display: grid; align-content: center; justify-items: start; background: linear-gradient(180deg, rgba(18, 34, 52, 0.94), rgba(11, 20, 33, 0.96)); }
+.simulation-dock-sheet { display: grid; grid-template-columns: minmax(0, 1.6fr) 320px; gap: 12px; max-height: 42vh; min-height: 206px; }
+.simulation-sheet-main, .simulation-sheet-side, .sheet-warning-list, .sheet-journal-list { display: grid; gap: 12px; min-height: 0; }
+.sheet-section { display: grid; gap: 12px; padding: 12px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.05); background: rgba(255,255,255,0.025); }
+.sheet-section-head { display: flex; justify-content: space-between; gap: 12px; align-items: start; }
+.sheet-section-meta { font-size: 12px; color: #8ea4bf; }
+.sheet-focus-button { padding-inline: 14px; }
+.sheet-journal-list { overflow: auto; padding-right: 2px; }
+.sheet-warning-list { align-content: start; }
+.sheet-warning-item.is-idle { color: #9db2cc; }
+.is-focus-mode .simulation-dock { width: min(980px, 100%); }
+.is-focus-mode .simulation-dock-panel { min-height: 104px; }
 
 .command-palette-backdrop { position: fixed; inset: 0; background: rgba(2, 8, 15, 0.68); display: grid; place-items: start center; padding-top: 12vh; z-index: 140; }
 .command-palette { width: min(720px, calc(100vw - 32px)); border-radius: 22px; border: 1px solid rgba(132, 171, 218, 0.18); background: linear-gradient(180deg, #101c2d, #0a1320); box-shadow: 0 28px 60px rgba(0,0,0,0.45); padding: 18px; display: grid; gap: 14px; }
@@ -224,7 +256,6 @@ button.primary, .toolbox-actions .primary { background: linear-gradient(180deg, 
 .wizard-footer-actions .primary { min-width: 180px; }
 
 .is-focus-mode .toolbox-drawer, .is-focus-mode .shell-right-drawer { display: none; }
-.is-focus-mode .simulation-panel.mode-expanded { max-height: 34vh; overflow: auto; }
 
 @media (max-width: 1280px) {
   .toolbox-drawer { width: 320px; }
@@ -238,8 +269,9 @@ button.primary, .toolbox-actions .primary { background: linear-gradient(180deg, 
   .toolbox-drawer { width: min(340px, calc(100vw - 84px)); }
   .shell-rail-right { flex-direction: row; border-left: 0; border-top: 1px solid rgba(122, 150, 183, 0.14); }
   .shell-right-drawer { width: 100%; }
-  .sim-compact-bar, .status-grid.diagnostics-grid, .sim-header, .wizard-context-grid, .wizard-form-grid { grid-template-columns: 1fr; display: grid; }
-  .sim-compact-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .simulation-dock-toolbar, .simulation-dock-row-primary, .simulation-dock-row-summary, .simulation-dock-sheet, .wizard-context-grid, .wizard-form-grid { grid-template-columns: 1fr; display: grid; }
+  .dock-status-strip, .dock-summary-grid, .sheet-overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dock-expand-button { min-height: 56px; }
   .wizard-footer { flex-direction: column; align-items: stretch; }
 }
 
@@ -261,3 +293,11 @@ button.primary, .toolbox-actions .primary { background: linear-gradient(180deg, 
 .toolbox-result-group-head span { color: #89a0bf; font-size: 12px; }
 .toolbox-group-items, .toolbox-suggestion-row { display: grid; gap: 8px; }
 .toolbox-suggestion-row { grid-template-columns: repeat(auto-fit, minmax(120px, max-content)); }
+
+@media (max-width: 720px) {
+  .simulation-overlay { padding-left: 8px; padding-right: 8px; }
+  .simulation-dock-mode-switch { overflow-x: auto; }
+  .dock-status-strip, .dock-summary-grid, .sheet-overview-grid { grid-template-columns: 1fr; }
+  .dock-status-item-wide, .dock-summary-grid .is-wide, .sheet-overview-grid .is-wide { grid-column: auto; }
+  .simulation-launcher-button { min-width: 0; width: 100%; }
+}
