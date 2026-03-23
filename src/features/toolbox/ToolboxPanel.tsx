@@ -58,22 +58,22 @@ const serviceKinds = ['serviceTerminal', 'utilityDrain', 'drainBranch', 'drainVa
 const specialtyKinds = ['collector', 'mixingJunction', 'cross', 'splitter', 'inlineMixer', 'samplePoint'];
 
 const familyDefinitions: FamilyDefinition[] = [
-  { key: 'library', label: 'Библиотека', description: 'Глобальный вход в инженерную библиотеку со всеми семействами и поиском.', tooltip: 'Библиотека', match: () => true, icon: (active) => <MenuIcon active={active} /> },
-  { key: 'sources', label: 'Источники', description: 'Подача среды, подготовка и входные точки процесса.', tooltip: 'Источники', match: (item) => item.type === 'source' || item.type === 'roSkid' || item.type === 'waterFilter', icon: (active) => <SourceIcon active={active} /> },
-  { key: 'vessels', label: 'Аппараты', description: 'Основное емкостное и реакторное оборудование схемы.', tooltip: 'Аппараты', match: (item) => item.family === 'vessel', icon: (active) => <VesselIcon active={active} /> },
-  { key: 'inline', label: 'Inline', description: 'Линейные узлы, которые ставятся прямо в поток: насосы, смесители и фильтры.', tooltip: 'Inline', match: (item) => item.family === 'machinery', icon: (active) => <InlineIcon active={active} /> },
-  { key: 'valves', label: 'Арматура', description: 'Запорно-регулирующая арматура для маршрутизации и отсечки.', tooltip: 'Арматура', match: (item) => item.family === 'valve', icon: (active) => <ValveIcon active={active} /> },
-  { key: 'instrumentation', label: 'КИП', description: 'Измерение параметров процесса и контрольные точки.', tooltip: 'КИП', match: (item) => item.family === 'instrument', icon: (active) => <InstrumentIcon active={active} /> },
-  { key: 'topology', label: 'Топология', description: 'Разветвления, объединения и структурные элементы трассировки.', tooltip: 'Топология', match: (item) => item.family === 'topology', icon: (active) => <TopologyIcon active={active} /> },
-  { key: 'more', label: 'Еще', description: 'Вторичные наборы: избранное, недавние, терминалы и сервисные подкатегории.', tooltip: 'Еще', match: () => false, icon: (active) => <MoreIcon active={active} /> },
+  { key: 'library', label: 'Библиотека', description: 'Все элементы библиотеки.', tooltip: 'Библиотека', match: () => true, icon: (active) => <MenuIcon active={active} /> },
+  { key: 'sources', label: 'Источники', description: 'Подача и подготовка среды.', tooltip: 'Источники', match: (item) => item.type === 'source' || item.type === 'roSkid' || item.type === 'waterFilter', icon: (active) => <SourceIcon active={active} /> },
+  { key: 'vessels', label: 'Аппараты', description: 'Ёмкости и реакторы.', tooltip: 'Аппараты', match: (item) => item.family === 'vessel', icon: (active) => <VesselIcon active={active} /> },
+  { key: 'inline', label: 'Линия', description: 'Насосы и линейные узлы.', tooltip: 'Линия', match: (item) => item.family === 'machinery', icon: (active) => <InlineIcon active={active} /> },
+  { key: 'valves', label: 'Арматура', description: 'Клапаны и задвижки.', tooltip: 'Арматура', match: (item) => item.family === 'valve', icon: (active) => <ValveIcon active={active} /> },
+  { key: 'instrumentation', label: 'КИП', description: 'Датчики и индикация.', tooltip: 'КИП', match: (item) => item.family === 'instrument', icon: (active) => <InstrumentIcon active={active} /> },
+  { key: 'topology', label: 'Топология', description: 'Ветки и соединения.', tooltip: 'Топология', match: (item) => item.family === 'topology', icon: (active) => <TopologyIcon active={active} /> },
+  { key: 'more', label: 'Ещё', description: 'Дополнительные наборы.', tooltip: 'Ещё', match: () => false, icon: (active) => <MoreIcon active={active} /> },
 ];
 
 const moreTabDefinitions: MoreTabDefinition[] = [
-  { key: 'favorites', label: 'Избранное', description: 'Быстрый доступ к часто используемым элементам.', match: (item) => favoriteKinds.includes(item.type) },
-  { key: 'recent', label: 'Недавние', description: 'Последние часто встречающиеся элементы для повторной вставки.', match: (item) => recentlyUsedFallback.includes(item.type) },
-  { key: 'terminals', label: 'Терминалы', description: 'Граничные подключения, выводы и внешние точки схемы.', match: (item) => item.family === 'terminal' },
-  { key: 'service', label: 'Сервисные', description: 'Служебные и утилитарные подмножества для обслуживания и дренажа.', match: (item) => serviceKinds.includes(item.type) },
-  { key: 'specialty', label: 'Спецнаборы', description: 'Редкие специализированные узлы и вспомогательные инженерные элементы.', match: (item) => specialtyKinds.includes(item.type) },
+  { key: 'favorites', label: 'Избранное', description: 'Часто используемые элементы.', match: (item) => favoriteKinds.includes(item.type) },
+  { key: 'recent', label: 'Недавние', description: 'Недавно добавленные элементы.', match: (item) => recentlyUsedFallback.includes(item.type) },
+  { key: 'terminals', label: 'Терминалы', description: 'Граничные точки схемы.', match: (item) => item.family === 'terminal' },
+  { key: 'service', label: 'Сервис', description: 'Сервис и дренаж.', match: (item) => serviceKinds.includes(item.type) },
+  { key: 'specialty', label: 'Спецузлы', description: 'Редкие узлы.', match: (item) => specialtyKinds.includes(item.type) },
 ];
 
 const filterChips: Array<{ key: FilterKey; label: string }> = [
@@ -83,11 +83,11 @@ const filterChips: Array<{ key: FilterKey; label: string }> = [
 
 const insertionHint = (item: RegistryItem) => item.placementNote
   ? item.family === 'vessel'
-    ? 'Размещается как основной аппарат'
+    ? 'Аппарат'
     : item.family === 'terminal'
-      ? 'Размещается как граничная точка'
-      : 'Подходит для вставки в поток'
-  : 'Готов к вставке на схему';
+      ? 'Точка'
+      : 'В линию'
+  : 'На схему';
 
 const applySecondaryFilter = (items: RegistryItem[], activeFilter: FilterKey, compatibleKinds: Set<string>) => {
   switch (activeFilter) {
@@ -192,7 +192,7 @@ export const ToolboxPanel = ({ collapsed = false, drawerOpen = true, onToggleDra
           <span className="toolbox-meta-pill">{item.category}</span>
           <span className="toolbox-meta-pill">{item.subtypeLabel}</span>
           <span className="toolbox-meta-pill">{insertionHint(item)}</span>
-          {compatibleKinds.has(item.type) ? <span className="toolbox-meta-pill is-compatible">Совместимо</span> : null}
+          {compatibleKinds.has(item.type) ? <span className="toolbox-meta-pill is-compatible">Совместимые</span> : null}
         </div>
       </div>
     </button>
@@ -200,7 +200,7 @@ export const ToolboxPanel = ({ collapsed = false, drawerOpen = true, onToggleDra
 
   return (
     <aside className={`toolbox-shell ${collapsed ? 'is-collapsed' : ''}`} aria-label="Левая навигация библиотеки">
-      <div className="shell-rail shell-rail-left" aria-label="Основные семейства библиотеки">
+      <div className="shell-rail shell-rail-left" aria-label="Семейства библиотеки">
         {familyDefinitions.map((entry) => {
           const active = drawerOpen && activeFamily === entry.key;
           return (
@@ -221,15 +221,15 @@ export const ToolboxPanel = ({ collapsed = false, drawerOpen = true, onToggleDra
 
       {!collapsed && drawerOpen ? (
         <>
-          <button type="button" className="toolbox-overlay-scrim" aria-label="Закрыть библиотеку" onClick={onToggleDrawer} />
+          <button type="button" className="toolbox-overlay-scrim" aria-label="Закрыть" onClick={onToggleDrawer} />
           <div className="toolbox-drawer panel" role="dialog" aria-modal="false" aria-label={panelTitle}>
             <div className="toolbox-drawer-header">
               <div className="toolbox-drawer-head">
                 <div>
                   <div className="panel-title toolbox-family-title">{panelTitle}</div>
-                  {activeFamily === 'more' ? <div className="toolbox-family-context">Еще</div> : null}
+                  {activeFamily === 'more' ? <div className="toolbox-family-context">Ещё</div> : null}
                 </div>
-                <button type="button" className="toolbox-close-button" onClick={onToggleDrawer} aria-label="Закрыть библиотеку" title="Закрыть библиотеку">
+                <button type="button" className="toolbox-close-button" onClick={onToggleDrawer} aria-label="Закрыть" title="Закрыть">
                   <CloseIcon />
                 </button>
               </div>
@@ -237,7 +237,7 @@ export const ToolboxPanel = ({ collapsed = false, drawerOpen = true, onToggleDra
               <p className="panel-caption toolbox-family-description">{panelDescription}</p>
 
               {activeFamily === 'more' ? (
-                <div className="library-chip-row library-chip-row-secondary" role="tablist" aria-label="Вторичные наборы">
+                <div className="library-chip-row library-chip-row-secondary" role="tablist" aria-label="Дополнительные наборы">
                   {moreTabDefinitions.map((tab) => (
                     <button
                       key={tab.key}
@@ -252,7 +252,7 @@ export const ToolboxPanel = ({ collapsed = false, drawerOpen = true, onToggleDra
                 </div>
               ) : null}
 
-              <div className="toolbox-search-mode" role="tablist" aria-label="Режим поиска">
+              <div className="toolbox-search-mode" role="tablist" aria-label="Область поиска">
                 <button type="button" className={`library-chip library-chip-primary ${searchScope === 'global' ? 'is-active' : ''}`} onClick={() => setSearchScope('global')}>
                   Вся библиотека
                 </button>
@@ -266,11 +266,11 @@ export const ToolboxPanel = ({ collapsed = false, drawerOpen = true, onToggleDra
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 onKeyDown={handleKeyNavigation}
-                placeholder={searchScope === 'global' ? 'Например: тройник, коллектор, клапан, расходомер…' : `Фильтр внутри раздела «${panelTitle}»`}
+                placeholder={searchScope === 'global' ? 'Поиск по библиотеке' : `Поиск в разделе «${panelTitle}»`}
                 aria-label="Поиск по библиотеке"
               />
 
-              <div className="library-chip-row library-chip-row-secondary" role="tablist" aria-label="Фильтры библиотеки">
+              <div className="library-chip-row library-chip-row-secondary" role="tablist" aria-label="Фильтры">
                 {filterChips.map((chip) => (
                   <button
                     key={chip.key}
@@ -301,8 +301,8 @@ export const ToolboxPanel = ({ collapsed = false, drawerOpen = true, onToggleDra
                   </section>
                 )) : (
                   <div className="toolbox-empty-state">
-                    <strong>Ничего не найдено во всей библиотеке</strong>
-                    <span>Попробуйте один из инженерных терминов ниже или переключитесь на локальный фильтр.</span>
+                    <strong>Ничего не найдено</strong>
+                    <span>Попробуйте другой запрос.</span>
                     <div className="toolbox-suggestion-row">
                       {emptyStateSuggestions.map((suggestion) => <button key={suggestion} type="button" className="library-chip" onClick={() => setSearch(suggestion)}>{suggestion}</button>)}
                     </div>
@@ -313,9 +313,9 @@ export const ToolboxPanel = ({ collapsed = false, drawerOpen = true, onToggleDra
                 active: flatResults[activeResultIndex]?.item.type === result.item.type,
               })) : (
                 <div className="toolbox-empty-state">
-                  <strong>{normalizedSearch ? 'В текущем разделе совпадений нет' : 'Раздел пока пустой'}</strong>
-                  <span>{normalizedSearch ? 'Переключите режим на глобальный поиск или попробуйте другой термин.' : 'Выберите другое семейство или создайте новый элемент.'}</span>
-                  {normalizedSearch ? <div className="toolbox-suggestion-row"><button type="button" className="library-chip" onClick={() => setSearchScope('global')}>Искать во всей библиотеке</button></div> : null}
+                  <strong>{normalizedSearch ? 'Ничего не найдено' : 'Раздел пуст'}</strong>
+                  <span>{normalizedSearch ? 'Смените область поиска.' : 'Выберите другое семейство.'}</span>
+                  {normalizedSearch ? <div className="toolbox-suggestion-row"><button type="button" className="library-chip" onClick={() => setSearchScope('global')}>Вся библиотека</button></div> : null}
                 </div>
               )}
             </div>
