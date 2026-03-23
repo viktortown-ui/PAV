@@ -4,21 +4,21 @@ import { hasWizardSubtype } from '../equipmentWizard/schema';
 import { IndustrialIcon } from '../../icons/IndustrialIcon';
 import { useAppStore } from '../../store/useAppStore';
 import { groupSearchResultsByFamily, searchLibraryItems, summarizeMatchReason, ToolboxSearchScope } from './librarySearch';
+import { LeftFamilyKey, LeftShellEvent, LeftShellState, QuickAddCloseBehavior } from './leftShellState';
 
 type ToolboxPanelProps = {
-  collapsed?: boolean;
-  drawerOpen?: boolean;
-  onToggleDrawer?: () => void;
+  leftShell: LeftShellState;
+  stateMachineDefinition: string;
+  onEvent: (event: LeftShellEvent) => void;
 };
 
-type FamilyKey = 'library' | 'sources' | 'vessels' | 'inline' | 'valves' | 'instrumentation' | 'topology' | 'more';
 type FilterKey = 'all' | 'compatible';
 type MoreTabKey = 'favorites' | 'recent' | 'terminals' | 'service' | 'specialty';
 
 type RegistryItem = typeof componentRegistry[number];
 
 type FamilyDefinition = {
-  key: FamilyKey;
+  key: LeftFamilyKey;
   label: string;
   description: string;
   tooltip: string;
@@ -97,14 +97,18 @@ const applySecondaryFilter = (items: RegistryItem[], activeFilter: FilterKey, co
   }
 };
 
-export const ToolboxPanel = ({ collapsed = false, drawerOpen = true, onToggleDrawer }: ToolboxPanelProps) => {
+const quickAddBehaviorOptions: Array<{ value: QuickAddCloseBehavior; label: string }> = [
+  { value: 'close-drawer', label: 'Закрывать после вставки' },
+  { value: 'keep-open', label: 'Оставлять открытым' },
+];
+
+export const ToolboxPanel = ({ leftShell, stateMachineDefinition, onEvent }: ToolboxPanelProps) => {
   const search = useAppStore((state) => state.search);
   const setSearch = useAppStore((state) => state.setSearch);
   const addNode = useAppStore((state) => state.addNode);
   const openEquipmentWizard = useAppStore((state) => state.openEquipmentWizard);
   const selectedNodeId = useAppStore((state) => state.selectedNodeId);
   const project = useAppStore((state) => state.project);
-  const [activeFamily, setActiveFamily] = useState<FamilyKey>('library');
   const [activeFilter, setActiveFilter] = useState<FilterKey>('all');
   const [searchScope, setSearchScope] = useState<ToolboxSearchScope>('global');
   const [activeMoreTab, setActiveMoreTab] = useState<MoreTabKey>('favorites');
@@ -112,7 +116,7 @@ export const ToolboxPanel = ({ collapsed = false, drawerOpen = true, onToggleDra
 
   useEffect(() => {
     setActiveResultIndex(0);
-  }, [search, activeFamily, activeFilter, searchScope, activeMoreTab]);
+  }, [search, leftShell.activeFamily, activeFilter, searchScope, activeMoreTab]);
 
   const compatibleKinds = useMemo(() => {
     const selectedNode = project.nodes.find((node) => node.id === selectedNodeId);
@@ -122,20 +126,21 @@ export const ToolboxPanel = ({ collapsed = false, drawerOpen = true, onToggleDra
     return new Set(['pump', 'tank', 'tee', 'offPageConnector']);
   }, [project.nodes, selectedNodeId]);
 
-  const family = familyDefinitions.find((item) => item.key === activeFamily) ?? familyDefinitions[0];
+  const family = familyDefinitions.find((item) => item.key === leftShell.activeFamily) ?? familyDefinitions[0];
   const activeMoreCollection = moreTabDefinitions.find((item) => item.key === activeMoreTab) ?? moreTabDefinitions[0];
   const normalizedSearch = search.trim();
   const globalSearchActive = normalizedSearch.length > 0 && searchScope === 'global';
+  const drawerOpen = leftShell.drawerOpen && leftShell.mode === 'normal';
 
-  const panelTitle = activeFamily === 'more' ? activeMoreCollection.label : family.label;
-  const panelDescription = activeFamily === 'more' ? activeMoreCollection.description : family.description;
+  const panelTitle = leftShell.activeFamily === 'more' ? activeMoreCollection.label : family.label;
+  const panelDescription = leftShell.activeFamily === 'more' ? activeMoreCollection.description : family.description;
 
   const baseFamilyItems = useMemo(() => {
-    const items = activeFamily === 'more'
+    const items = leftShell.activeFamily === 'more'
       ? componentRegistry.filter((item) => activeMoreCollection.match(item))
       : componentRegistry.filter((item) => family.match(item));
     return applySecondaryFilter(items, activeFilter, compatibleKinds);
-  }, [activeFamily, activeFilter, activeMoreCollection, compatibleKinds, family]);
+  }, [leftShell.activeFamily, activeFilter, activeMoreCollection, compatibleKinds, family]);
 
   const familySearchResults = useMemo(() => searchLibraryItems(baseFamilyItems, normalizedSearch), [baseFamilyItems, normalizedSearch]);
   const globalSearchResults = useMemo(() => searchLibraryItems(componentRegistry, normalizedSearch), [normalizedSearch]);
@@ -146,14 +151,14 @@ export const ToolboxPanel = ({ collapsed = false, drawerOpen = true, onToggleDra
     [familySearchResults, globalSearchActive, groupedGlobalResults],
   );
 
-  const handleFamilySelect = (nextFamily: FamilyKey) => {
-    setActiveFamily(nextFamily);
-    if (!drawerOpen) onToggleDrawer?.();
+  const handleFamilySelect = (nextFamily: LeftFamilyKey) => {
+    onEvent({ type: 'select-family', family: nextFamily });
   };
 
   const handleInsert = (item: RegistryItem) => {
     if (hasWizardSubtype(item.type)) openEquipmentWizard({ kind: item.type });
     else addNode(item.type);
+    onEvent({ type: 'quick-add-complete' });
   };
 
   const handleKeyNavigation = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -199,10 +204,10 @@ export const ToolboxPanel = ({ collapsed = false, drawerOpen = true, onToggleDra
   );
 
   return (
-    <aside className={`toolbox-shell ${collapsed ? 'is-collapsed' : ''}`} aria-label="Левая навигация библиотеки">
+    <aside className="toolbox-shell" aria-label="Левая навигация библиотеки" data-left-shell-mode={leftShell.mode} data-drawer-open={drawerOpen}>
       <div className="shell-rail shell-rail-left" aria-label="Семейства библиотеки">
         {familyDefinitions.map((entry) => {
-          const active = drawerOpen && activeFamily === entry.key;
+          const active = leftShell.activeFamily === entry.key;
           return (
             <button
               key={entry.key}
@@ -219,24 +224,25 @@ export const ToolboxPanel = ({ collapsed = false, drawerOpen = true, onToggleDra
         })}
       </div>
 
-      {!collapsed && drawerOpen ? (
+      {drawerOpen ? (
         <>
-          <button type="button" className="toolbox-overlay-scrim" aria-label="Закрыть" onClick={onToggleDrawer} />
-          <div className="toolbox-drawer panel" role="dialog" aria-modal="false" aria-label={panelTitle}>
+          <button type="button" className="toolbox-overlay-scrim" aria-label="Закрыть" onClick={() => onEvent({ type: 'toggle-drawer' })} />
+          <div className="toolbox-drawer panel" role="dialog" aria-modal="false" aria-label={panelTitle} data-left-shell-drawer="open">
             <div className="toolbox-drawer-header">
               <div className="toolbox-drawer-head">
                 <div>
                   <div className="panel-title toolbox-family-title">{panelTitle}</div>
-                  {activeFamily === 'more' ? <div className="toolbox-family-context">Ещё</div> : null}
+                  {leftShell.activeFamily === 'more' ? <div className="toolbox-family-context">Ещё</div> : null}
                 </div>
-                <button type="button" className="toolbox-close-button" onClick={onToggleDrawer} aria-label="Закрыть" title="Закрыть">
+                <button type="button" className="toolbox-close-button" onClick={() => onEvent({ type: 'toggle-drawer' })} aria-label="Закрыть" title="Закрыть">
                   <CloseIcon />
                 </button>
               </div>
 
               <p className="panel-caption toolbox-family-description">{panelDescription}</p>
+              <p className="toolbox-state-machine-note">{stateMachineDefinition.split('\n')[1]?.trim() ?? 'LEFT SHELL STATE MACHINE'}</p>
 
-              {activeFamily === 'more' ? (
+              {leftShell.activeFamily === 'more' ? (
                 <div className="library-chip-row library-chip-row-secondary" role="tablist" aria-label="Дополнительные наборы">
                   {moreTabDefinitions.map((tab) => (
                     <button
@@ -257,7 +263,7 @@ export const ToolboxPanel = ({ collapsed = false, drawerOpen = true, onToggleDra
                   Вся библиотека
                 </button>
                 <button type="button" className={`library-chip library-chip-primary ${searchScope === 'family' ? 'is-active' : ''}`} onClick={() => setSearchScope('family')}>
-                  {activeFamily === 'more' ? 'Этот набор' : 'Это семейство'}
+                  {leftShell.activeFamily === 'more' ? 'Этот набор' : 'Это семейство'}
                 </button>
               </div>
 
@@ -282,6 +288,13 @@ export const ToolboxPanel = ({ collapsed = false, drawerOpen = true, onToggleDra
                   </button>
                 ))}
               </div>
+
+              <label className="toolbox-quick-add-field">
+                <span>Quick add</span>
+                <select value={leftShell.quickAddCloseBehavior} onChange={(event) => onEvent({ type: 'set-quick-add-close-behavior', behavior: event.target.value as QuickAddCloseBehavior })}>
+                  {quickAddBehaviorOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+              </label>
             </div>
 
             <div className="toolbox-list toolbox-list-dense">

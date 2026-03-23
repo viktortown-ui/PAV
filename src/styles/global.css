@@ -57,6 +57,10 @@ button.primary, .toolbox-actions .primary { background: linear-gradient(180deg, 
 .toolbox-family-title { margin: 0; min-width: 0; }
 .toolbox-family-description { margin: 0; font-size: 12px; line-height: 1.45; max-width: 100%; color: #9bb0ca; }
 .toolbox-family-context { margin-top: 4px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #7f98b8; }
+.toolbox-state-machine-note { margin: 0; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #6f87a4; }
+.toolbox-quick-add-field { display: grid; gap: 8px; }
+.toolbox-quick-add-field span { font-size: 12px; color: #9bb0ca; font-weight: 600; }
+.toolbox-quick-add-field select { width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(122, 150, 183, 0.16); background: #0b1625; color: #eff6ff; }
 .toolbox-close-button { width: 42px; height: 42px; border-radius: 14px; display: grid; place-items: center; flex-shrink: 0; }
 .toolbox-close-button svg { width: 18px; height: 18px; }
 .library-chip-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; }

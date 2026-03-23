@@ -4,6 +4,7 @@ import { CanvasEditor } from '../features/editor/CanvasEditor';
 import { TopToolbar } from '../features/editor/TopToolbar';
 import { InspectorPanel } from '../features/inspector/InspectorPanel';
 import { ToolboxPanel } from '../features/toolbox/ToolboxPanel';
+import { LeftShellState, defaultLeftShellState, leftShellStateMachineDefinition, restoreLeftShellState, serializeLeftShellState, transitionLeftShell } from '../features/toolbox/leftShellState';
 import { EquipmentWizard } from '../features/equipmentWizard/EquipmentWizard';
 import { useAppStore } from '../store/useAppStore';
 import { buildSegmentList, summarizeDiagnostics } from '../features/editor/lineList';
@@ -143,8 +144,7 @@ export const App = () => {
   const edgeLabelMode = useAppStore((state) => state.edgeLabelMode);
   const loadTemplate = useAppStore((state) => state.loadTemplate);
   const addNode = useAppStore((state) => state.addNode);
-  const [focusMode, setFocusMode] = useState(false);
-  const [libraryOpen, setLibraryOpen] = useState(true);
+  const [leftShell, setLeftShell] = useState<LeftShellState>(() => defaultLeftShellState());
   const [rightPanel, setRightPanel] = useState<RightPanelKey>('inspector');
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
 
@@ -155,9 +155,8 @@ export const App = () => {
     const raw = window.sessionStorage.getItem(shellStateKey);
     if (!raw) return;
     try {
-      const parsed = JSON.parse(raw) as { focusMode?: boolean; libraryOpen?: boolean; rightPanel?: RightPanelKey };
-      setFocusMode(Boolean(parsed.focusMode));
-      setLibraryOpen(parsed.libraryOpen ?? true);
+      const parsed = JSON.parse(raw) as { leftShell?: Partial<LeftShellState>; rightPanel?: RightPanelKey };
+      setLeftShell(restoreLeftShellState(parsed.leftShell));
       setRightPanel(parsed.rightPanel ?? 'inspector');
     } catch {
       window.sessionStorage.removeItem(shellStateKey);
@@ -165,17 +164,24 @@ export const App = () => {
   }, []);
 
   useEffect(() => {
-    window.sessionStorage.setItem(shellStateKey, JSON.stringify({ focusMode, libraryOpen, rightPanel }));
-  }, [focusMode, libraryOpen, rightPanel]);
+    window.sessionStorage.setItem(shellStateKey, JSON.stringify({ leftShell: serializeLeftShellState(leftShell), rightPanel }));
+  }, [leftShell, rightPanel]);
+
+  useEffect(() => {
+    console.info(leftShellStateMachineDefinition.trim());
+  }, []);
+
+  const focusMode = leftShell.mode === 'focus';
+
+  const updateLeftShell = (event: Parameters<typeof transitionLeftShell>[1]) => {
+    setLeftShell((current) => transitionLeftShell(current, event));
+  };
 
   const toggleFocusMode = () => {
-    setFocusMode((current) => {
-      const next = !current;
-      if (next) {
-        setLibraryOpen(false);
-        setRightPanel(null);
-      }
-      return next;
+    setLeftShell((current) => {
+      const enteringFocus = current.mode !== 'focus';
+      if (enteringFocus) setRightPanel(null);
+      return transitionLeftShell(current, { type: enteringFocus ? 'enter-focus' : 'exit-focus' });
     });
   };
 
@@ -192,16 +198,16 @@ export const App = () => {
         event.preventDefault();
         toggleFocusMode();
       }
-      if (event.altKey && key === '1') setLibraryOpen((value) => !value);
+      if (event.altKey && key === '1') updateLeftShell({ type: 'toggle-drawer' });
       if (event.altKey && key === '2') setRightPanel((current) => current === 'inspector' ? null : 'inspector');
       if (event.altKey && key === '3') setRightPanel((current) => current === 'diagnostics' ? null : 'diagnostics');
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
+  }, [toggleFocusMode, updateLeftShell]);
 
   const openPanel = (panel: Exclude<RightPanelKey, null>) => {
-    setFocusMode(false);
+    setLeftShell((current) => current.mode === 'focus' ? transitionLeftShell(current, { type: 'exit-focus' }) : current);
     setRightPanel(panel);
   };
 
@@ -224,7 +230,7 @@ export const App = () => {
       subtitle: action.subtitle,
       keywords: action.keywords,
       group: 'Линия',
-      run: () => addNode(action.kind),
+      run: () => { addNode(action.kind); updateLeftShell({ type: 'quick-add-complete' }); },
     }));
 
     return [
@@ -238,7 +244,7 @@ export const App = () => {
       ...inlineActions,
       ...templateActions,
     ];
-  }, [addNode, edgeLabelMode, focusMode, loadTemplate, openEquipmentWizard, rf]);
+  }, [addNode, edgeLabelMode, focusMode, leftShell.quickAddCloseBehavior, loadTemplate, openEquipmentWizard, rf]);
 
   const rightPanelNode = useMemo(() => {
     switch (rightPanel) {
@@ -251,5 +257,5 @@ export const App = () => {
     }
   }, [rightPanel]);
 
-  return <div className={`app-shell shell-refactor ${focusMode ? 'is-focus-mode' : ''}`}><TopToolbar focusMode={focusMode} onToggleFocusMode={toggleFocusMode} onToggleLibrary={() => setLibraryOpen((value) => !value)} onOpenCommandPalette={() => setCommandPaletteOpen(true)} />{startupNotice && <div className={`startup-banner startup-banner-${startupNotice.type}`} role="status"><span>{startupNotice.message}</span><button onClick={dismissStartupNotice}>Закрыть</button></div>}{startupState !== 'ready' ? <div className="startup-fallback"><h2>Запуск редактора</h2><p>Подготавливаем данные проекта и восстанавливаем рабочее состояние.</p></div> : <EditorErrorBoundary><div className="workspace-shell"><ToolboxPanel collapsed={focusMode} drawerOpen={libraryOpen && !focusMode} onToggleDrawer={() => setLibraryOpen((value) => !value)} /><div className="center-stage"><CanvasEditor focusMode={focusMode} /><div className="right-rail"><div className="shell-rail shell-rail-right"><button type="button" className={rightPanel === 'inspector' ? 'is-active' : ''} onClick={() => setRightPanel((value) => value === 'inspector' ? null : 'inspector')} title="Инспектор">И</button><button type="button" className={rightPanel === 'diagnostics' ? 'is-active' : ''} onClick={() => setRightPanel((value) => value === 'diagnostics' ? null : 'diagnostics')} title="Диагностика">Д</button><button type="button" className={rightPanel === 'lines' ? 'is-active' : ''} onClick={() => setRightPanel((value) => value === 'lines' ? null : 'lines')} title="Линии">Л</button><button type="button" className={rightPanel === 'events' ? 'is-active' : ''} onClick={() => setRightPanel((value) => value === 'events' ? null : 'events')} title="События">С</button><button type="button" className={rightPanel === 'datasheet' ? 'is-active' : ''} onClick={() => setRightPanel((value) => value === 'datasheet' ? null : 'datasheet')} title="Паспорт">П</button></div>{!focusMode && rightPanelNode ? <aside className="shell-right-drawer">{rightPanelNode}</aside> : null}</div></div></div></EditorErrorBoundary>}<EquipmentWizard /><CommandPalette open={commandPaletteOpen} onClose={() => setCommandPaletteOpen(false)} actions={commandActions} /></div>;
+  return <div className={`app-shell shell-refactor ${focusMode ? 'is-focus-mode' : ''}`}><TopToolbar focusMode={focusMode} onToggleFocusMode={toggleFocusMode} onToggleLibrary={() => updateLeftShell({ type: 'toggle-drawer' })} onOpenCommandPalette={() => setCommandPaletteOpen(true)} />{startupNotice && <div className={`startup-banner startup-banner-${startupNotice.type}`} role="status"><span>{startupNotice.message}</span><button onClick={dismissStartupNotice}>Закрыть</button></div>}{startupState !== 'ready' ? <div className="startup-fallback"><h2>Запуск редактора</h2><p>Подготавливаем данные проекта и восстанавливаем рабочее состояние.</p></div> : <EditorErrorBoundary><div className="workspace-shell"><ToolboxPanel leftShell={leftShell} stateMachineDefinition={leftShellStateMachineDefinition} onEvent={updateLeftShell} /><div className="center-stage"><CanvasEditor focusMode={focusMode} /><div className="right-rail"><div className="shell-rail shell-rail-right"><button type="button" className={rightPanel === 'inspector' ? 'is-active' : ''} onClick={() => setRightPanel((value) => value === 'inspector' ? null : 'inspector')} title="Инспектор">И</button><button type="button" className={rightPanel === 'diagnostics' ? 'is-active' : ''} onClick={() => setRightPanel((value) => value === 'diagnostics' ? null : 'diagnostics')} title="Диагностика">Д</button><button type="button" className={rightPanel === 'lines' ? 'is-active' : ''} onClick={() => setRightPanel((value) => value === 'lines' ? null : 'lines')} title="Линии">Л</button><button type="button" className={rightPanel === 'events' ? 'is-active' : ''} onClick={() => setRightPanel((value) => value === 'events' ? null : 'events')} title="События">С</button><button type="button" className={rightPanel === 'datasheet' ? 'is-active' : ''} onClick={() => setRightPanel((value) => value === 'datasheet' ? null : 'datasheet')} title="Паспорт">П</button></div>{!focusMode && rightPanelNode ? <aside className="shell-right-drawer">{rightPanelNode}</aside> : null}</div></div></div></EditorErrorBoundary>}<EquipmentWizard /><CommandPalette open={commandPaletteOpen} onClose={() => setCommandPaletteOpen(false)} actions={commandActions} /></div>;
 };
