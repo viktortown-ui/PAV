@@ -23,13 +23,13 @@ export const EquipmentWizard = () => {
   if (!wizard.open || !wizard.groupId || !wizard.kind) return null;
 
   return (
-    <div className="wizard-overlay" role="dialog" aria-modal="true" aria-label="Мастер создания оборудования">
+    <div className="wizard-overlay" role="dialog" aria-modal="true" aria-label="Добавление оборудования">
       <div className="wizard-card">
         <div className="wizard-head">
           <div>
-            <span className="wizard-kicker">Мастер оборудования</span>
-            <h2>Создание по схеме</h2>
-            <p>Сначала группа и подтип, затем только нужные поля. AI-помощник можно добавить позже без обхода схемы.</p>
+            <span className="wizard-kicker">Добавление оборудования</span>
+            <h2>Новый элемент</h2>
+            <p>Выберите тип оборудования и заполните основные параметры.</p>
           </div>
           <button className="wizard-close" onClick={closeWizard}>✕</button>
         </div>
@@ -62,10 +62,10 @@ export const EquipmentWizard = () => {
           <section>
             <div className="wizard-step-title">3. Параметры</div>
             <div className="wizard-context-grid">
-              <div><span>Среда линии</span><strong>{context.inferredMedium ?? 'water'}</strong></div>
-              <div><span>Диаметр линии</span><strong>{context.inferredDiameter ?? 'DN50'}</strong></div>
-              <div><span>Правило тега</span><strong>{wizard.namingRule}</strong></div>
-              <div><span>Источник defaults</span><strong>{wizardGroups.find((group) => group.id === wizard.groupId)?.label}</strong></div>
+              <div><span>Среда</span><strong>{context.inferredMedium ?? 'water'}</strong></div>
+              <div><span>Диаметр</span><strong>{context.inferredDiameter ?? 'DN50'}</strong></div>
+              <div><span>Шаблон тега</span><strong>{wizard.namingRule}</strong></div>
+              <div><span>Источник настроек</span><strong>{wizardGroups.find((group) => group.id === wizard.groupId)?.label}</strong></div>
             </div>
             <div className="wizard-form-grid">
               {fields.map((field) => {
@@ -93,12 +93,12 @@ export const EquipmentWizard = () => {
 
         <div className="wizard-footer">
           <div className="wizard-footer-copy">
-            <strong>Автозаполнение из контекста</strong>
-            <span>Среда, диаметр и тег уже подставлены. Кнопка не пропускает обязательные поля и не обходит схему.</span>
+            <strong>Подстановка по схеме</strong>
+            <span>Среда, диаметр и тег подставлены автоматически. Проверьте данные перед добавлением.</span>
           </div>
           <div className="wizard-footer-actions">
             <button onClick={regenerateWizardTag}>Обновить тег</button>
-            <button className="primary" onClick={createEquipment}>Создать оборудование</button>
+            <button className="primary" onClick={createEquipment}>Добавить элемент</button>
           </div>
         </div>
       </div>

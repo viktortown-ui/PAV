@@ -66,7 +66,7 @@ const DiagnosticsSection = () => {
 
     <section className="route-card">
       <strong>Список сегментов</strong>
-      <span>Минимальная line list без отдельного модуля: быстрый доступ к критичным участкам и их атрибутам.</span>
+      <span>Краткий список линий для быстрого перехода к нужному участку.</span>
       <div className="segment-list">
         {segmentList.map((segment) => (
           <button
@@ -81,7 +81,7 @@ const DiagnosticsSection = () => {
             <span>Замечаний: {segment.issueCount} • Предупреждений маршрута: {segment.warningCount}</span>
           </button>
         ))}
-        {!segmentList.length ? <div className="issue-card severity-info"><strong>Сегменты</strong><span>Сначала соедините оборудование, чтобы редактор построил line list.</span></div> : null}
+        {!segmentList.length ? <div className="issue-card severity-info"><strong>Сегменты</strong><span>Сначала соедините оборудование, чтобы появился список линий.</span></div> : null}
       </div>
     </section>
   </div>;
@@ -129,7 +129,7 @@ export const InspectorPanel = ({ compact = false }: { compact?: boolean }) => {
     const schema = createEdgeInspectorSchema(edge, { upstream: source?.data.technicalTag ?? '', downstream: target?.data.technicalTag ?? '' });
     const relatedIssues = issues.filter((issue) => issue.edgeIds?.includes(edge.id));
     const lineTag = `${schema.lineRole === 'CIP' ? 'CIP' : schema.mediumType.toUpperCase()}-${schema.upstreamRef}-${schema.downstreamRef}-${schema.nominalDiameter}`;
-    return <aside className={`panel inspector-panel ${compact ? 'is-compact' : ''}`}><div className="panel-title">Инспектор сегмента</div><div className="route-card"><strong>{source?.data.visibleName} → {target?.data.visibleName}</strong><span>Line tag: {lineTag}</span><span>Segment ID: {edge.data?.segmentId ?? edge.id}</span>{edgeInspectorFields.map((field) => <label key={field.key} className="field"><span>{field.label}</span>{field.type === 'number' ? <input type="number" value={schema[field.key]} onChange={(e) => updateEdgeField(edge.id, field.key, Number(e.target.value))} /> : field.type === 'select' ? <select value={String(schema[field.key])} onChange={(e) => updateEdgeField(edge.id, field.key, e.target.value)}>{field.key === 'routeState' ? Object.entries(ruState).map(([value, label]) => <option key={value} value={value}>{label}</option>) : field.options?.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select> : <input type="text" value={String(schema[field.key])} onChange={(e) => updateEdgeField(edge.id, field.key, e.target.value)} />}</label>)}</div><div className="route-card"><strong>Диагностика сегмента</strong>{relatedIssues.length ? relatedIssues.map((issue) => <div key={issue.id} className={`issue-card severity-${issue.severity}`}><strong>{issueTitle(issue)}</strong><span>{issue.message}</span></div>) : <div className="issue-card severity-info"><strong>Проверка</strong><span>Для выбранного сегмента критичных замечаний нет.</span></div>}</div><div className="line-actions"><strong>Действия с линией</strong><div className="action-grid">{edgeActionButtons.map((item) => <button key={item.action} onClick={() => executeEdgeAction(item.action, edge.id)}>{item.label}</button>)}</div></div></aside>;
+    return <aside className={`panel inspector-panel ${compact ? 'is-compact' : ''}`}><div className="panel-title">Инспектор сегмента</div><div className="route-card"><strong>{source?.data.visibleName} → {target?.data.visibleName}</strong><span>Тег линии: {lineTag}</span><span>ID сегмента: {edge.data?.segmentId ?? edge.id}</span>{edgeInspectorFields.map((field) => <label key={field.key} className="field"><span>{field.label}</span>{field.type === 'number' ? <input type="number" value={schema[field.key]} onChange={(e) => updateEdgeField(edge.id, field.key, Number(e.target.value))} /> : field.type === 'select' ? <select value={String(schema[field.key])} onChange={(e) => updateEdgeField(edge.id, field.key, e.target.value)}>{field.key === 'routeState' ? Object.entries(ruState).map(([value, label]) => <option key={value} value={value}>{label}</option>) : field.options?.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select> : <input type="text" value={String(schema[field.key])} onChange={(e) => updateEdgeField(edge.id, field.key, e.target.value)} />}</label>)}</div><div className="route-card"><strong>Диагностика сегмента</strong>{relatedIssues.length ? relatedIssues.map((issue) => <div key={issue.id} className={`issue-card severity-${issue.severity}`}><strong>{issueTitle(issue)}</strong><span>{issue.message}</span></div>) : <div className="issue-card severity-info"><strong>Проверка</strong><span>Для выбранного сегмента критичных замечаний нет.</span></div>}</div><div className="line-actions"><strong>Действия с линией</strong><div className="action-grid">{edgeActionButtons.map((item) => <button key={item.action} onClick={() => executeEdgeAction(item.action, edge.id)}>{item.label}</button>)}</div></div></aside>;
   }
 
   const definition = componentMap.get(node!.data.kind);

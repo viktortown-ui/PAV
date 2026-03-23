@@ -71,7 +71,7 @@ export const SimulationPanel = ({ placement = 'center', focusMode = false }: Sim
       ? `${selectedEdge.data?.sourceLabel} → ${selectedEdge.data?.targetLabel}`
       : 'ничего не выбрано';
 
-  const modeLabel = panelMode === 'expanded' ? 'Свернуть диагностику' : panelMode === 'compact' ? 'Развернуть диагностику' : 'Показать док';
+  const modeLabel = panelMode === 'expanded' ? 'Свернуть панель' : panelMode === 'compact' ? 'Развернуть панель' : 'Показать панель';
   const modeIcon = panelMode === 'expanded' ? '▾' : panelMode === 'compact' ? '▴' : '◱';
 
   return (
@@ -128,7 +128,7 @@ export const SimulationPanel = ({ placement = 'center', focusMode = false }: Sim
               <div className="sim-header">
                 <div>
                   <strong>Диагностика технологической схемы</strong>
-                  <span>Мини-док раскрывается только по запросу, чтобы не перекрывать рабочую область диаграммы.</span>
+                  <span>Панель открывается по запросу и не мешает работе со схемой.</span>
                 </div>
                 <div className="sim-pills">
                   <span className="sim-pill">{project.simulation.running ? 'Симуляция включена' : 'Режим редактирования'}</span>

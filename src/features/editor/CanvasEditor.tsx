@@ -1,12 +1,11 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import ReactFlow, { Background, ControlButton, Controls, MiniMap, Panel, ReactFlowInstance, SelectionMode, Viewport, getViewportForBounds } from 'reactflow';
+import ReactFlow, { Background, ControlButton, Controls, MiniMap, ReactFlowInstance, SelectionMode, Viewport, getViewportForBounds } from 'reactflow';
 import { shallow } from 'zustand/shallow';
 import { FlowEdge } from '../../ui/edges/FlowEdge';
 import { ProcessNode } from '../../ui/nodes/ProcessNode';
 import { useAppStore } from '../../store/useAppStore';
 import { SimulationPanel } from '../simulation/SimulationPanel';
 import { instrumentCallsite } from '../../utils/instrumentation';
-import { DebugPanel } from '../devtools/DebugPanel';
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const VIEWPORT_POSITION_EPSILON = 0.5;
@@ -280,9 +279,8 @@ const CanvasEditorComponent = ({ focusMode = false }: { focusMode?: boolean }) =
         <Controls showInteractive={false} position="bottom-right" className="canvas-controls">
           <ControlButton title="Вписать схему" onClick={() => void flow?.fitView({ padding: 0.2, duration: 220 })}>⌗</ControlButton>
           <ControlButton title="Подписи линий" onClick={() => setEdgeLabelMode(edgeLabelMode === 'hidden' ? 'selected' : 'hidden')}>{edgeLabelMode === 'hidden' ? 'T' : 'Т'}</ControlButton>
-          <ControlButton title={focusMode ? 'Canvas focus mode включен' : 'Canvas focus mode выключен'} disabled>{focusMode ? 'Ф' : 'UI'}</ControlButton>
+          <ControlButton title={focusMode ? 'Режим схемы включён' : 'Режим схемы выключен'} disabled>{focusMode ? 'Ф' : 'Р'}</ControlButton>
         </Controls>
-        <Panel position="top-right"><DebugPanel /></Panel>
       </ReactFlow>
       <div className={`canvas-overlay simulation-overlay placement-${panelPlacement} ${focusMode ? 'is-focus-mode' : ''}`}>
         <SimulationPanel placement={panelPlacement} focusMode={focusMode} />
