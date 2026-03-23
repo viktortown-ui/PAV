@@ -45,16 +45,16 @@ export interface EquipmentWizardDraft {
 const select = (label: string, value: string) => ({ label, value });
 
 export const wizardGroups: EquipmentWizardGroup[] = [
-  { id: 'sources', label: 'Источники среды', description: 'Подача среды и входные точки.', subtypeKinds: ['source'], defaults: { medium: 'water' } },
-  { id: 'waterPrep', label: 'Водоподготовка', description: 'Фильтрация и мембранная очистка.', subtypeKinds: ['waterFilter', 'roSkid', 'filterUnit'], defaults: { medium: 'water' } },
-  { id: 'vessels', label: 'Ёмкости', description: 'Накопление, буферизация и хранение.', subtypeKinds: ['tank', 'bufferTank'], defaults: { medium: 'product' } },
-  { id: 'reactors', label: 'Реакторы', description: 'Реакторы и смесительные аппараты.', subtypeKinds: ['reactor', 'heatedReactor'], defaults: { medium: 'product', agitatorOn: true } },
+  { id: 'sources', label: 'Источники', description: 'Подача среды.', subtypeKinds: ['source'], defaults: { medium: 'water' } },
+  { id: 'waterPrep', label: 'Водоподготовка', description: 'Фильтрация и очистка.', subtypeKinds: ['waterFilter', 'roSkid', 'filterUnit'], defaults: { medium: 'water' } },
+  { id: 'vessels', label: 'Ёмкости', description: 'Хранение и буфер.', subtypeKinds: ['tank', 'bufferTank'], defaults: { medium: 'product' } },
+  { id: 'reactors', label: 'Реакторы', description: 'Реакторы и смешение.', subtypeKinds: ['reactor', 'heatedReactor'], defaults: { medium: 'product', agitatorOn: true } },
   { id: 'pumps', label: 'Насосы', description: 'Перекачка и дозирование.', subtypeKinds: ['pump', 'dosingPump'], defaults: { flowRate: 25, dryRunProtection: true } },
-  { id: 'valves', label: 'Арматура', description: 'Запорная, регулирующая и защитная арматура.', subtypeKinds: ['manualValve', 'shutoffValve', 'solenoidValve', 'checkValve', 'controlValve', 'gateValve', 'drainValve', 'reliefValve'], defaults: { normallyOpen: false, failPosition: 'closed' } },
-  { id: 'instrumentation', label: 'КИП', description: 'Измерение, индикация и сигнализация.', subtypeKinds: ['flowMeter', 'pressureSensor', 'temperatureSensor', 'levelSensor', 'phSensor', 'conductivitySensor', 'indicator'], defaults: { warningLow: 0, warningHigh: 0 } },
-  { id: 'pipework', label: 'Трубопроводные узлы', description: 'Соединения, распределение и сервисные точки.', subtypeKinds: ['inlineFilter', 'inlineMixer', 'heatExchanger', 'tee', 'cross', 'collector', 'splitter', 'mixingJunction', 'drainBranch', 'samplePoint', 'offPageConnector', 'serviceTerminal'], defaults: { diameterNominal: 'DN50' } },
-  { id: 'consumers', label: 'Потребители', description: 'Конечные точки приёма среды.', subtypeKinds: ['consumer', 'fillingStation'], defaults: { medium: 'product' } },
-  { id: 'utilities', label: 'Утилиты', description: 'Слив, дренаж и вспомогательные узлы.', subtypeKinds: ['utilityDrain', 'serviceTerminal'], defaults: { medium: 'waste' } },
+  { id: 'valves', label: 'Арматура', description: 'Клапаны и задвижки.', subtypeKinds: ['manualValve', 'shutoffValve', 'solenoidValve', 'checkValve', 'controlValve', 'gateValve', 'drainValve', 'reliefValve'], defaults: { normallyOpen: false, failPosition: 'closed' } },
+  { id: 'instrumentation', label: 'КИП', description: 'Датчики и индикация.', subtypeKinds: ['flowMeter', 'pressureSensor', 'temperatureSensor', 'levelSensor', 'phSensor', 'conductivitySensor', 'indicator'], defaults: { warningLow: 0, warningHigh: 0 } },
+  { id: 'pipework', label: 'Трубопроводные узлы', description: 'Соединения и ветки.', subtypeKinds: ['inlineFilter', 'inlineMixer', 'heatExchanger', 'tee', 'cross', 'collector', 'splitter', 'mixingJunction', 'drainBranch', 'samplePoint', 'offPageConnector', 'serviceTerminal'], defaults: { diameterNominal: 'DN50' } },
+  { id: 'consumers', label: 'Потребители', description: 'Конечные точки.', subtypeKinds: ['consumer', 'fillingStation'], defaults: { medium: 'product' } },
+  { id: 'utilities', label: 'Утилиты', description: 'Слив и сервис.', subtypeKinds: ['utilityDrain', 'serviceTerminal'], defaults: { medium: 'waste' } },
 ];
 
 export const wizardSubtypeMap = new Map<SoapNodeKind, EquipmentWizardGroupId>(wizardGroups.flatMap((group) => group.subtypeKinds.map((kind) => [kind, group.id] as const)));
@@ -221,5 +221,5 @@ export const applyWizardValuesToNode = (node: SoapNode, values: Record<string, s
   return copy;
 };
 
-export const getWizardLaunchLabel = (kind?: SoapNodeKind) => kind ? `Создать: ${componentMap.get(kind)?.label ?? kind}` : 'Мастер оборудования';
+export const getWizardLaunchLabel = (kind?: SoapNodeKind) => kind ? `Создать: ${componentMap.get(kind)?.label ?? kind}` : 'Создать элемент';
 export const hasWizardSubtype = (kind: SoapNodeKind) => componentRegistry.some((item) => item.type === kind) && wizardSubtypeMap.has(kind);
