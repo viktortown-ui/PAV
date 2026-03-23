@@ -233,3 +233,12 @@ button.primary, .toolbox-actions .primary { background: linear-gradient(180deg, 
 .toolbox-empty-state { border: 1px dashed rgba(132, 171, 218, 0.2); border-radius: 18px; padding: 18px; display: grid; gap: 6px; color: #9ab0ca; }
 .toolbox-drawer-footer { padding-top: 10px; border-top: 1px solid rgba(122, 150, 183, 0.12); }
 .toolbox-create-button { width: 100%; justify-content: center; }
+.toolbox-search-mode { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.toolbox-search-caption { margin-top: -6px; }
+.toolbox-item.is-active { border-color: rgba(120, 166, 255, 0.48); box-shadow: 0 0 0 1px rgba(120, 166, 255, 0.22); }
+.toolbox-match-reason { font-size: 12px; color: #b9d4ff; }
+.toolbox-result-group { display: grid; gap: 10px; }
+.toolbox-result-group-head { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; color: #b7cbe6; padding: 2px 4px; }
+.toolbox-result-group-head span { color: #89a0bf; font-size: 12px; }
+.toolbox-group-items, .toolbox-suggestion-row { display: grid; gap: 8px; }
+.toolbox-suggestion-row { grid-template-columns: repeat(auto-fit, minmax(120px, max-content)); }

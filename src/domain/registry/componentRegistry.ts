@@ -112,8 +112,55 @@ type DefinitionConfig = {
   ruDescriptionShort: string;
   placementNote?: string;
   auditNote: string;
+  subtype?: string;
+  subtypeLabel?: string;
+  libraryTags?: string[];
+  tags?: string[];
+  aliases?: string[];
+  synonyms?: string[];
+  insertionContextHints?: string[];
+  compatibilityHints?: string[];
+  searchMetadata?: string[];
   ports?: { inputs: number; outputs: number; preferredDirection?: 'ltr' | 'ttb'; inline?: boolean };
   overrides?: Record<string, string | number | boolean>;
+};
+
+const familyLibraryTags: Record<SymbolFamily, string[]> = {
+  vessel: ['аппараты', 'емкости', 'equipment'],
+  machinery: ['линейные узлы', 'inline', 'machines'],
+  valve: ['арматура', 'valves', 'flow control'],
+  instrument: ['кип', 'instrumentation', 'sensors'],
+  topology: ['топология', 'junctions', 'routing'],
+  terminal: ['терминалы', 'drain', 'utility'],
+};
+
+const defaultSubtypeLabel = (family: SymbolFamily) => ({
+  vessel: 'Основной аппарат',
+  machinery: 'Линейная машина',
+  valve: 'Арматура',
+  instrument: 'КИП',
+  topology: 'Топологический узел',
+  terminal: 'Терминал',
+}[family]);
+
+const inferAliases = (type: SoapNodeKind, config: DefinitionConfig) => {
+  const inferred = [config.label, config.shortName, config.technicalPrefix, type];
+  if (type === 'tee') inferred.push('тройник', 'ответвление', 'branch tee');
+  if (type === 'collector') inferred.push('коллектор', 'manifold', 'сборный узел');
+  if (type === 'drainBranch') inferred.push('дренаж', 'слив', 'drain branch');
+  if (type === 'utilityDrain') inferred.push('дренаж', 'дренажный коллектор', 'сливной коллектор');
+  if (type === 'flowMeter') inferred.push('расходомер', 'flow meter', 'FIT');
+  if (config.family === 'valve') inferred.push('клапан', 'арматура');
+  return [...new Set([...(config.aliases ?? []), ...inferred])];
+};
+
+const inferTags = (type: SoapNodeKind, config: DefinitionConfig, familyLabel: string) => {
+  const base = [config.technicalPrefix, config.category, config.family, familyLabel, config.description, config.ruDescriptionShort];
+  if (type === 'collector') base.push('manifold', 'collection');
+  if (type === 'tee') base.push('junction', 'branching');
+  if (type === 'drainBranch' || type === 'utilityDrain' || type === 'drainValve') base.push('drain', 'waste', 'drainage');
+  if (type === 'flowMeter') base.push('measurement', 'flow', 'meter');
+  return [...new Set([...(config.tags ?? []), ...base])];
 };
 
 const makeDefinition = (type: SoapNodeKind, config: DefinitionConfig): ComponentDefinition => {
@@ -139,6 +186,17 @@ const makeDefinition = (type: SoapNodeKind, config: DefinitionConfig): Component
 
   const ports = config.ports ?? { inputs: 1, outputs: 1, preferredDirection: 'ltr', inline: false };
 
+  const familyLabel = familyLabelMap[config.family];
+  const subtype = config.subtype ?? type;
+  const subtypeLabel = config.subtypeLabel ?? defaultSubtypeLabel(config.family);
+  const libraryTags = [...new Set([...(config.libraryTags ?? []), ...familyLibraryTags[config.family]])];
+  const aliases = inferAliases(type, config);
+  const synonyms = [...new Set([...(config.synonyms ?? []), ...(config.family === 'valve' ? ['клапан', 'valve'] : []), ...(config.family === 'topology' ? ['узел', 'junction'] : [])])];
+  const tags = inferTags(type, config, familyLabel);
+  const insertionContextHints = [...new Set([config.placementNote ?? '', ...(config.insertionContextHints ?? []), ports.inline ? 'inline placement' : 'standalone placement'])].filter(Boolean);
+  const compatibilityHints = [...new Set(config.compatibilityHints ?? [])];
+  const searchMetadata = [...new Set([config.category, type, config.className, ...(config.searchMetadata ?? [])])];
+
   return {
     type,
     label: config.label,
@@ -148,7 +206,16 @@ const makeDefinition = (type: SoapNodeKind, config: DefinitionConfig): Component
     description: config.description,
     className: config.className,
     family: config.family,
-    familyLabel: familyLabelMap[config.family],
+    familyLabel,
+    subtype,
+    subtypeLabel,
+    libraryTags,
+    tags,
+    aliases,
+    synonyms,
+    insertionContextHints,
+    compatibilityHints,
+    searchMetadata,
     ruDescriptionShort: config.ruDescriptionShort,
     placementNote: config.placementNote,
     auditNote: config.auditNote,
