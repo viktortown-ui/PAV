@@ -24,11 +24,11 @@ type PaletteAction = { id: string; title: string; subtitle: string; keywords: st
 const shellStateKey = 'pav-shell-state';
 const commandPaletteKey = 'k';
 const inlineInsertActions = [
-  { id: 'inline-shutoff', title: 'Вставить запорный клапан', subtitle: 'Inline item • быстрая арматура в поток', keywords: 'insert inline valve shutoff клапан арматура on line', kind: 'shutoffValve' },
-  { id: 'inline-flowmeter', title: 'Вставить расходомер', subtitle: 'Inline item • контроль расхода на линии', keywords: 'insert inline flow meter расходомер кип line', kind: 'flowMeter' },
-  { id: 'inline-sensor', title: 'Вставить датчик давления', subtitle: 'Inline item • измерение давления', keywords: 'insert inline pressure sensor датчик давления кип', kind: 'pressureSensor' },
-  { id: 'inline-filter', title: 'Вставить inline-фильтр', subtitle: 'Inline item • компактная подготовка потока', keywords: 'insert inline filter фильтр line', kind: 'inlineFilter' },
-  { id: 'inline-tee', title: 'Вставить тройник', subtitle: 'Inline item • разветвление магистрали', keywords: 'insert inline tee topology тройник branch', kind: 'tee' },
+  { id: 'inline-shutoff', title: 'Вставить запорный клапан', subtitle: 'На линию • запорная арматура', keywords: 'insert inline valve shutoff клапан арматура on line', kind: 'shutoffValve' },
+  { id: 'inline-flowmeter', title: 'Вставить расходомер', subtitle: 'На линию • контроль расхода', keywords: 'insert inline flow meter расходомер кип line', kind: 'flowMeter' },
+  { id: 'inline-sensor', title: 'Вставить датчик давления', subtitle: 'На линию • контроль давления', keywords: 'insert inline pressure sensor датчик давления кип', kind: 'pressureSensor' },
+  { id: 'inline-filter', title: 'Вставить линейный фильтр', subtitle: 'На линию • фильтрация потока', keywords: 'insert inline filter фильтр line', kind: 'inlineFilter' },
+  { id: 'inline-tee', title: 'Вставить тройник', subtitle: 'На линию • ответвление потока', keywords: 'insert inline tee topology тройник branch', kind: 'tee' },
 ] as const;
 
 const DiagnosticsPanel = () => {
@@ -49,7 +49,7 @@ const LineListPanel = () => {
   const selectEdge = useAppStore((state) => state.selectEdge);
   const segments = buildSegmentList(project, issues);
 
-  return <div className="shell-side-panel"><div className="panel-title">Линии</div><div className="shell-panel-section"><strong>Line list</strong><span className="panel-caption">Список сегментов сгруппирован для быстрого выбора без отдельного крупного модуля.</span><div className="segment-list">{segments.map((segment) => <button key={segment.edgeId} type="button" className={`segment-card severity-${segment.severity === 'ok' ? 'info' : segment.severity}`} onClick={() => selectEdge(segment.edgeId)}><strong>{segment.lineTag}</strong><span>{segment.sourceName} → {segment.targetName}</span><span>{segment.mediumLabel} • {segment.nominalDiameter}</span><span>Маршрут: {segment.routeStateLabel} • Замечаний: {segment.issueCount}</span></button>)}</div></div></div>;
+  return <div className="shell-side-panel"><div className="panel-title">Линии</div><div className="shell-panel-section"><strong>Список линий</strong><span className="panel-caption">Выберите линию, чтобы быстро перейти к её параметрам.</span><div className="segment-list">{segments.map((segment) => <button key={segment.edgeId} type="button" className={`segment-card severity-${segment.severity === 'ok' ? 'info' : segment.severity}`} onClick={() => selectEdge(segment.edgeId)}><strong>{segment.lineTag}</strong><span>{segment.sourceName} → {segment.targetName}</span><span>{segment.mediumLabel} • {segment.nominalDiameter}</span><span>Маршрут: {segment.routeStateLabel} • Замечаний: {segment.issueCount}</span></button>)}</div></div></div>;
 };
 
 const EventLogPanel = () => {
@@ -71,13 +71,13 @@ const DatasheetPanel = () => {
     ['Среда', node.data.mediumType],
     ['Статус', node.data.status],
   ] : edge ? [
-    ['Segment ID', edge.data?.segmentId ?? edge.id],
+    ['ID сегмента', edge.data?.segmentId ?? edge.id],
     ['Среда', edge.data?.medium ?? 'water'],
     ['DN', edge.data?.nominalDiameter ?? 'DN50'],
     ['Маршрут', edge.data?.routeState ?? 'idle'],
     ['Источник', edge.data?.sourceLabel ?? edge.source],
   ] : [];
-  return <div className="shell-side-panel"><div className="panel-title">Datasheet</div><div className="shell-panel-section"><strong>{node ? 'Карточка оборудования' : edge ? 'Карточка сегмента' : 'Нет выбора'}</strong>{rows.length ? <dl className="datasheet-grid">{rows.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{String(value)}</dd></div>)}</dl> : <p className="empty-state">Выберите объект или линию, чтобы открыть компактный datasheet.</p>}</div></div>;
+  return <div className="shell-side-panel"><div className="panel-title">Паспорт</div><div className="shell-panel-section"><strong>{node ? 'Карточка оборудования' : edge ? 'Карточка сегмента' : 'Нет выбора'}</strong>{rows.length ? <dl className="datasheet-grid">{rows.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{String(value)}</dd></div>)}</dl> : <p className="empty-state">Выберите объект или линию, чтобы открыть паспорт.</p>}</div></div>;
 };
 
 const CommandPalette = ({ open, onClose, actions }: { open: boolean; onClose: () => void; actions: PaletteAction[] }) => {
@@ -131,7 +131,7 @@ const CommandPalette = ({ open, onClose, actions }: { open: boolean; onClose: ()
   }, [activeIndex, filteredActions, onClose, open]);
 
   if (!open) return null;
-  return <div className="command-palette-backdrop" onClick={onClose}><div className="command-palette" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Командная палитра"><div className="command-palette-head"><div><strong>Командная палитра</strong><span className="panel-caption">RU-first запуск действий по всей оболочке • Ctrl/⌘K</span></div><button type="button" onClick={onClose}>Esc</button></div><input autoFocus className="panel-search command-palette-search" placeholder="Команда, панель, оборудование, шаблон…" value={query} onChange={(e) => { setQuery(e.target.value); setActiveIndex(0); }} /><div className="command-palette-meta"><span>↑ ↓ навигация</span><span>Enter выполнить</span><span>Shift+F focus mode</span></div><div className="command-palette-list">{filteredActions.length ? filteredActions.map((action, index) => <button key={action.id} type="button" className={`command-palette-item ${index === activeIndex ? 'is-active' : ''}`} onMouseEnter={() => setActiveIndex(index)} onClick={() => { action.run(); onClose(); }}><div><strong>{action.title}</strong><span>{action.subtitle}</span></div><div className="command-palette-item-meta"><small>{action.group}</small>{action.hint ? <kbd>{action.hint}</kbd> : null}</div></button>) : <div className="command-palette-empty"><strong>Ничего не найдено</strong><span>Попробуйте «диагностика», «линии», «шаблон» или «inline».</span></div>}</div></div></div>;
+  return <div className="command-palette-backdrop" onClick={onClose}><div className="command-palette" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Командная палитра"><div className="command-palette-head"><div><strong>Командная палитра</strong><span className="panel-caption">Быстрый доступ к действиям и панелям • Ctrl/⌘K</span></div><button type="button" onClick={onClose}>Esc</button></div><input autoFocus className="panel-search command-palette-search" placeholder="Команда, панель, оборудование, шаблон…" value={query} onChange={(e) => { setQuery(e.target.value); setActiveIndex(0); }} /><div className="command-palette-meta"><span>↑ ↓ переход</span><span>Enter выбрать</span><span>Shift+F режим схемы</span></div><div className="command-palette-list">{filteredActions.length ? filteredActions.map((action, index) => <button key={action.id} type="button" className={`command-palette-item ${index === activeIndex ? 'is-active' : ''}`} onMouseEnter={() => setActiveIndex(index)} onClick={() => { action.run(); onClose(); }}><div><strong>{action.title}</strong><span>{action.subtitle}</span></div><div className="command-palette-item-meta"><small>{action.group}</small>{action.hint ? <kbd>{action.hint}</kbd> : null}</div></button>) : <div className="command-palette-empty"><strong>Ничего не найдено</strong><span>Попробуйте «диагностика», «линии» или «шаблон».</span></div>}</div></div></div>;
 };
 
 export const App = () => {
@@ -213,9 +213,9 @@ export const App = () => {
 
   const commandActions = useMemo<PaletteAction[]>(() => {
     const templateActions: PaletteAction[] = [
-      { id: 'template-water', title: 'Переключить шаблон: Водоподготовка', subtitle: 'Шаблон • стартовая схема water-prep', keywords: 'template water вода водоподготовка water-prep', group: 'Шаблоны', run: () => void loadTemplate('water-prep' satisfies TemplateId) },
-      { id: 'template-soap', title: 'Переключить шаблон: Линия ПАВ', subtitle: 'Шаблон • базовая схема soap-line', keywords: 'template soap пав line шаблон soap-line', group: 'Шаблоны', run: () => void loadTemplate('soap-line' satisfies TemplateId) },
-      { id: 'template-cip', title: 'Переключить шаблон: CIP-фрагмент', subtitle: 'Шаблон • компактный CIP контур', keywords: 'template cip шаблон cip-fragment', group: 'Шаблоны', run: () => void loadTemplate('cip-fragment' satisfies TemplateId) },
+      { id: 'template-water', title: 'Переключить шаблон: Водоподготовка', subtitle: 'Шаблон • схема водоподготовки', keywords: 'template water вода водоподготовка water-prep', group: 'Шаблоны', run: () => void loadTemplate('water-prep' satisfies TemplateId) },
+      { id: 'template-soap', title: 'Переключить шаблон: Линия ПАВ', subtitle: 'Шаблон • базовая схема линии ПАВ', keywords: 'template soap пав line шаблон soap-line', group: 'Шаблоны', run: () => void loadTemplate('soap-line' satisfies TemplateId) },
+      { id: 'template-cip', title: 'Переключить шаблон: CIP-фрагмент', subtitle: 'Шаблон • базовый CIP-контур', keywords: 'template cip шаблон cip-fragment', group: 'Шаблоны', run: () => void loadTemplate('cip-fragment' satisfies TemplateId) },
     ];
 
     const inlineActions: PaletteAction[] = inlineInsertActions.map((action) => ({
@@ -223,18 +223,18 @@ export const App = () => {
       title: action.title,
       subtitle: action.subtitle,
       keywords: action.keywords,
-      group: 'Inline items',
+      group: 'Линия',
       run: () => addNode(action.kind),
     }));
 
     return [
-      { id: 'add-equipment', title: 'Добавить оборудование', subtitle: 'Открыть мастер и быстро добавить узел', keywords: 'add equipment оборудование мастер wizard', group: 'Действия', hint: 'A', run: () => openEquipmentWizard() },
+      { id: 'add-equipment', title: 'Добавить оборудование', subtitle: 'Открыть форму и добавить оборудование', keywords: 'add equipment оборудование мастер wizard', group: 'Действия', hint: 'A', run: () => openEquipmentWizard() },
       { id: 'open-diagnostics', title: 'Открыть диагностику', subtitle: 'Показать ошибки, предупреждения и критичные сегменты', keywords: 'diagnostics диагностика ошибки предупреждения issues', group: 'Панели', run: () => openPanel('diagnostics') },
-      { id: 'open-lines', title: 'Открыть line list', subtitle: 'Перейти к компактному списку линий', keywords: 'line list линии сегменты list', group: 'Панели', run: () => openPanel('lines') },
+      { id: 'open-lines', title: 'Открыть список линий', subtitle: 'Показать все линии схемы', keywords: 'line list линии сегменты list', group: 'Панели', run: () => openPanel('lines') },
       { id: 'open-inspector', title: 'Открыть инспектор', subtitle: 'Вернуть правую панель свойств и действий', keywords: 'inspector инспектор свойства', group: 'Панели', run: () => { setInspectorTab('main'); openPanel('inspector'); } },
-      { id: 'fit-view', title: 'Вписать схему', subtitle: 'Canvas control • быстро вернуть всю схему в кадр', keywords: 'fit view вписать zoom canvas', group: 'Canvas', hint: 'F', run: () => void rf.fitView({ padding: 0.2, duration: 220 }) },
-      { id: 'toggle-labels', title: 'Переключить подписи линий', subtitle: `Сейчас: ${edgeLabelModes.find((mode) => mode.value === edgeLabelMode)?.label ?? edgeLabelMode}` , keywords: 'labels подписи линии toggle labels', group: 'Canvas', run: toggleLabels },
-      { id: 'toggle-focus', title: focusMode ? 'Выйти из focus mode' : 'Включить focus mode', subtitle: 'Canvas-first режим без лишних панелей', keywords: 'focus mode фокус режим canvas first', group: 'Canvas', hint: 'Shift+F', run: toggleFocusMode },
+      { id: 'fit-view', title: 'Вписать схему', subtitle: 'Показать всю схему в рабочей области', keywords: 'fit view вписать zoom canvas', group: 'Вид схемы', hint: 'F', run: () => void rf.fitView({ padding: 0.2, duration: 220 }) },
+      { id: 'toggle-labels', title: 'Переключить подписи линий', subtitle: `Сейчас: ${edgeLabelModes.find((mode) => mode.value === edgeLabelMode)?.label ?? edgeLabelMode}` , keywords: 'labels подписи линии toggle labels', group: 'Вид схемы', run: toggleLabels },
+      { id: 'toggle-focus', title: focusMode ? 'Выйти из режима схемы' : 'Включить режим схемы', subtitle: 'Работа со схемой без боковых панелей', keywords: 'focus mode фокус режим canvas first', group: 'Вид схемы', hint: 'Shift+F', run: toggleFocusMode },
       ...inlineActions,
       ...templateActions,
     ];
@@ -251,5 +251,5 @@ export const App = () => {
     }
   }, [rightPanel]);
 
-  return <div className={`app-shell shell-refactor ${focusMode ? 'is-focus-mode' : ''}`}><TopToolbar focusMode={focusMode} onToggleFocusMode={toggleFocusMode} onToggleLibrary={() => setLibraryOpen((value) => !value)} onOpenCommandPalette={() => setCommandPaletteOpen(true)} />{startupNotice && <div className={`startup-banner startup-banner-${startupNotice.type}`} role="status"><span>{startupNotice.message}</span><button onClick={dismissStartupNotice}>Закрыть</button></div>}{startupState !== 'ready' ? <div className="startup-fallback"><h2>Запуск редактора</h2><p>Проверяем версии локальных данных, схем проекта и безопасное восстановление интерфейса.</p></div> : <EditorErrorBoundary><div className="workspace-shell"><ToolboxPanel collapsed={focusMode} drawerOpen={libraryOpen && !focusMode} onToggleDrawer={() => setLibraryOpen((value) => !value)} /><div className="center-stage"><CanvasEditor focusMode={focusMode} /><div className="right-rail"><div className="shell-rail shell-rail-right"><button type="button" className={rightPanel === 'inspector' ? 'is-active' : ''} onClick={() => setRightPanel((value) => value === 'inspector' ? null : 'inspector')} title="Инспектор">И</button><button type="button" className={rightPanel === 'diagnostics' ? 'is-active' : ''} onClick={() => setRightPanel((value) => value === 'diagnostics' ? null : 'diagnostics')} title="Диагностика">Д</button><button type="button" className={rightPanel === 'lines' ? 'is-active' : ''} onClick={() => setRightPanel((value) => value === 'lines' ? null : 'lines')} title="Линии">Л</button><button type="button" className={rightPanel === 'events' ? 'is-active' : ''} onClick={() => setRightPanel((value) => value === 'events' ? null : 'events')} title="События">С</button><button type="button" className={rightPanel === 'datasheet' ? 'is-active' : ''} onClick={() => setRightPanel((value) => value === 'datasheet' ? null : 'datasheet')} title="Datasheet">DS</button></div>{!focusMode && rightPanelNode ? <aside className="shell-right-drawer">{rightPanelNode}</aside> : null}</div></div></div></EditorErrorBoundary>}<EquipmentWizard /><CommandPalette open={commandPaletteOpen} onClose={() => setCommandPaletteOpen(false)} actions={commandActions} /></div>;
+  return <div className={`app-shell shell-refactor ${focusMode ? 'is-focus-mode' : ''}`}><TopToolbar focusMode={focusMode} onToggleFocusMode={toggleFocusMode} onToggleLibrary={() => setLibraryOpen((value) => !value)} onOpenCommandPalette={() => setCommandPaletteOpen(true)} />{startupNotice && <div className={`startup-banner startup-banner-${startupNotice.type}`} role="status"><span>{startupNotice.message}</span><button onClick={dismissStartupNotice}>Закрыть</button></div>}{startupState !== 'ready' ? <div className="startup-fallback"><h2>Запуск редактора</h2><p>Подготавливаем данные проекта и восстанавливаем рабочее состояние.</p></div> : <EditorErrorBoundary><div className="workspace-shell"><ToolboxPanel collapsed={focusMode} drawerOpen={libraryOpen && !focusMode} onToggleDrawer={() => setLibraryOpen((value) => !value)} /><div className="center-stage"><CanvasEditor focusMode={focusMode} /><div className="right-rail"><div className="shell-rail shell-rail-right"><button type="button" className={rightPanel === 'inspector' ? 'is-active' : ''} onClick={() => setRightPanel((value) => value === 'inspector' ? null : 'inspector')} title="Инспектор">И</button><button type="button" className={rightPanel === 'diagnostics' ? 'is-active' : ''} onClick={() => setRightPanel((value) => value === 'diagnostics' ? null : 'diagnostics')} title="Диагностика">Д</button><button type="button" className={rightPanel === 'lines' ? 'is-active' : ''} onClick={() => setRightPanel((value) => value === 'lines' ? null : 'lines')} title="Линии">Л</button><button type="button" className={rightPanel === 'events' ? 'is-active' : ''} onClick={() => setRightPanel((value) => value === 'events' ? null : 'events')} title="События">С</button><button type="button" className={rightPanel === 'datasheet' ? 'is-active' : ''} onClick={() => setRightPanel((value) => value === 'datasheet' ? null : 'datasheet')} title="Паспорт">П</button></div>{!focusMode && rightPanelNode ? <aside className="shell-right-drawer">{rightPanelNode}</aside> : null}</div></div></div></EditorErrorBoundary>}<EquipmentWizard /><CommandPalette open={commandPaletteOpen} onClose={() => setCommandPaletteOpen(false)} actions={commandActions} /></div>;
 };

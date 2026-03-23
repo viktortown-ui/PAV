@@ -25,8 +25,8 @@ export const edgeInspectorFields: Array<{ key: keyof EdgeInspectorSchema; label:
   { key: 'directionMode', label: 'Направление', type: 'select', options: ['forward', 'reverse', 'bidirectional', 'derived'].map((value) => ({ value, label: value })) },
   { key: 'mediumMode', label: 'Модель среды', type: 'select', options: ['single', 'mixed', 'unknown'].map((value) => ({ value, label: value })) },
   { key: 'lineRole', label: 'Роль линии', type: 'select', options: ['process', 'drain', 'CIP', 'utility', 'recycle'].map((value) => ({ value, label: value })) },
-  { key: 'upstreamRef', label: 'Upstream', type: 'text' },
-  { key: 'downstreamRef', label: 'Downstream', type: 'text' },
+  { key: 'upstreamRef', label: 'Откуда', type: 'text' },
+  { key: 'downstreamRef', label: 'Куда', type: 'text' },
 ];
 
 export const createEdgeInspectorSchema = (edge: SoapEdge, fallbackRefs: { upstream: string; downstream: string }): EdgeInspectorSchema => ({

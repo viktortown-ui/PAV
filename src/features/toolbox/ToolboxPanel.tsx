@@ -50,7 +50,7 @@ const familyDefinitions: FamilyDefinition[] = [
   { key: 'library', label: 'Библиотека', description: 'Общий доступ к инженерным семействам и быстрым сценариям вставки.', tooltip: 'Библиотека', match: () => true, icon: (active) => <MenuIcon active={active} /> },
   { key: 'sources', label: 'Источники', description: 'Питание, подготовка среды и входные точки процесса.', tooltip: 'Источники', match: (item) => item.type === 'source' || item.type === 'roSkid' || item.type === 'waterFilter', icon: (active) => <SourceIcon active={active} /> },
   { key: 'vessels', label: 'Аппараты', description: 'Основное емкостное и реакторное оборудование схемы.', tooltip: 'Аппараты', match: (item) => item.family === 'vessel', icon: (active) => <VesselIcon active={active} /> },
-  { key: 'machines', label: 'Inline-машины', description: 'Насосы, смесители и встраиваемые узлы обработки потока.', tooltip: 'Inline-машины', match: (item) => item.family === 'machinery', icon: (active) => <MachineIcon active={active} /> },
+  { key: 'machines', label: 'Линейные узлы', description: 'Насосы, смесители и элементы, которые ставятся на линию.', tooltip: 'Линейные узлы', match: (item) => item.family === 'machinery', icon: (active) => <MachineIcon active={active} /> },
   { key: 'valves', label: 'Арматура', description: 'Запорно-регулирующая арматура для маршрутизации и отсечки.', tooltip: 'Арматура', match: (item) => item.family === 'valve', icon: (active) => <ValveIcon active={active} /> },
   { key: 'instrumentation', label: 'КИП', description: 'Контроль параметров процесса и измерительные точки.', tooltip: 'КИП', match: (item) => item.family === 'instrument', icon: (active) => <InstrumentIcon active={active} /> },
   { key: 'topology', label: 'Топология', description: 'Разветвления, объединения и структурные элементы трассировки.', tooltip: 'Топология', match: (item) => item.family === 'topology', icon: (active) => <TopologyIcon active={active} /> },
@@ -172,7 +172,7 @@ export const ToolboxPanel = ({ collapsed = false, drawerOpen = true, onToggleDra
               className="panel-search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Поиск по названию, типу или назначению"
+              placeholder="Поиск по названию и назначению"
               aria-label="Поиск по библиотеке"
             />
 
