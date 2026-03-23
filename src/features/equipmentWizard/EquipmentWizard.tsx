@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { getWizardFields, getWizardSubtypes, inferWizardContext, wizardGroups } from './schema';
 
@@ -16,27 +16,56 @@ export const EquipmentWizard = () => {
   const regenerateWizardTag = useAppStore((state) => state.regenerateWizardTag);
   const createEquipment = useAppStore((state) => state.createEquipmentFromWizard);
 
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+
   const context = useMemo(() => inferWizardContext(project, selectedNodeId, selectedEdgeId), [project, selectedEdgeId, selectedNodeId]);
   const subtypes = wizard.groupId ? getWizardSubtypes(wizard.groupId) : [];
   const fields = wizard.kind && wizard.groupId ? getWizardFields(project, wizard.groupId, wizard.kind, context) : [];
+  const requiredFields = fields.filter((field) => field.required);
+  const optionalFields = fields.filter((field) => !field.required);
+
+  useEffect(() => {
+    if (!wizard.open) setAdvancedOpen(false);
+  }, [wizard.open, wizard.groupId, wizard.kind]);
 
   if (!wizard.open || !wizard.groupId || !wizard.kind) return null;
 
+  const renderField = (field: (typeof fields)[number]) => {
+    const value = wizard.values[field.key] ?? '';
+
+    return (
+      <label key={field.key} className="wizard-field">
+        <span>{field.label}{field.required ? ' *' : ''}{field.unitHint ? `, ${field.unitHint}` : ''}</span>
+        {field.type === 'number' ? (
+          <input type="number" value={String(value)} onChange={(e) => updateWizardValue(field.key, Number(e.target.value))} />
+        ) : field.type === 'select' ? (
+          <select value={String(value)} onChange={(e) => updateWizardValue(field.key, e.target.value)}>
+            {field.options?.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+        ) : field.type === 'toggle' ? (
+          <input type="checkbox" checked={boolFromValue(value)} onChange={(e) => updateWizardValue(field.key, e.target.checked)} />
+        ) : (
+          <input type="text" value={String(value)} onChange={(e) => updateWizardValue(field.key, e.target.value)} />
+        )}
+      </label>
+    );
+  };
+
   return (
-    <div className="wizard-overlay" role="dialog" aria-modal="true" aria-label="Добавление оборудования">
+    <div className="wizard-overlay" role="dialog" aria-modal="true" aria-label="Создание элемента">
       <div className="wizard-card">
         <div className="wizard-head">
           <div>
-            <span className="wizard-kicker">Добавление оборудования</span>
+            <span className="wizard-kicker">Создание элемента</span>
             <h2>Новый элемент</h2>
-            <p>Выберите тип оборудования и заполните основные параметры.</p>
+            <p>Выберите группу, уточните тип и заполните обязательные параметры.</p>
           </div>
           <button className="wizard-close" onClick={closeWizard}>✕</button>
         </div>
 
         <div className="wizard-steps">
           <section>
-            <div className="wizard-step-title">1. Группа</div>
+            <div className="wizard-step-title">1. Выберите группу оборудования</div>
             <div className="wizard-chip-grid">
               {wizardGroups.map((group) => (
                 <button key={group.id} className={wizard.groupId === group.id ? 'wizard-chip is-active' : 'wizard-chip'} onClick={() => setWizardGroup(group.id)}>
@@ -48,7 +77,7 @@ export const EquipmentWizard = () => {
           </section>
 
           <section>
-            <div className="wizard-step-title">2. Подтип</div>
+            <div className="wizard-step-title">2. Уточните тип</div>
             <div className="wizard-subtype-list">
               {subtypes.map((subtype) => (
                 <button key={subtype.kind} className={wizard.kind === subtype.kind ? 'wizard-subtype is-active' : 'wizard-subtype'} onClick={() => setWizardKind(subtype.kind)}>
@@ -60,45 +89,37 @@ export const EquipmentWizard = () => {
           </section>
 
           <section>
-            <div className="wizard-step-title">3. Параметры</div>
+            <div className="wizard-step-title">3. Заполните обязательные параметры</div>
             <div className="wizard-context-grid">
               <div><span>Среда</span><strong>{context.inferredMedium ?? 'water'}</strong></div>
               <div><span>Диаметр</span><strong>{context.inferredDiameter ?? 'DN50'}</strong></div>
-              <div><span>Шаблон тега</span><strong>{wizard.namingRule}</strong></div>
-              <div><span>Источник настроек</span><strong>{wizardGroups.find((group) => group.id === wizard.groupId)?.label}</strong></div>
+              <div><span>Тег</span><strong>{wizard.values.technicalTag || '—'}</strong></div>
+              <div><span>Группа</span><strong>{wizardGroups.find((group) => group.id === wizard.groupId)?.label}</strong></div>
             </div>
+            <div className="wizard-section-note">Проверьте обязательные поля перед созданием элемента.</div>
             <div className="wizard-form-grid">
-              {fields.map((field) => {
-                const value = wizard.values[field.key] ?? '';
-                return (
-                  <label key={field.key} className="wizard-field">
-                    <span>{field.label}{field.required ? ' *' : ''}{field.unitHint ? `, ${field.unitHint}` : ''}</span>
-                    {field.type === 'number' ? (
-                      <input type="number" value={String(value)} onChange={(e) => updateWizardValue(field.key, Number(e.target.value))} />
-                    ) : field.type === 'select' ? (
-                      <select value={String(value)} onChange={(e) => updateWizardValue(field.key, e.target.value)}>
-                        {field.options?.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                      </select>
-                    ) : field.type === 'toggle' ? (
-                      <input type="checkbox" checked={boolFromValue(value)} onChange={(e) => updateWizardValue(field.key, e.target.checked)} />
-                    ) : (
-                      <input type="text" value={String(value)} onChange={(e) => updateWizardValue(field.key, e.target.value)} />
-                    )}
-                  </label>
-                );
-              })}
+              {requiredFields.map(renderField)}
             </div>
+            {optionalFields.length ? (
+              <div className="wizard-advanced">
+                <button type="button" className={advancedOpen ? 'wizard-advanced-toggle is-open' : 'wizard-advanced-toggle'} onClick={() => setAdvancedOpen((value) => !value)} aria-expanded={advancedOpen}>
+                  <span>4. Дополнительные параметры</span>
+                  <strong>{advancedOpen ? 'Скрыть' : 'Открыть'}</strong>
+                </button>
+                {advancedOpen ? <div className="wizard-form-grid">{optionalFields.map(renderField)}</div> : null}
+              </div>
+            ) : null}
           </section>
         </div>
 
         <div className="wizard-footer">
           <div className="wizard-footer-copy">
-            <strong>Подстановка по схеме</strong>
-            <span>Среда, диаметр и тег подставлены автоматически. Проверьте данные перед добавлением.</span>
+            <strong>Готово к созданию</strong>
+            <span>При необходимости обновите тег или откройте дополнительные параметры.</span>
           </div>
           <div className="wizard-footer-actions">
             <button onClick={regenerateWizardTag}>Обновить тег</button>
-            <button className="primary" onClick={createEquipment}>Добавить элемент</button>
+            <button className="primary" onClick={createEquipment}>Создать элемент</button>
           </div>
         </div>
       </div>
