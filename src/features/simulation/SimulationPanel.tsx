@@ -1,15 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAppStore } from '../../store/useAppStore';
-
-type SimulationPanelMode = 'hidden' | 'mini' | 'compact' | 'expanded';
+import { SimulationPanelMode, coercePanelMode, cyclePanelMode, getExpandToggleTarget, getLastOpenPanelMode, getOpenPanelMode, getPanelModeLabel, panelLastOpenModeStorageKey, panelModeStorageKey } from './panelMode';
 
 type SimulationPanelProps = {
   focusMode?: boolean;
 };
 
 const speedOptions = [0.5, 1, 1.5, 2, 3];
-const panelModeOrder: SimulationPanelMode[] = ['hidden', 'mini', 'compact', 'expanded'];
-const panelModeStorageKey = 'simulation-panel-mode';
 
 const mediumLabel: Record<string, string> = {
   none: 'нет',
@@ -18,11 +15,6 @@ const mediumLabel: Record<string, string> = {
   product: 'продукт',
   cip: 'CIP',
   waste: 'сток',
-};
-
-const cyclePanelMode = (mode: SimulationPanelMode) => {
-  const currentIndex = panelModeOrder.indexOf(mode);
-  return panelModeOrder[(currentIndex + 1) % panelModeOrder.length];
 };
 
 const formatEventTime = (timestamp: string | number) => new Date(timestamp).toLocaleTimeString('ru-RU', {
@@ -44,12 +36,19 @@ export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => 
   const showProblematicOnly = useAppStore((state) => state.showProblematicOnly);
   const [panelMode, setPanelMode] = useState<SimulationPanelMode>(() => {
     if (typeof window === 'undefined') return 'mini';
-    const storedMode = window.sessionStorage.getItem(panelModeStorageKey);
-    return storedMode === 'hidden' || storedMode === 'mini' || storedMode === 'compact' || storedMode === 'expanded' ? storedMode : 'mini';
+    return coercePanelMode(window.sessionStorage.getItem(panelModeStorageKey), 'mini');
+  });
+  const [lastOpenPanelMode, setLastOpenPanelMode] = useState<Exclude<SimulationPanelMode, 'hidden'>>(() => {
+    if (typeof window === 'undefined') return 'mini';
+    return getLastOpenPanelMode(window.sessionStorage.getItem(panelLastOpenModeStorageKey));
   });
 
   useEffect(() => {
     window.sessionStorage.setItem(panelModeStorageKey, panelMode);
+    if (panelMode !== 'hidden') {
+      window.sessionStorage.setItem(panelLastOpenModeStorageKey, panelMode);
+      setLastOpenPanelMode(panelMode);
+    }
   }, [panelMode]);
 
   useEffect(() => {
@@ -80,16 +79,16 @@ export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => 
   const modeSummary = project.simulation.running ? 'Симуляция включена' : 'Редактирование';
 
   const modeButtons: Array<{ mode: SimulationPanelMode; label: string }> = [
-    { mode: 'hidden', label: 'Скрыто' },
-    { mode: 'mini', label: 'Dock' },
-    { mode: 'compact', label: 'Сводка' },
-    { mode: 'expanded', label: 'Лист' },
+    { mode: 'hidden', label: 'Скрыта' },
+    { mode: 'mini', label: 'Мини-панель' },
+    { mode: 'compact', label: 'Компактная' },
+    { mode: 'expanded', label: 'Развернутая' },
   ];
 
   return (
     <section className={`simulation-dock is-${panelMode} ${focusMode ? 'is-focus-mode' : ''}`} data-panel-mode={panelMode} aria-label="Нижняя панель симуляции и диагностики">
       <div className="simulation-dock-launcher" aria-hidden={panelMode !== 'hidden'}>
-        <button type="button" className="simulation-launcher-button" onClick={() => setPanelMode('mini')} aria-expanded={panelMode !== 'hidden'}>
+        <button type="button" className="simulation-launcher-button" onClick={() => setPanelMode(getOpenPanelMode(lastOpenPanelMode))} aria-expanded={panelMode !== 'hidden'} aria-label={`Открыть нижнюю панель: ${getPanelModeLabel(getOpenPanelMode(lastOpenPanelMode))}`}>
           <span className="launcher-title">Диагностика</span>
           <span className="launcher-meta">{warningCount} предупрежд. • {Math.round(project.simulation.totalActiveFlow)} л/мин</span>
         </button>
@@ -110,6 +109,7 @@ export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => 
                 type="button"
                 className={panelMode === mode ? 'is-active' : ''}
                 onClick={() => setPanelMode(mode)}
+                aria-label={label}
                 aria-pressed={panelMode === mode}
               >
                 {label}
@@ -170,10 +170,10 @@ export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => 
             <button
               type="button"
               className="dock-expand-button"
-              onClick={() => setPanelMode(panelMode === 'expanded' ? 'compact' : panelMode === 'compact' ? 'mini' : 'expanded')}
+              onClick={() => setPanelMode(getExpandToggleTarget(panelMode))}
               aria-expanded={panelMode === 'expanded'}
             >
-              <span>{panelMode === 'expanded' ? 'Свернуть' : panelMode === 'compact' ? 'Мини-dock' : 'Развернуть'}</span>
+              <span>{panelMode === 'expanded' ? 'Свернуть' : panelMode === 'compact' ? 'Сжать до мини-панели' : 'Развернуть'}</span>
               <strong>{panelMode === 'expanded' ? '▾' : '▴'}</strong>
             </button>
           </div>

@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, WheelEvent as ReactWheelEvent, PointerEvent as ReactPointerEvent, MouseEvent as ReactMouseEvent } from 'react';
 import ReactFlow, { Background, MiniMap, ReactFlowInstance, SelectionMode, Viewport, getViewportForBounds } from 'reactflow';
 import { shallow } from 'zustand/shallow';
 import { FlowEdge } from '../../ui/edges/FlowEdge';
@@ -186,6 +186,20 @@ const CanvasEditorComponent = ({ focusMode = false }: { focusMode?: boolean }) =
     void applyViewport(view.hasManualViewport ? 'restore' : 'curated', 'initial-load');
   }, [applyViewport, flow, view.hasManualViewport, viewportNonce]);
 
+
+  const stopCanvasViewportPropagation = useCallback((event: ReactWheelEvent<HTMLElement> | ReactPointerEvent<HTMLElement> | ReactMouseEvent<HTMLElement>) => {
+    event.stopPropagation();
+  }, []);
+
+  const handleFitToView = useCallback(async () => {
+    if (!flow) return;
+    await flow.fitView({ padding: 0.2, duration: 220 });
+  }, [flow]);
+
+  const handleReturnToDiagram = useCallback(async () => {
+    await applyViewport(view.hasManualViewport ? 'restore' : 'curated', 'return-to-diagram');
+  }, [applyViewport, view.hasManualViewport]);
+
   useEffect(() => {
     if (!shellRef.current || !flow || latestViewRef.current.hasManualViewport) return;
     const observer = new ResizeObserver(() => {
@@ -246,13 +260,13 @@ const CanvasEditorComponent = ({ focusMode = false }: { focusMode?: boolean }) =
         <Background color="rgba(93,117,145,0.18)" gap={24} size={1.2} />
       </ReactFlow>
       {!focusMode ? (
-        <div className="canvas-navigation-cluster" aria-label="Навигация по схеме">
+        <div className="canvas-navigation-cluster" aria-label="Навигация по схеме" onWheel={stopCanvasViewportPropagation} onPointerDown={stopCanvasViewportPropagation} onMouseDown={stopCanvasViewportPropagation}>
           <section className="viewport-controls-card" aria-label="Управление видом">
             <div className="viewport-controls-card__title">Вид схемы</div>
             <div className="viewport-controls-stack">
               <button type="button" className="viewport-control-button" title="Увеличить" aria-label="Увеличить" onClick={() => void flow?.zoomIn({ duration: 180 })}>+</button>
               <button type="button" className="viewport-control-button" title="Уменьшить" aria-label="Уменьшить" onClick={() => void flow?.zoomOut({ duration: 180 })}>−</button>
-              <button type="button" className="viewport-control-button viewport-control-button--fit" title="Вписать схему" aria-label="Вписать схему" onClick={() => void flow?.fitView({ padding: 0.2, duration: 220 })}>⤢</button>
+              <button type="button" className="viewport-control-button viewport-control-button--fit" title="Вписать схему" aria-label="Вписать схему" onClick={() => void handleFitToView()}>⤢</button>
               <button
                 type="button"
                 className={`viewport-control-button ${isViewportLocked ? 'is-active' : ''}`}
@@ -292,8 +306,9 @@ const CanvasEditorComponent = ({ focusMode = false }: { focusMode?: boolean }) =
                   nodeStrokeColor="#d9e8ff"
                 />
                 <div className="minimap-card__footer">
-                  <button type="button" className="minimap-card__action" title="Вернуть основной вид" onClick={() => void flow?.fitView({ padding: 0.2, duration: 220 })}>Вернуть вид</button>
-                  <button type="button" className="minimap-card__action minimap-card__action--secondary" title={edgeLabelMode === 'hidden' ? 'Показать подписи линий' : 'Скрыть подписи линий'} onClick={() => setEdgeLabelMode(edgeLabelMode === 'hidden' ? 'selected' : 'hidden')}>{edgeLabelMode === 'hidden' ? 'Показать подписи' : 'Скрыть подписи'}</button>
+                  <button type="button" className="minimap-card__action" title="Вернуться к схеме" aria-label="Вернуться к схеме" onClick={() => void handleReturnToDiagram()}>К схеме</button>
+                  <button type="button" className="minimap-card__action minimap-card__action--secondary" title="Вписать всю схему" aria-label="Вписать всю схему" onClick={() => void handleFitToView()}>Вписать</button>
+                  <button type="button" className="minimap-card__action minimap-card__action--secondary minimap-card__action--ghost" title={edgeLabelMode === 'hidden' ? 'Показать подписи линий' : 'Скрыть подписи линий'} onClick={() => setEdgeLabelMode(edgeLabelMode === 'hidden' ? 'selected' : 'hidden')}>{edgeLabelMode === 'hidden' ? 'Показать подписи' : 'Скрыть подписи'}</button>
                 </div>
               </>
             ) : (
@@ -302,7 +317,7 @@ const CanvasEditorComponent = ({ focusMode = false }: { focusMode?: boolean }) =
           </section>
         </div>
       ) : null}
-      <div className={`canvas-overlay simulation-overlay ${focusMode ? 'is-focus-mode' : ''}`}>
+      <div className={`canvas-overlay simulation-overlay ${focusMode ? 'is-focus-mode' : ''}`} onWheel={stopCanvasViewportPropagation} onPointerDown={stopCanvasViewportPropagation} onMouseDown={stopCanvasViewportPropagation}>
         <SimulationPanel focusMode={focusMode} />
       </div>
     </div>
