@@ -99,8 +99,9 @@ export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => 
         <div className="simulation-dock-grab" aria-hidden="true" />
         <div className="simulation-dock-toolbar" role="toolbar" aria-label="Состояние нижней панели">
           <div className="simulation-dock-titleblock">
-            <span className="simulation-dock-kicker">Нижняя панель</span>
-            <strong>Управление потоком и диагностика</strong>
+            <span className="simulation-dock-kicker">Диагностика</span>
+            <strong>Управление потоком</strong>
+            <small>{modeSummary}</small>
           </div>
           <div className="simulation-dock-mode-switch">
             {modeButtons.map(({ mode, label }) => (
@@ -119,13 +120,13 @@ export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => 
 
         <div className="simulation-dock-row simulation-dock-row-primary">
           <div className="dock-zone dock-zone-controls" aria-label="Управление симуляцией">
-            <span className="dock-zone-label">Zone A • Controls</span>
+            <span className="dock-zone-label">Управление</span>
             <div className="dock-controls-cluster">
               <button type="button" className="is-primary" onClick={() => setSimulationRunning(true)} disabled={project.simulation.running}>▶ Пуск</button>
               <button type="button" onClick={() => setSimulationRunning(false)} disabled={!project.simulation.running}>❚❚ Пауза</button>
               <button type="button" onClick={resetSimulation}>↺ Сброс</button>
               <div className="dock-speed-field">
-                <span>Скорость</span>
+                <span className="dock-field-label">Скорость</span>
                 <div className="dock-speed-options">
                   {speedOptions.map((speed) => (
                     <button
@@ -143,29 +144,29 @@ export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => 
           </div>
 
           <div className="dock-zone dock-zone-status" aria-label="Живой статус симуляции">
-            <span className="dock-zone-label">Zone B • Live status</span>
+            <span className="dock-zone-label">Статус</span>
             <div className="dock-status-strip">
               <div className="dock-status-item">
-                <span>Поток</span>
+                <span className="metric-label">Поток</span>
                 <strong>{Math.round(project.simulation.totalActiveFlow)} л/мин</strong>
               </div>
               <div className="dock-status-item warning-state">
-                <span>Предупреждения</span>
+                <span className="metric-label">Предупреждения</span>
                 <strong>{warningCount}</strong>
               </div>
               <div className="dock-status-item dock-status-item-wide">
-                <span>Последнее событие</span>
+                <span className="metric-label">Последнее событие</span>
                 <strong>{project.simulation.lastEvent}</strong>
               </div>
               <div className="dock-status-item">
-                <span>Режим</span>
+                <span className="metric-label">Режим</span>
                 <strong>{modeSummary}</strong>
               </div>
             </div>
           </div>
 
           <div className="dock-zone dock-zone-expand">
-            <span className="dock-zone-label">Панель</span>
+            <span className="dock-zone-label">Режим панели</span>
             <button
               type="button"
               className="dock-expand-button"
@@ -180,7 +181,7 @@ export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => 
 
         <div className="simulation-dock-row simulation-dock-row-summary">
           <div className="dock-zone dock-zone-filters" aria-label="Фильтры и режимы">
-            <span className="dock-zone-label">Zone C • Filters / mode</span>
+            <span className="dock-zone-label">Фильтры</span>
             <div className="dock-filter-chips">
               <button type="button" className={!showProblematicOnly ? 'is-active' : ''} onClick={() => showProblematicOnly && toggleProblematicOnly()}>Все</button>
               <button type="button" className={showProblematicOnly ? 'is-active' : ''} onClick={() => !showProblematicOnly && toggleProblematicOnly()}>Только проблемные</button>
@@ -190,22 +191,22 @@ export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => 
           </div>
 
           <div className="dock-zone dock-zone-summary" aria-label="Сводка панели">
-            <span className="dock-zone-label">Сводка</span>
+            <span className="dock-zone-label">Контекст</span>
             <div className="dock-summary-grid">
               <div>
-                <span>Среда</span>
+                <span className="metric-label">Среда</span>
                 <strong>{mediumLabel[project.simulation.activeMedium]}</strong>
               </div>
               <div>
-                <span>Фильтр</span>
+                <span className="metric-label">Фильтр</span>
                 <strong>{filterLabel}</strong>
               </div>
               <div className="is-wide">
-                <span>Выбор</span>
+                <span className="metric-label">Выбор</span>
                 <strong>{selectionLabel}</strong>
               </div>
               <div className="is-wide">
-                <span>Активное предупреждение</span>
+                <span className="metric-label">Активное предупреждение</span>
                 <strong>{activeWarnings[0] ?? 'Нет активных предупреждений'}</strong>
               </div>
             </div>
@@ -217,8 +218,8 @@ export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => 
             <div className="sheet-section sheet-section-overview">
               <div className="sheet-section-head">
                 <div>
-                  <span className="dock-zone-label">Zone D • Journal</span>
-                  <strong>Диагностический лист</strong>
+                  <span className="dock-zone-label">Консоль</span>
+                  <strong>Диагностическая сводка</strong>
                 </div>
                 <button type="button" className="sheet-focus-button" onClick={toggleProblematicOnly}>
                   {showProblematicOnly ? 'Показать всю схему' : 'Фокус на проблемах'}
@@ -226,19 +227,19 @@ export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => 
               </div>
               <div className="sheet-overview-grid">
                 <div>
-                  <span>Mode</span>
+                  <span className="metric-label">Режим</span>
                   <strong>{modeSummary}</strong>
                 </div>
                 <div>
-                  <span>Medium</span>
+                  <span className="metric-label">Среда</span>
                   <strong>{mediumLabel[project.simulation.activeMedium]}</strong>
                 </div>
                 <div className="is-wide">
-                  <span>Selection summary</span>
+                  <span className="metric-label">Выбор</span>
                   <strong>{selectionLabel}</strong>
                 </div>
                 <div className="is-wide">
-                  <span>Warnings</span>
+                  <span className="metric-label">Предупреждения</span>
                   <strong>{activeWarnings.join(' • ') || 'Нет активных предупреждений'}</strong>
                 </div>
               </div>
@@ -255,9 +256,9 @@ export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => 
               <div className="sheet-journal-list">
                 {recentEvents.map((event) => (
                   <article key={event.id} className={`sheet-journal-item severity-${event.severity}`}>
-                    <span>{formatEventTime(event.timestamp)}</span>
-                    <strong>{event.message}</strong>
-                    <small>{event.type}</small>
+                    <span className="sheet-journal-time">{formatEventTime(event.timestamp)}</span>
+                    <strong className="sheet-journal-message">{event.message}</strong>
+                    <small className="sheet-journal-type">{event.type}</small>
                   </article>
                 ))}
               </div>
@@ -268,7 +269,7 @@ export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => 
             <div className="sheet-section">
               <div className="sheet-section-head">
                 <div>
-                  <strong>Активные предупреждения</strong>
+                  <strong>Предупреждения</strong>
                   <span>Приоритетные сигналы и отклонения</span>
                 </div>
               </div>
@@ -287,6 +288,7 @@ export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => 
                 </div>
               </div>
               <div className="sheet-last-event">
+                <span className="metric-label">Состояние</span>
                 <strong>{latestEvent?.message ?? project.simulation.lastEvent}</strong>
                 <span>{latestEvent?.type ?? 'system'}</span>
               </div>
