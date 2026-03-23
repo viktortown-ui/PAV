@@ -287,10 +287,30 @@ button.primary, .toolbox-actions .primary { background: linear-gradient(180deg, 
   .wizard-footer { flex-direction: column; align-items: stretch; }
 }
 
-.canvas-controls { box-shadow: 0 18px 38px rgba(0,0,0,0.24); border-radius: 16px; overflow: hidden; }
-.canvas-controls button { width: 38px; height: 38px; background: rgba(8,16,25,0.94); color: #edf4ff; border-bottom: 1px solid rgba(255,255,255,0.06); }
-.canvas-controls button:last-child { border-bottom: 0; }
-.canvas-controls button:disabled { opacity: 1; color: #8ea4bf; }
+.canvas-navigation-cluster { position: absolute; right: 16px; bottom: calc(env(safe-area-inset-bottom, 0px) + 18px); z-index: 25; display: grid; gap: 12px; justify-items: end; pointer-events: none; }
+.canvas-navigation-cluster > * { pointer-events: auto; }
+.viewport-controls-card, .minimap-card { width: 100%; border: 1px solid rgba(132, 171, 218, 0.2); background: linear-gradient(180deg, rgba(11, 20, 32, 0.96), rgba(8, 14, 24, 0.96)); backdrop-filter: blur(14px); box-shadow: 0 20px 40px rgba(0,0,0,0.28); }
+.viewport-controls-card { width: 76px; border-radius: 20px; padding: 10px 8px 8px; display: grid; gap: 10px; }
+.viewport-controls-card__title { font-size: 10px; line-height: 1.2; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #8ea4bf; text-align: center; }
+.viewport-controls-stack { display: grid; gap: 8px; }
+.viewport-control-button { width: 100%; min-height: 42px; border-radius: 14px; border: 1px solid rgba(143, 181, 226, 0.16); background: linear-gradient(180deg, rgba(18, 34, 54, 0.96), rgba(12, 23, 37, 0.96)); color: #edf4ff; font-size: 20px; line-height: 1; display: grid; place-items: center; transition: border-color 140ms ease, transform 140ms ease, box-shadow 140ms ease, background 140ms ease; }
+.viewport-control-button:hover { border-color: rgba(168, 206, 255, 0.38); transform: translateY(-1px); box-shadow: 0 10px 18px rgba(0,0,0,0.2); }
+.viewport-control-button.is-active { background: linear-gradient(180deg, rgba(42, 109, 244, 0.94), rgba(26, 72, 170, 0.94)); border-color: rgba(120, 166, 255, 0.55); }
+.viewport-control-button--fit { font-size: 18px; }
+.minimap-card { width: 248px; border-radius: 22px; padding: 12px; display: grid; gap: 12px; }
+.minimap-card__header { display: flex; justify-content: space-between; gap: 12px; align-items: start; }
+.minimap-card__title { font-size: 13px; line-height: 1.2; font-weight: 700; color: #eef5ff; }
+.minimap-card__caption { margin-top: 4px; font-size: 11px; line-height: 1.35; color: #8ea4bf; }
+.minimap-card__toggle, .minimap-card__action { border: 1px solid rgba(143, 181, 226, 0.16); background: rgba(16, 32, 51, 0.94); color: #edf4ff; border-radius: 12px; padding: 8px 10px; font-size: 12px; line-height: 1.2; }
+.minimap-card__toggle:hover, .minimap-card__action:hover { border-color: rgba(168, 206, 255, 0.34); }
+.minimap-card__map { width: 100%; height: 168px; border-radius: 18px; overflow: hidden; border: 1px solid rgba(132, 171, 218, 0.22); background: rgba(6, 11, 18, 0.98); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04); }
+.minimap-card__map .react-flow__minimap-svg { border-radius: 18px; }
+.minimap-card__map .react-flow__minimap-mask { fill: rgba(6, 12, 19, 0.76); }
+.minimap-card__map .react-flow__minimap-node { rx: 4px; ry: 4px; }
+.minimap-card__footer { display: grid; grid-template-columns: 1fr; gap: 8px; }
+.minimap-card__action { width: 100%; text-align: center; }
+.minimap-card__action--secondary { background: rgba(11, 22, 35, 0.88); color: #c8d7ea; }
+.minimap-card__collapsed { border: 1px dashed rgba(132, 171, 218, 0.2); border-radius: 16px; padding: 14px 12px; font-size: 12px; line-height: 1.45; color: #9ab0ca; }
 .is-focus-mode .shell-rail-right { border-left-color: rgba(122, 150, 183, 0.08); }
 .is-focus-mode .shell-rail-right button { width: 42px; min-height: 42px; }
 
@@ -306,6 +326,13 @@ button.primary, .toolbox-actions .primary { background: linear-gradient(180deg, 
 .toolbox-group-items, .toolbox-suggestion-row { display: grid; gap: 8px; }
 .toolbox-suggestion-row { grid-template-columns: repeat(auto-fit, minmax(120px, max-content)); }
 
+
+@media (max-width: 720px) {
+  .canvas-navigation-cluster { right: 10px; bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); gap: 10px; }
+  .minimap-card { width: min(224px, calc(100vw - 20px)); }
+  .minimap-card__map { height: 150px; }
+  .viewport-controls-card { width: 68px; }
+}
 @media (max-width: 720px) {
   .simulation-overlay { padding-left: 8px; padding-right: 8px; }
   .simulation-dock-mode-switch { overflow-x: auto; }
