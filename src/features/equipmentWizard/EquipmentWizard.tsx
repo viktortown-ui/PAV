@@ -23,6 +23,8 @@ export const EquipmentWizard = () => {
   const fields = wizard.kind && wizard.groupId ? getWizardFields(project, wizard.groupId, wizard.kind, context) : [];
   const requiredFields = fields.filter((field) => field.required);
   const optionalFields = fields.filter((field) => !field.required);
+  const activeGroup = wizardGroups.find((group) => group.id === wizard.groupId);
+  const activeSubtype = subtypes.find((subtype) => subtype.kind === wizard.kind);
 
   useEffect(() => {
     if (!wizard.open) setAdvancedOpen(false);
@@ -55,56 +57,55 @@ export const EquipmentWizard = () => {
     <div className="wizard-overlay" role="dialog" aria-modal="true" aria-label="Создать элемент">
       <div className="wizard-card">
         <div className="wizard-head">
-          <div>
+          <div className="wizard-head-copy">
             <span className="wizard-kicker">Создать элемент</span>
             <h2>Новый элемент</h2>
-            <p>Выберите семейство, тип и заполните поля.</p>
           </div>
           <button className="wizard-close" onClick={closeWizard}>✕</button>
         </div>
 
         <div className="wizard-steps">
-          <section>
-            <div className="wizard-step-title">1. Выберите семейство</div>
+          <section className="wizard-step-section">
+            <div className="wizard-step-title">1. Группа</div>
             <div className="wizard-chip-grid">
               {wizardGroups.map((group) => (
                 <button key={group.id} className={wizard.groupId === group.id ? 'wizard-chip is-active' : 'wizard-chip'} onClick={() => setWizardGroup(group.id)}>
                   <strong>{group.label}</strong>
-                  <span>{group.description}</span>
                 </button>
               ))}
             </div>
           </section>
 
-          <section>
-            <div className="wizard-step-title">2. Выберите тип</div>
+          <section className="wizard-step-section">
+            <div className="wizard-step-title">2. Тип</div>
             <div className="wizard-subtype-list">
               {subtypes.map((subtype) => (
                 <button key={subtype.kind} className={wizard.kind === subtype.kind ? 'wizard-subtype is-active' : 'wizard-subtype'} onClick={() => setWizardKind(subtype.kind)}>
                   <strong>{subtype.label}</strong>
-                  <span>{subtype.description}</span>
                 </button>
               ))}
             </div>
           </section>
 
-          <section>
-            <div className="wizard-step-title">3. Заполните поля</div>
-            <div className="wizard-context-grid">
-              <div><span>Среда</span><strong>{context.inferredMedium ?? 'water'}</strong></div>
-              <div><span>Диаметр</span><strong>{context.inferredDiameter ?? 'DN50'}</strong></div>
-              <div><span>Тег</span><strong>{wizard.values.technicalTag || '—'}</strong></div>
-              <div><span>Группа</span><strong>{wizardGroups.find((group) => group.id === wizard.groupId)?.label}</strong></div>
+          <section className="wizard-step-section">
+            <div className="wizard-step-title">3. Обязательные параметры</div>
+            <div className="wizard-context-strip" aria-label="Контекст по умолчанию">
+              <div className="wizard-context-grid">
+                <div><span>Группа</span><strong>{activeGroup?.label ?? '—'}</strong></div>
+                <div><span>Тип</span><strong>{activeSubtype?.label ?? '—'}</strong></div>
+                <div><span>Среда</span><strong>{context.inferredMedium ?? 'water'}</strong></div>
+                <div><span>Диаметр</span><strong>{context.inferredDiameter ?? 'DN50'}</strong></div>
+                <div><span>Тег</span><strong>{wizard.values.technicalTag || '—'}</strong></div>
+              </div>
             </div>
-            <div className="wizard-section-note">Проверьте поля перед созданием.</div>
             <div className="wizard-form-grid">
               {requiredFields.map(renderField)}
             </div>
             {optionalFields.length ? (
               <div className="wizard-advanced">
                 <button type="button" className={advancedOpen ? 'wizard-advanced-toggle is-open' : 'wizard-advanced-toggle'} onClick={() => setAdvancedOpen((value) => !value)} aria-expanded={advancedOpen}>
-                  <span>4. Дополнительно</span>
-                  <strong>{advancedOpen ? 'Свернуть' : 'Открыть'}</strong>
+                  <span>Дополнительно</span>
+                  <strong>{advancedOpen ? 'Скрыть' : 'Показать'}</strong>
                 </button>
                 {advancedOpen ? <div className="wizard-form-grid">{optionalFields.map(renderField)}</div> : null}
               </div>
@@ -113,12 +114,8 @@ export const EquipmentWizard = () => {
         </div>
 
         <div className="wizard-footer">
-          <div className="wizard-footer-copy">
-            <strong>Готово</strong>
-            <span>Проверьте тег и поля.</span>
-          </div>
           <div className="wizard-footer-actions">
-            <button onClick={regenerateWizardTag}>Новый тег</button>
+            <button onClick={regenerateWizardTag}>Обновить тег</button>
             <button className="primary" onClick={createEquipment}>Создать элемент</button>
           </div>
         </div>
