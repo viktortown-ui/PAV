@@ -1,16 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 
-type SimulationPanelMode = 'compact' | 'expanded' | 'hidden';
-type SimulationPanelPlacement = 'left' | 'center' | 'right';
+type SimulationPanelMode = 'hidden' | 'mini' | 'compact' | 'expanded';
 
 type SimulationPanelProps = {
-  placement?: SimulationPanelPlacement;
   focusMode?: boolean;
 };
 
 const speedOptions = [0.5, 1, 1.5, 2, 3];
-const panelModeOrder: SimulationPanelMode[] = ['hidden', 'compact', 'expanded'];
+const panelModeOrder: SimulationPanelMode[] = ['hidden', 'mini', 'compact', 'expanded'];
 const panelModeStorageKey = 'simulation-panel-mode';
 
 const mediumLabel: Record<string, string> = {
@@ -27,7 +25,14 @@ const cyclePanelMode = (mode: SimulationPanelMode) => {
   return panelModeOrder[(currentIndex + 1) % panelModeOrder.length];
 };
 
-export const SimulationPanel = ({ placement = 'center', focusMode = false }: SimulationPanelProps) => {
+const formatEventTime = (timestamp: string | number) => new Date(timestamp).toLocaleTimeString('ru-RU', {
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  timeZone: 'UTC',
+});
+
+export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => {
   const project = useAppStore((state) => state.project);
   const selectedNodeId = useAppStore((state) => state.selectedNodeId);
   const selectedEdgeId = useAppStore((state) => state.selectedEdgeId);
@@ -38,9 +43,9 @@ export const SimulationPanel = ({ placement = 'center', focusMode = false }: Sim
   const issues = useAppStore((state) => state.issues);
   const showProblematicOnly = useAppStore((state) => state.showProblematicOnly);
   const [panelMode, setPanelMode] = useState<SimulationPanelMode>(() => {
-    if (typeof window === 'undefined') return 'compact';
+    if (typeof window === 'undefined') return 'mini';
     const storedMode = window.sessionStorage.getItem(panelModeStorageKey);
-    return storedMode === 'expanded' || storedMode === 'hidden' || storedMode === 'compact' ? storedMode : 'compact';
+    return storedMode === 'hidden' || storedMode === 'mini' || storedMode === 'compact' || storedMode === 'expanded' ? storedMode : 'mini';
   });
 
   useEffect(() => {
@@ -63,48 +68,65 @@ export const SimulationPanel = ({ placement = 'center', focusMode = false }: Sim
   const selectedNode = project.nodes.find((node) => node.id === selectedNodeId);
   const selectedEdge = project.edges.find((edge) => edge.id === selectedEdgeId);
   const warningCount = issues.filter((issue) => issue.severity !== 'info').length;
-  const recentEvents = useMemo(() => project.eventLog.slice(-6).reverse(), [project.eventLog]);
   const activeWarnings = useMemo(() => project.simulation.warnings.slice(0, 4), [project.simulation.warnings]);
+  const recentEvents = useMemo(() => project.eventLog.slice(-8).reverse(), [project.eventLog]);
+  const latestEvent = recentEvents[0];
   const selectionLabel = selectedNode
     ? `${selectedNode.data.visibleName} • ${selectedNode.data.technicalTag}`
     : selectedEdge
       ? `${selectedEdge.data?.sourceLabel} → ${selectedEdge.data?.targetLabel}`
       : 'ничего не выбрано';
+  const filterLabel = showProblematicOnly ? 'Только проблемные' : 'Все';
+  const modeSummary = project.simulation.running ? 'Симуляция включена' : 'Редактирование';
 
-  const modeLabel = panelMode === 'expanded' ? 'Свернуть панель' : panelMode === 'compact' ? 'Развернуть панель' : 'Показать панель';
-  const modeIcon = panelMode === 'expanded' ? '▾' : panelMode === 'compact' ? '▴' : '◱';
+  const modeButtons: Array<{ mode: SimulationPanelMode; label: string }> = [
+    { mode: 'hidden', label: 'Скрыто' },
+    { mode: 'mini', label: 'Dock' },
+    { mode: 'compact', label: 'Сводка' },
+    { mode: 'expanded', label: 'Лист' },
+  ];
 
   return (
-    <div className={`simulation-panel-shell placement-${placement} mode-${panelMode} ${focusMode ? 'is-focus-mode' : ''}`} data-panel-mode={panelMode}>
-      <div className="simulation-panel-toggle-rail" role="toolbar" aria-label="Режим панели диагностики">
-        <button
-          type="button"
-          className="simulation-panel-toggle"
-          onClick={() => setPanelMode(panelMode === 'expanded' ? 'compact' : 'expanded')}
-          aria-expanded={panelMode === 'expanded'}
-        >
-          <span className="toggle-icon" aria-hidden="true">{modeIcon}</span>
-          <span>{modeLabel}</span>
-        </button>
-        <button type="button" className="simulation-panel-toggle is-secondary" onClick={() => setPanelMode(panelMode === 'hidden' ? 'compact' : 'hidden')}>
-          <span className="toggle-icon" aria-hidden="true">{panelMode === 'hidden' ? '◰' : '—'}</span>
-          <span>{panelMode === 'hidden' ? 'Показать панель' : 'Скрыть панель'}</span>
+    <section className={`simulation-dock is-${panelMode} ${focusMode ? 'is-focus-mode' : ''}`} data-panel-mode={panelMode} aria-label="Нижняя панель симуляции и диагностики">
+      <div className="simulation-dock-launcher" aria-hidden={panelMode !== 'hidden'}>
+        <button type="button" className="simulation-launcher-button" onClick={() => setPanelMode('mini')} aria-expanded={panelMode !== 'hidden'}>
+          <span className="launcher-title">Диагностика</span>
+          <span className="launcher-meta">{warningCount} предупрежд. • {Math.round(project.simulation.totalActiveFlow)} л/мин</span>
         </button>
       </div>
 
-      {panelMode !== 'hidden' && (
-        <div className={`simulation-panel mode-${panelMode}`}>
-          <div className="sim-compact-bar">
-            <div className="sim-control-group sim-control-group-primary">
-              <button type="button" onClick={() => setSimulationRunning(true)} disabled={project.simulation.running}>▶ Пуск</button>
+      <div className="simulation-dock-panel">
+        <div className="simulation-dock-grab" aria-hidden="true" />
+        <div className="simulation-dock-toolbar" role="toolbar" aria-label="Состояние нижней панели">
+          <div className="simulation-dock-titleblock">
+            <span className="simulation-dock-kicker">Нижняя панель</span>
+            <strong>Управление потоком и диагностика</strong>
+          </div>
+          <div className="simulation-dock-mode-switch">
+            {modeButtons.map(({ mode, label }) => (
+              <button
+                key={mode}
+                type="button"
+                className={panelMode === mode ? 'is-active' : ''}
+                onClick={() => setPanelMode(mode)}
+                aria-pressed={panelMode === mode}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="simulation-dock-row simulation-dock-row-primary">
+          <div className="dock-zone dock-zone-controls" aria-label="Управление симуляцией">
+            <span className="dock-zone-label">Zone A • Controls</span>
+            <div className="dock-controls-cluster">
+              <button type="button" className="is-primary" onClick={() => setSimulationRunning(true)} disabled={project.simulation.running}>▶ Пуск</button>
               <button type="button" onClick={() => setSimulationRunning(false)} disabled={!project.simulation.running}>❚❚ Пауза</button>
               <button type="button" onClick={resetSimulation}>↺ Сброс</button>
-            </div>
-
-            <div className="sim-compact-metrics">
-              <div className="compact-metric">
+              <div className="dock-speed-field">
                 <span>Скорость</span>
-                <div className="sim-speed-group">
+                <div className="dock-speed-options">
                   {speedOptions.map((speed) => (
                     <button
                       type="button"
@@ -117,76 +139,161 @@ export const SimulationPanel = ({ placement = 'center', focusMode = false }: Sim
                   ))}
                 </div>
               </div>
-              <div className="compact-metric"><span>Поток</span><strong>{Math.round(project.simulation.totalActiveFlow)} л/мин</strong></div>
-              <div className="compact-metric"><span>Предупреждения</span><strong>{warningCount}</strong></div>
-              <div className="compact-metric compact-metric-event"><span>Последнее событие</span><strong>{project.simulation.lastEvent}</strong></div>
             </div>
           </div>
 
-          {panelMode === 'expanded' && (
-            <div className="sim-expanded-content">
-              <div className="sim-header">
-                <div>
-                  <strong>Диагностика технологической схемы</strong>
-                  <span>Панель открывается по запросу и не мешает работе со схемой.</span>
-                </div>
-                <div className="sim-pills">
-                  <span className="sim-pill">{project.simulation.running ? 'Симуляция включена' : 'Режим редактирования'}</span>
-                  <span className="sim-pill">Среда: {mediumLabel[project.simulation.activeMedium]}</span>
-                  <span className="sim-pill">Выбор: {selectionLabel}</span>
-                </div>
+          <div className="dock-zone dock-zone-status" aria-label="Живой статус симуляции">
+            <span className="dock-zone-label">Zone B • Live status</span>
+            <div className="dock-status-strip">
+              <div className="dock-status-item">
+                <span>Поток</span>
+                <strong>{Math.round(project.simulation.totalActiveFlow)} л/мин</strong>
               </div>
+              <div className="dock-status-item warning-state">
+                <span>Предупреждения</span>
+                <strong>{warningCount}</strong>
+              </div>
+              <div className="dock-status-item dock-status-item-wide">
+                <span>Последнее событие</span>
+                <strong>{project.simulation.lastEvent}</strong>
+              </div>
+              <div className="dock-status-item">
+                <span>Режим</span>
+                <strong>{modeSummary}</strong>
+              </div>
+            </div>
+          </div>
 
-              <div className="status-grid diagnostics-grid">
-                <div className="status-card">
-                  <span>Активные предупреждения</span>
-                  <strong>{warningCount}</strong>
-                  <small>{activeWarnings[0] ?? 'Нет активных предупреждений'}</small>
+          <div className="dock-zone dock-zone-expand">
+            <span className="dock-zone-label">Панель</span>
+            <button
+              type="button"
+              className="dock-expand-button"
+              onClick={() => setPanelMode(panelMode === 'expanded' ? 'compact' : panelMode === 'compact' ? 'mini' : 'expanded')}
+              aria-expanded={panelMode === 'expanded'}
+            >
+              <span>{panelMode === 'expanded' ? 'Свернуть' : panelMode === 'compact' ? 'Мини-dock' : 'Развернуть'}</span>
+              <strong>{panelMode === 'expanded' ? '▾' : '▴'}</strong>
+            </button>
+          </div>
+        </div>
+
+        <div className="simulation-dock-row simulation-dock-row-summary">
+          <div className="dock-zone dock-zone-filters" aria-label="Фильтры и режимы">
+            <span className="dock-zone-label">Zone C • Filters / mode</span>
+            <div className="dock-filter-chips">
+              <button type="button" className={!showProblematicOnly ? 'is-active' : ''} onClick={() => showProblematicOnly && toggleProblematicOnly()}>Все</button>
+              <button type="button" className={showProblematicOnly ? 'is-active' : ''} onClick={() => !showProblematicOnly && toggleProblematicOnly()}>Только проблемные</button>
+              <button type="button" className={(selectedNode || selectedEdge) ? 'is-active' : ''} disabled>Выбранное</button>
+              <button type="button" disabled>Текущая линия</button>
+            </div>
+          </div>
+
+          <div className="dock-zone dock-zone-summary" aria-label="Сводка панели">
+            <span className="dock-zone-label">Сводка</span>
+            <div className="dock-summary-grid">
+              <div>
+                <span>Среда</span>
+                <strong>{mediumLabel[project.simulation.activeMedium]}</strong>
+              </div>
+              <div>
+                <span>Фильтр</span>
+                <strong>{filterLabel}</strong>
+              </div>
+              <div className="is-wide">
+                <span>Выбор</span>
+                <strong>{selectionLabel}</strong>
+              </div>
+              <div className="is-wide">
+                <span>Активное предупреждение</span>
+                <strong>{activeWarnings[0] ?? 'Нет активных предупреждений'}</strong>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="simulation-dock-sheet">
+          <div className="simulation-sheet-main">
+            <div className="sheet-section sheet-section-overview">
+              <div className="sheet-section-head">
+                <div>
+                  <span className="dock-zone-label">Zone D • Journal</span>
+                  <strong>Диагностический лист</strong>
                 </div>
-                <div className="status-card">
-                  <span>Среда</span>
+                <button type="button" className="sheet-focus-button" onClick={toggleProblematicOnly}>
+                  {showProblematicOnly ? 'Показать всю схему' : 'Фокус на проблемах'}
+                </button>
+              </div>
+              <div className="sheet-overview-grid">
+                <div>
+                  <span>Mode</span>
+                  <strong>{modeSummary}</strong>
+                </div>
+                <div>
+                  <span>Medium</span>
                   <strong>{mediumLabel[project.simulation.activeMedium]}</strong>
                 </div>
-                <div className="status-card">
-                  <span>Выбор</span>
+                <div className="is-wide">
+                  <span>Selection summary</span>
                   <strong>{selectionLabel}</strong>
                 </div>
-                <div className="status-card">
-                  <span>Режим фильтра</span>
-                  <strong>{showProblematicOnly ? 'Только проблемные' : 'Вся схема'}</strong>
-                  <small>Упростите обзор без потери управления.</small>
-                </div>
-              </div>
-
-              <div className="warning-strip">
-                {activeWarnings.length
-                  ? activeWarnings.map((warning) => <span key={warning} className="warning-pill">{warning}</span>)
-                  : <span className="warning-pill is-idle">Активных предупреждений нет</span>}
-              </div>
-
-              <div className="sim-diagnostics-actions">
-                <button type="button" onClick={toggleProblematicOnly}>{showProblematicOnly ? 'Показать всю схему' : 'Фокус на проблемных узлах'}</button>
-                <span>Горячая клавиша: Alt/⌘ + D</span>
-              </div>
-
-              <div className="event-log-card">
-                <div className="event-log-head">
-                  <strong>Журнал событий</strong>
-                  <span>Буфер: {project.eventLog.length}</span>
-                </div>
-                <div className="event-log-list">
-                  {recentEvents.map((event) => (
-                    <div key={event.id} className={`event-log-item severity-${event.severity}`}>
-                      <span>{new Date(event.timestamp).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'UTC' })}</span>
-                      <strong>{event.message}</strong>
-                    </div>
-                  ))}
+                <div className="is-wide">
+                  <span>Warnings</span>
+                  <strong>{activeWarnings.join(' • ') || 'Нет активных предупреждений'}</strong>
                 </div>
               </div>
             </div>
-          )}
+
+            <div className="sheet-section sheet-section-log">
+              <div className="sheet-section-head">
+                <div>
+                  <strong>Журнал событий</strong>
+                  <span>Последние записи технологического контура</span>
+                </div>
+                <span className="sheet-section-meta">Буфер: {project.eventLog.length}</span>
+              </div>
+              <div className="sheet-journal-list">
+                {recentEvents.map((event) => (
+                  <article key={event.id} className={`sheet-journal-item severity-${event.severity}`}>
+                    <span>{formatEventTime(event.timestamp)}</span>
+                    <strong>{event.message}</strong>
+                    <small>{event.type}</small>
+                  </article>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <aside className="simulation-sheet-side">
+            <div className="sheet-section">
+              <div className="sheet-section-head">
+                <div>
+                  <strong>Активные предупреждения</strong>
+                  <span>Приоритетные сигналы и отклонения</span>
+                </div>
+              </div>
+              <div className="sheet-warning-list">
+                {activeWarnings.length
+                  ? activeWarnings.map((warning) => <div key={warning} className="sheet-warning-item">{warning}</div>)
+                  : <div className="sheet-warning-item is-idle">Активных предупреждений нет</div>}
+              </div>
+            </div>
+
+            <div className="sheet-section">
+              <div className="sheet-section-head">
+                <div>
+                  <strong>Последнее событие</strong>
+                  <span>{latestEvent ? formatEventTime(latestEvent.timestamp) : 'Нет записей'}</span>
+                </div>
+              </div>
+              <div className="sheet-last-event">
+                <strong>{latestEvent?.message ?? project.simulation.lastEvent}</strong>
+                <span>{latestEvent?.type ?? 'system'}</span>
+              </div>
+            </div>
+          </aside>
         </div>
-      )}
-    </div>
+      </div>
+    </section>
   );
 };
