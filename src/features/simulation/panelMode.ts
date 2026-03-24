@@ -1,7 +1,7 @@
-export type DiagnosticsPanelState = 'hidden' | 'miniDock' | 'compact' | 'expanded';
+export type DiagnosticsPanelState = 'hidden' | 'compact' | 'standard' | 'full';
 export type DiagnosticsPanelTrigger = 'launcher' | 'step-expand' | 'step-collapse' | 'close';
 
-export const diagnosticsPanelStateOrder: DiagnosticsPanelState[] = ['hidden', 'miniDock', 'compact', 'expanded'];
+export const diagnosticsPanelStateOrder: DiagnosticsPanelState[] = ['hidden', 'compact', 'standard', 'full'];
 export const diagnosticsPanelStateStorageKey = 'simulation-panel-mode';
 export const diagnosticsPanelLastOpenStateStorageKey = 'simulation-panel-last-open-mode';
 
@@ -10,31 +10,33 @@ Diagnostics bottom panel state machine
 
 States
 - hidden
-- miniDock
 - compact
-- expanded
+- standard
+- full
 
 Allowed transitions
-- hidden --launcher--> miniDock
-- miniDock --step-expand--> compact
-- compact --step-expand--> expanded
-- expanded --step-collapse--> compact
+- hidden --launcher--> compact
+- compact --step-expand--> standard
+- standard --step-expand--> full
+- full --step-collapse--> standard
+- standard --step-collapse--> compact
 - compact --close--> hidden
-- expanded --close--> hidden
+- standard --close--> hidden
+- full --close--> hidden
 `.trim();
 
 export const isDiagnosticsPanelState = (value: string | null | undefined): value is DiagnosticsPanelState => (
-  value === 'hidden' || value === 'miniDock' || value === 'compact' || value === 'expanded'
+  value === 'hidden' || value === 'compact' || value === 'standard' || value === 'full'
 );
 
 export const coerceDiagnosticsPanelState = (
   value: string | null | undefined,
-  fallback: DiagnosticsPanelState = 'miniDock',
+  fallback: DiagnosticsPanelState = 'compact',
 ) => (isDiagnosticsPanelState(value) ? value : fallback);
 
 export const getLastOpenDiagnosticsPanelState = (
   value: string | null | undefined,
-  fallback: Exclude<DiagnosticsPanelState, 'hidden'> = 'miniDock',
+  fallback: Exclude<DiagnosticsPanelState, 'hidden'> = 'compact',
 ) => {
   const nextState = coerceDiagnosticsPanelState(value, fallback);
   return nextState === 'hidden' ? fallback : nextState;
@@ -46,15 +48,18 @@ export const transitionDiagnosticsPanelState = (
 ): DiagnosticsPanelState => {
   switch (currentState) {
     case 'hidden':
-      return trigger === 'launcher' ? 'miniDock' : currentState;
-    case 'miniDock':
-      return trigger === 'step-expand' ? 'compact' : currentState;
+      return trigger === 'launcher' ? 'compact' : currentState;
     case 'compact':
-      if (trigger === 'step-expand') return 'expanded';
+      if (trigger === 'step-expand') return 'standard';
       if (trigger === 'close') return 'hidden';
       return currentState;
-    case 'expanded':
+    case 'standard':
+      if (trigger === 'step-expand') return 'full';
       if (trigger === 'step-collapse') return 'compact';
+      if (trigger === 'close') return 'hidden';
+      return currentState;
+    case 'full':
+      if (trigger === 'step-collapse') return 'standard';
       if (trigger === 'close') return 'hidden';
       return currentState;
   }
@@ -64,12 +69,12 @@ export const getDiagnosticsPanelStepLabel = (state: DiagnosticsPanelState) => {
   switch (state) {
     case 'hidden':
       return 'Скрыта';
-    case 'miniDock':
-      return 'Мини-док';
     case 'compact':
-      return 'Компактная';
-    case 'expanded':
-      return 'Развернутая';
+      return 'Compact dock';
+    case 'standard':
+      return 'Standard dock';
+    case 'full':
+      return 'Full diagnostics';
   }
 };
 
@@ -77,11 +82,11 @@ export const getDiagnosticsPanelViewportClassName = (state: DiagnosticsPanelStat
   switch (state) {
     case 'hidden':
       return 'is-hidden';
-    case 'miniDock':
-      return 'is-mini-dock';
     case 'compact':
       return 'is-compact';
-    case 'expanded':
-      return 'is-expanded';
+    case 'standard':
+      return 'is-standard';
+    case 'full':
+      return 'is-full';
   }
 };
