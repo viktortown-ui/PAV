@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import {
   DiagnosticsPanelState,
@@ -36,6 +36,7 @@ const formatEventTime = (timestamp: string | number) => new Date(timestamp).toLo
 
 export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => {
   const project = useAppStore((state) => state.project);
+  const dockRef = useRef<HTMLElement>(null);
   const selectedNodeId = useAppStore((state) => state.selectedNodeId);
   const selectedEdgeId = useAppStore((state) => state.selectedEdgeId);
   const setSimulationRunning = useAppStore((state) => state.setSimulationRunning);
@@ -94,7 +95,12 @@ export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => 
       ? `${selectedEdge.data?.sourceLabel} → ${selectedEdge.data?.targetLabel}`
       : 'ничего не выбрано';
   const filterLabel = showProblematicOnly ? 'Только проблемные' : 'Все';
-  const modeSummary = project.simulation.running ? 'Симуляция включена' : 'Редактирование';
+  const simulationStatus = project.simulation.status ?? (project.simulation.running ? 'running' : 'idle');
+  const modeSummary = simulationStatus === 'running'
+    ? 'Симуляция выполняется'
+    : simulationStatus === 'paused'
+      ? 'Симуляция на паузе'
+      : 'Базовое состояние';
 
   const panelClassName = getDiagnosticsPanelViewportClassName(panelState);
   const canClose = panelState === 'compact' || panelState === 'expanded';
@@ -103,9 +109,29 @@ export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => 
   const isMiniDock = panelState === 'miniDock';
   const isCompact = panelState === 'compact';
   const isExpanded = panelState === 'expanded';
+  const isRunning = simulationStatus === 'running';
+  const isPaused = simulationStatus === 'paused';
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const dockNode = dockRef.current;
+    if (!dockNode) return;
+    const syncDockHeight = () => {
+      const rect = dockNode.getBoundingClientRect();
+      const isHidden = panelState === 'hidden';
+      document.documentElement.style.setProperty('--simulation-dock-height', `${Math.ceil(rect.height)}px`);
+      document.documentElement.style.setProperty('--simulation-dock-visible-height', isHidden ? '0px' : `${Math.ceil(rect.height)}px`);
+    };
+    syncDockHeight();
+    const observer = new ResizeObserver(syncDockHeight);
+    observer.observe(dockNode);
+    return () => {
+      observer.disconnect();
+    };
+  }, [panelState]);
 
   return (
-    <section className={`simulation-dock ${panelClassName} ${focusMode ? 'is-focus-mode' : ''}`} data-panel-mode={panelState} aria-label="Нижняя панель симуляции и диагностики">
+    <section ref={dockRef} className={`simulation-dock ${panelClassName} ${focusMode ? 'is-focus-mode' : ''}`} data-panel-mode={panelState} aria-label="Нижняя панель симуляции и диагностики">
       <div className="simulation-dock-launcher" aria-hidden={panelState !== 'hidden'}>
         <button
           type="button"
@@ -140,9 +166,17 @@ export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => 
           <div className="dock-zone dock-zone-controls" aria-label="Управление симуляцией">
             <span className="dock-zone-label">Управление</span>
             <div className="dock-controls-cluster">
-              <button type="button" className="is-primary" onClick={() => setSimulationRunning(true)} disabled={project.simulation.running}>▶ Пуск</button>
-              <button type="button" onClick={() => setSimulationRunning(false)} disabled={!project.simulation.running}>❚❚ Пауза</button>
-              <button type="button" onClick={resetSimulation}>↺ Сброс</button>
+              <button type="button" className="is-primary" onClick={() => setSimulationRunning(true)} disabled={isRunning} title={isPaused ? 'Продолжить симуляцию' : 'Запустить симуляцию'}>
+                {isPaused ? '▶ Продолжить' : '▶ Пуск'}
+              </button>
+              <button type="button" onClick={() => setSimulationRunning(false)} disabled={!isRunning} title={isRunning ? 'Поставить симуляцию на паузу' : 'Пауза доступна только при запущенной симуляции'}>❚❚ Пауза</button>
+              <button
+                type="button"
+                onClick={resetSimulation}
+                title="Сбросить поток, предупреждения, анимацию линий и статусы узлов к исходному состоянию"
+              >
+                ↺ Сбросить состояние
+              </button>
               {!isMiniDock ? (
                 <div className="dock-speed-field">
                   <span className="dock-field-label">Скорость</span>

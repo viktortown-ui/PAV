@@ -4,7 +4,6 @@ import { shallow } from 'zustand/shallow';
 import { FlowEdge } from '../../ui/edges/FlowEdge';
 import { ProcessNode } from '../../ui/nodes/ProcessNode';
 import { useAppStore } from '../../store/useAppStore';
-import { SimulationPanel } from '../simulation/SimulationPanel';
 import { instrumentCallsite } from '../../utils/instrumentation';
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -41,6 +40,7 @@ const CanvasEditorComponent = ({ focusMode = false }: { focusMode?: boolean }) =
     pathSelection,
     showProblematicOnly,
     hoveredEdgeId,
+    simulationStatus,
     viewportNonce,
     onNodesChange,
     onEdgesChange,
@@ -60,6 +60,7 @@ const CanvasEditorComponent = ({ focusMode = false }: { focusMode?: boolean }) =
     pathSelection: state.pathSelection,
     showProblematicOnly: state.showProblematicOnly,
     hoveredEdgeId: state.hoveredEdgeId,
+    simulationStatus: state.project.simulation.status ?? (state.project.simulation.running ? 'running' : 'idle'),
     edgeLabelMode: state.edgeLabelMode,
     viewportNonce: state.viewportNonce,
     onNodesChange: state.onNodesChange,
@@ -93,11 +94,22 @@ const CanvasEditorComponent = ({ focusMode = false }: { focusMode?: boolean }) =
   }, [tickSimulation]);
 
   useEffect(() => {
+    if (simulationStatus !== 'running') {
+      lastTimeRef.current = undefined;
+      if (frameRef.current != null) {
+        cancelAnimationFrame(frameRef.current);
+        frameRef.current = undefined;
+      }
+      return;
+    }
     frameRef.current = requestAnimationFrame(animate);
     return () => {
-      if (frameRef.current) cancelAnimationFrame(frameRef.current);
+      if (frameRef.current != null) {
+        cancelAnimationFrame(frameRef.current);
+        frameRef.current = undefined;
+      }
     };
-  }, [animate]);
+  }, [animate, simulationStatus]);
 
   const problemNodeIds = useMemo(() => new Set(issues.flatMap((issue) => issue.nodeIds ?? [])), [issues]);
   const problemEdgeIds = useMemo(() => new Set(issues.flatMap((issue) => issue.edgeIds ?? [])), [issues]);
@@ -317,9 +329,6 @@ const CanvasEditorComponent = ({ focusMode = false }: { focusMode?: boolean }) =
           </section>
         </div>
       ) : null}
-      <div className={`canvas-overlay simulation-overlay ${focusMode ? 'is-focus-mode' : ''}`} onWheel={stopCanvasViewportPropagation} onPointerDown={stopCanvasViewportPropagation} onMouseDown={stopCanvasViewportPropagation}>
-        <SimulationPanel focusMode={focusMode} />
-      </div>
     </div>
   );
 };

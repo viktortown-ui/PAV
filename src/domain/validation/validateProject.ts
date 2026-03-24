@@ -53,7 +53,22 @@ const sanitizeTemplateViewMetadata = (value: unknown, fallback: TemplateViewMeta
 };
 
 const sanitizeView = (value: unknown, fallback: ProjectViewState): ProjectViewState => ({ viewport: sanitizeViewport(isObject(value) ? value.viewport : undefined), metadata: sanitizeTemplateViewMetadata(isObject(value) ? value.metadata : undefined, fallback.metadata), hasManualViewport: asBoolean(isObject(value) ? value.hasManualViewport : undefined, fallback.hasManualViewport) });
-const sanitizeSimulation = (value: unknown, fallback: SimulationSettings): SimulationSettings => ({ running: asBoolean(isObject(value) ? value.running : undefined, false), speed: Math.min(3, Math.max(0.5, asNumber(isObject(value) ? value.speed : undefined, fallback.speed))), tick: Math.max(0, asNumber(isObject(value) ? value.tick : undefined, fallback.tick)), warnings: Array.isArray(isObject(value) ? value.warnings : undefined) ? (value as any).warnings.filter((item: unknown) => typeof item === 'string').slice(0, 50) : fallback.warnings, activeMedium: (isObject(value) && (value.activeMedium === 'mixed' || value.activeMedium === 'none')) ? value.activeMedium as any : asMedium(isObject(value) ? value.activeMedium : undefined, fallback.activeMedium === 'mixed' || fallback.activeMedium === 'none' ? 'water' : fallback.activeMedium), totalActiveFlow: Math.max(0, asNumber(isObject(value) ? value.totalActiveFlow : undefined, fallback.totalActiveFlow)), lastEvent: asString(isObject(value) ? value.lastEvent : undefined, fallback.lastEvent) });
+const sanitizeSimulation = (value: unknown, fallback: SimulationSettings): SimulationSettings => {
+  const running = asBoolean(isObject(value) ? value.running : undefined, false);
+  const status = isObject(value) && (value.status === 'idle' || value.status === 'running' || value.status === 'paused')
+    ? value.status
+    : running ? 'running' : fallback.status ?? 'idle';
+  return {
+    status,
+    running: status === 'running',
+    speed: Math.min(3, Math.max(0.5, asNumber(isObject(value) ? value.speed : undefined, fallback.speed))),
+    tick: Math.max(0, asNumber(isObject(value) ? value.tick : undefined, fallback.tick)),
+    warnings: Array.isArray(isObject(value) ? value.warnings : undefined) ? (value as any).warnings.filter((item: unknown) => typeof item === 'string').slice(0, 50) : fallback.warnings,
+    activeMedium: (isObject(value) && (value.activeMedium === 'mixed' || value.activeMedium === 'none')) ? value.activeMedium as any : asMedium(isObject(value) ? value.activeMedium : undefined, fallback.activeMedium === 'mixed' || fallback.activeMedium === 'none' ? 'water' : fallback.activeMedium),
+    totalActiveFlow: Math.max(0, asNumber(isObject(value) ? value.totalActiveFlow : undefined, fallback.totalActiveFlow)),
+    lastEvent: asString(isObject(value) ? value.lastEvent : undefined, fallback.lastEvent),
+  };
+};
 const sanitizeEventLog = (value: unknown, fallback: EventLogEntry[]) => Array.isArray(value) ? value.filter(isObject).map((entry, index) => ({ id: asString(entry.id, `event-${index}`), timestamp: asString(entry.timestamp, new Date().toISOString()), type: asString(entry.type, 'restore'), message: asString(entry.message, 'Восстановлено состояние проекта'), severity: asSeverity(entry.severity), targetId: typeof entry.targetId === 'string' ? entry.targetId : undefined })).slice(-80) : fallback;
 const sanitizeDefaultValueMap = (value: unknown, fallback: DefaultValueMap = {}): DefaultValueMap => {
   if (!isObject(value)) return fallback;
