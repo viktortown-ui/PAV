@@ -229,7 +229,7 @@ const CanvasEditorComponent = ({ focusMode = false }: { focusMode?: boolean }) =
   }, [applyViewport, flow, view.hasManualViewport]);
 
   return (
-    <div className={`canvas-shell ${focusMode ? 'is-focus-mode' : ''}`} ref={shellRef}>
+    <div className={`canvas-shell sim-${simulationStatus} ${focusMode ? 'is-focus-mode' : ''}`} ref={shellRef}>
       <ReactFlow
         panOnDrag={!isViewportLocked}
         zoomOnScroll={!isViewportLocked}
@@ -273,7 +273,8 @@ const CanvasEditorComponent = ({ focusMode = false }: { focusMode?: boolean }) =
       </ReactFlow>
       {!focusMode ? (
         <div className="canvas-navigation-cluster" aria-label="Навигация по схеме" onWheel={stopCanvasViewportPropagation} onPointerDown={stopCanvasViewportPropagation} onMouseDown={stopCanvasViewportPropagation}>
-          <section className="viewport-controls-card" aria-label="Управление видом">
+          <section className="canvas-slot canvas-slot-controls">
+            <div className="viewport-controls-card" aria-label="Управление видом">
             <div className="viewport-controls-card__title">Вид схемы</div>
             <div className="viewport-controls-stack">
               <button type="button" className="viewport-control-button" title="Увеличить" aria-label="Увеличить" onClick={() => void flow?.zoomIn({ duration: 180 })}>+</button>
@@ -289,8 +290,10 @@ const CanvasEditorComponent = ({ focusMode = false }: { focusMode?: boolean }) =
                 {isViewportLocked ? '🔒' : '🔓'}
               </button>
             </div>
+            </div>
           </section>
-          <section className="minimap-card" aria-label="Навигатор">
+          <section className="canvas-slot canvas-slot-minimap">
+            <div className="minimap-card" aria-label="Навигатор">
             <div className="minimap-card__header">
               <div>
                 <div className="minimap-card__title">Навигатор</div>
@@ -306,7 +309,7 @@ const CanvasEditorComponent = ({ focusMode = false }: { focusMode?: boolean }) =
                 {isMinimapVisible ? 'Скрыть' : 'Показать'}
               </button>
             </div>
-            {isMinimapVisible ? (
+              {isMinimapVisible ? (
               <>
                 <MiniMap
                   pannable
@@ -326,6 +329,7 @@ const CanvasEditorComponent = ({ focusMode = false }: { focusMode?: boolean }) =
             ) : (
               <div className="minimap-card__collapsed">Навигатор скрыт. Откройте его, чтобы видеть положение схемы.</div>
             )}
+            </div>
           </section>
         </div>
       ) : null}

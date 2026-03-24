@@ -4,6 +4,7 @@ import { IndustrialIcon } from '../../icons/IndustrialIcon';
 import { RouteState, SoapNodeData } from '../../domain/schemas/types';
 import { mediumPalette, routeTone } from '../tokens/tokens';
 import { getHandleSpecs } from '../../domain/flow/handles';
+import { useAppStore } from '../../store/useAppStore';
 
 const routeLabel: Record<SoapNodeData['simulation']['routeState'], string> = { flowing: 'Поток', blocked: 'Блок', starved: 'Пусто', cip: 'CIP', idle: 'Ожидание', alarm: 'Авария', primed: 'Готов', draining: 'Слив', maintenance: 'Ремонт', offline: 'Вне линии' };
 const mediumLabel: Record<SoapNodeData['medium'], string> = { water: 'Вода', product: 'Продукт', cip: 'CIP', waste: 'Сток' };
@@ -11,6 +12,7 @@ const stateClassMap: Record<RouteState, string> = { flowing: 'is-flowing', block
 
 export const ProcessNode = memo(({ id, data, selected }: NodeProps<SoapNodeData>) => {
   const zoom = useStore((state) => state.transform[2]);
+  const simulationStatus = useAppStore((state) => state.project.simulation.status ?? (state.project.simulation.running ? 'running' : 'idle'));
   const updateNodeInternals = useUpdateNodeInternals();
   const far = zoom < 0.72;
   const near = zoom > 1.12 || selected;
@@ -30,6 +32,7 @@ export const ProcessNode = memo(({ id, data, selected }: NodeProps<SoapNodeData>
   const lowLevel = vesselLike && level <= 12;
   const isAlarmed = data.status === 'alarm' || routeState === 'alarm' || data.alarms.length > 0;
   const isRunning = data.status === 'running' || routeState === 'flowing' || routeState === 'cip' || routeState === 'draining';
+  const isRunningVisual = isRunning && simulationStatus === 'running';
   const blockedState = data.status === 'blocked' || routeState === 'blocked';
   const stateBadge = data.visual.stateBadge ?? (isAlarmed ? 'ALM' : blockedState ? 'BLOCK' : isRunning ? 'RUN' : lowLevel ? 'LOW' : routeLabel[routeState]);
   const process = data.process as any;
@@ -50,6 +53,7 @@ export const ProcessNode = memo(({ id, data, selected }: NodeProps<SoapNodeData>
       terminalNode ? 'is-terminal-node' : '',
       vesselLike ? 'is-vessel-node' : '',
       selected ? 'is-selected' : '',
+      `sim-${simulationStatus}`,
       stateClassMap[routeState],
       lowLevel ? 'is-low-level' : '',
       isAlarmed ? 'has-alarm' : '',
@@ -57,11 +61,11 @@ export const ProcessNode = memo(({ id, data, selected }: NodeProps<SoapNodeData>
     ].join(' ')} style={{ ['--accent' as string]: palette.base, ['--route' as string]: routeTone[routeState], ['--fill-level' as string]: `${level}%` }}>
       {handles.filter((handle) => handle.type === 'target').map((handle) => <Handle key={handle.id} id={handle.id} type={handle.type} position={handle.position} className={handle.className} />)}
       <div className="node-shell">
-        <div className={`node-icon ${isRunning ? 'is-live' : ''} ${agitatorOn ? 'is-mixing' : ''} ${data.className === 'valve' ? 'is-valve-icon' : ''} ${data.className === 'instrument' ? 'is-instrument-icon' : ''} ${terminalNode ? 'is-terminal-icon' : ''}`}>
+        <div className={`node-icon ${isRunningVisual ? 'is-live' : ''} ${agitatorOn && simulationStatus === 'running' ? 'is-mixing' : ''} ${data.className === 'valve' ? 'is-valve-icon' : ''} ${data.className === 'instrument' ? 'is-instrument-icon' : ''} ${terminalNode ? 'is-terminal-icon' : ''}`}>
           <IndustrialIcon kind={data.kind} active={data.simulation.active} />
           {vesselLike ? <div className={`vessel-fill ${lowLevel ? 'is-low' : ''}`} style={{ height: `${level}%`, background: `linear-gradient(180deg, ${palette.glow}, ${palette.fill})` }}><span className="vessel-wave" /></div> : null}
           {heatingOn ? <span className="thermal-ring" /> : null}
-          {lineEquipment && isRunning ? <span className="equipment-spinner" /> : null}
+          {lineEquipment && isRunningVisual ? <span className="equipment-spinner" /> : null}
         </div>
         <div className="node-copy">
           <div className="node-labels">
