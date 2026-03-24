@@ -60,7 +60,7 @@ const FlowEdgeComponent = ({ id, sourceX, sourceY, targetX, targetY, sourcePosit
   const warnings = (data?.routeWarnings ?? []).slice(0, 2);
   const isRunningSimulation = simulationStatus === 'running';
   const isPausedSimulation = simulationStatus === 'paused';
-  const shouldAnimateFlow = isRunningSimulation && active;
+  const shouldAnimateFlow = (isRunningSimulation || isPausedSimulation) && active;
   const effectiveSpeed = Math.max(0.5, simulationSpeed || 1);
   const primaryBase = Math.max(0.65, 2.6 - Number(data?.flowRate ?? 0) / 36);
   const secondaryBase = Math.max(0.85, 3.2 - Number(data?.flowRate ?? 0) / 44);
