@@ -25,6 +25,8 @@ type PaletteAction = { id: string; title: string; subtitle: string; keywords: st
 
 const shellStateKey = 'pav-shell-state';
 const commandPaletteKey = 'k';
+const datasheetMediumLabel: Record<string, string> = { water: 'Вода', product: 'Продукт', cip: 'CIP', waste: 'Сток', none: 'Нет', mixed: 'Смешанная' };
+const datasheetRouteLabel: Record<string, string> = { idle: 'Ожидание', primed: 'Подготовлен', flowing: 'Поток', blocked: 'Блокировка', starved: 'Нет подпитки', draining: 'Слив', cip: 'CIP', alarm: 'Авария', maintenance: 'Ремонт', offline: 'Отключён' };
 const inlineInsertActions = [
   { id: 'inline-shutoff', title: 'Вставить запорный клапан', subtitle: 'На линию • запорная арматура', keywords: 'insert inline valve shutoff клапан арматура on line', kind: 'shutoffValve' },
   { id: 'inline-flowmeter', title: 'Вставить расходомер', subtitle: 'На линию • контроль расхода', keywords: 'insert inline flow meter расходомер кип line', kind: 'flowMeter' },
@@ -70,13 +72,13 @@ const DatasheetPanel = () => {
     ['Имя', node.data.visibleName],
     ['Тег', node.data.technicalTag],
     ['Категория', node.data.category],
-    ['Среда', node.data.mediumType],
+    ['Среда', datasheetMediumLabel[node.data.mediumType] ?? node.data.mediumType],
     ['Статус', node.data.status],
   ] : edge ? [
     ['ID сегмента', edge.data?.segmentId ?? edge.id],
-    ['Среда', edge.data?.medium ?? 'water'],
+    ['Среда', datasheetMediumLabel[edge.data?.medium ?? 'water'] ?? edge.data?.medium ?? 'Вода'],
     ['DN', edge.data?.nominalDiameter ?? 'DN50'],
-    ['Маршрут', edge.data?.routeState ?? 'idle'],
+    ['Маршрут', datasheetRouteLabel[edge.data?.routeState ?? 'idle'] ?? edge.data?.routeState ?? 'Ожидание'],
     ['Источник', edge.data?.sourceLabel ?? edge.source],
   ] : [];
   return <div className="shell-side-panel"><div className="panel-title">Паспорт</div><div className="shell-panel-section"><strong>{node ? 'Карточка оборудования' : edge ? 'Карточка сегмента' : 'Нет выбора'}</strong>{rows.length ? <dl className="datasheet-grid">{rows.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{String(value)}</dd></div>)}</dl> : <p className="empty-state">Выберите объект или линию, чтобы открыть паспорт.</p>}</div></div>;

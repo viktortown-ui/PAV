@@ -101,6 +101,7 @@ export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => 
     : simulationStatus === 'paused'
       ? 'Симуляция на паузе'
       : 'Базовое состояние';
+  const modeChipLabel = simulationStatus === 'running' ? 'В работе' : simulationStatus === 'paused' ? 'Пауза' : 'Ожидание';
 
   const panelClassName = getDiagnosticsPanelViewportClassName(panelState);
   const canClose = panelState === 'compact' || panelState === 'expanded';
@@ -131,7 +132,7 @@ export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => 
   }, [panelState]);
 
   return (
-    <section ref={dockRef} className={`simulation-dock ${panelClassName} ${focusMode ? 'is-focus-mode' : ''}`} data-panel-mode={panelState} aria-label="Нижняя панель симуляции и диагностики">
+    <section ref={dockRef} className={`simulation-dock sim-${simulationStatus} ${panelClassName} ${focusMode ? 'is-focus-mode' : ''}`} data-panel-mode={panelState} aria-label="Нижняя панель симуляции и диагностики">
       <div className="simulation-dock-launcher" aria-hidden={panelState !== 'hidden'}>
         <button
           type="button"
@@ -156,6 +157,7 @@ export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => 
               <small>{modeSummary}</small>
             </div>
             <div className="simulation-dock-toolbar-actions">
+              <span className={`simulation-status-chip is-${simulationStatus}`}>{modeChipLabel}</span>
               <span className="simulation-dock-state-label">{getDiagnosticsPanelStepLabel(panelState)}</span>
               <button type="button" className="simulation-dock-close" onClick={() => setPanelState((currentState) => transitionDiagnosticsPanelState(currentState, 'close'))}>Скрыть</button>
             </div>
@@ -208,15 +210,15 @@ export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => 
                 <span className="metric-label">Предупреждения</span>
                 <strong>{warningCount}</strong>
               </div>
+              <div className={`dock-status-item dock-status-state is-${simulationStatus}`}>
+                <span className="metric-label">Режим</span>
+                <strong>{modeChipLabel}</strong>
+              </div>
               {!isMiniDock ? (
                 <>
                   <div className="dock-status-item dock-status-item-wide">
                     <span className="metric-label">Выбор</span>
                     <strong>{selectionLabel}</strong>
-                  </div>
-                  <div className="dock-status-item">
-                    <span className="metric-label">Режим</span>
-                    <strong>{modeSummary}</strong>
                   </div>
                 </>
               ) : null}
@@ -249,36 +251,6 @@ export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => 
 
         {(isCompact || isExpanded) ? (
           <div className="simulation-dock-row simulation-dock-row-summary">
-            {isExpanded ? (
-              <div className="dock-zone dock-zone-filters" aria-label="Фильтры и режимы">
-                <span className="dock-zone-label">Фильтры</span>
-                <div className="dock-filter-chips">
-                  <button type="button" className={!showProblematicOnly ? 'is-active' : ''} onClick={() => showProblematicOnly && toggleProblematicOnly()}>Все</button>
-                  <button type="button" className={showProblematicOnly ? 'is-active' : ''} onClick={() => !showProblematicOnly && toggleProblematicOnly()}>Только проблемные</button>
-                  <button type="button" className={(selectedNode || selectedEdge) ? 'is-active' : ''} disabled>Выбранное</button>
-                  <button type="button" disabled>Текущая линия</button>
-                </div>
-              </div>
-            ) : (
-              <div className="dock-zone dock-zone-summary" aria-label="Сводка панели">
-                <span className="dock-zone-label">Контекст</span>
-                <div className="dock-summary-grid dock-summary-grid-compact">
-                  <div>
-                    <span className="metric-label">Среда</span>
-                    <strong>{mediumLabel[project.simulation.activeMedium]}</strong>
-                  </div>
-                  <div>
-                    <span className="metric-label">Фильтр</span>
-                    <strong>{filterLabel}</strong>
-                  </div>
-                  <div className="is-wide">
-                    <span className="metric-label">Активное предупреждение</span>
-                    <strong>{activeWarnings[0] ?? 'Нет активных предупреждений'}</strong>
-                  </div>
-                </div>
-              </div>
-            )}
-
             <div className="dock-zone dock-zone-summary" aria-label="Сводка панели">
               <span className="dock-zone-label">Контекст</span>
               <div className="dock-summary-grid">
@@ -299,6 +271,26 @@ export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => 
                   <strong>{activeWarnings[0] ?? 'Нет активных предупреждений'}</strong>
                 </div>
               </div>
+            </div>
+            <div className="dock-zone dock-zone-filters" aria-label="Фильтры и режимы">
+              <span className="dock-zone-label">Фильтры</span>
+              <div className="dock-filter-chips">
+                <button type="button" className={!showProblematicOnly ? 'is-active' : ''} onClick={() => showProblematicOnly && toggleProblematicOnly()}>Все</button>
+                <button type="button" className={showProblematicOnly ? 'is-active' : ''} onClick={() => !showProblematicOnly && toggleProblematicOnly()}>Только проблемные</button>
+                <button type="button" className={(selectedNode || selectedEdge) ? 'is-active' : ''} disabled>Выбранное</button>
+              </div>
+              {!isExpanded ? (
+                <div className="dock-summary-grid dock-summary-grid-compact">
+                  <div>
+                    <span className="metric-label">Режим</span>
+                    <strong>{modeChipLabel}</strong>
+                  </div>
+                  <div>
+                    <span className="metric-label">Скорость</span>
+                    <strong>{project.simulation.speed.toFixed(project.simulation.speed % 1 === 0 ? 0 : 1)}x</strong>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
         ) : null}
@@ -381,7 +373,7 @@ export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => 
                 <div className="sheet-last-event">
                   <span className="metric-label">Состояние</span>
                   <strong>{latestEvent?.message ?? project.simulation.lastEvent}</strong>
-                  <span>{latestEvent?.type ?? 'system'}</span>
+                  <span>{latestEvent?.type ?? 'система'}</span>
                 </div>
               </div>
             </aside>
