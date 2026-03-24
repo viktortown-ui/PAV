@@ -6,15 +6,15 @@ export const diagnosticsPanelStateStorageKey = 'simulation-panel-mode';
 export const diagnosticsPanelLastOpenStateStorageKey = 'simulation-panel-last-open-mode';
 
 export const diagnosticsPanelStateMachineDefinition = `
-Diagnostics bottom panel state machine
+Состояния нижней панели диагностики
 
-States
+Состояния
 - hidden
 - compact
 - standard
 - full
 
-Allowed transitions
+Разрешённые переходы
 - hidden --launcher--> compact
 - compact --step-expand--> standard
 - standard --step-expand--> full
@@ -70,11 +70,11 @@ export const getDiagnosticsPanelStepLabel = (state: DiagnosticsPanelState) => {
     case 'hidden':
       return 'Скрыта';
     case 'compact':
-      return 'Compact dock';
+      return 'Компактная панель';
     case 'standard':
-      return 'Standard dock';
+      return 'Стандартная панель';
     case 'full':
-      return 'Full diagnostics';
+      return 'Полная диагностика';
   }
 };
 

@@ -71,7 +71,7 @@ const FlowEdgeComponent = ({ id, sourceX, sourceY, targetX, targetY, sourcePosit
           {edgeEditorMode === 'insert' ? (
             <div className="edge-picker">
               <button type="button" className="nodrag nopan" onMouseDown={stopCanvasGesture} onClick={(event) => { stopCanvasGesture(event); openLibraryPicker('context-insert', { edgeId: id }); setEdgeEditorMode(undefined); }}>
-                Открыть picker
+                Открыть выбор
               </button>
               <button type="button" className="is-secondary nodrag nopan" onMouseDown={stopCanvasGesture} onClick={(event) => { stopCanvasGesture(event); setEdgeEditorMode('actions'); }}>Назад</button>
             </div>
@@ -80,7 +80,7 @@ const FlowEdgeComponent = ({ id, sourceX, sourceY, targetX, targetY, sourcePosit
               <button type="button" className="nodrag nopan" onMouseDown={stopCanvasGesture} onClick={(event) => { stopCanvasGesture(event); setEdgeEditorMode('insert'); }}>Вставить</button>
               <button type="button" className="nodrag nopan" onMouseDown={stopCanvasGesture} onClick={(event) => { stopCanvasGesture(event); executeEdgeAction('branch:tee', id); }}>Ответвить</button>
               <button type="button" className="nodrag nopan" onMouseDown={stopCanvasGesture} onClick={(event) => { stopCanvasGesture(event); executeEdgeAction('break', id); }}>Разорвать</button>
-              <button type="button" className="nodrag nopan" onMouseDown={stopCanvasGesture} onClick={(event) => { stopCanvasGesture(event); executeEdgeAction('reconnect', id); }}>Переподключить</button>
+              <button type="button" className="nodrag nopan" disabled title="Недоступно в текущей версии">Переподключить</button>
             </div>
           )}
         </div>

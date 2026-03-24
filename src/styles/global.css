@@ -7,7 +7,7 @@ button { cursor: pointer; }
 .app-shell { height: var(--app-height); display: grid; grid-template-rows: auto auto minmax(0, 1fr); overflow: hidden; }
 .shell-refactor { display: grid; grid-template-rows: auto auto minmax(0, 1fr); }
 .workspace-shell { display: grid; grid-template-columns: 68px minmax(0, 1fr); min-height: 0; overflow: hidden; }
-.center-stage { display: grid; grid-template-columns: minmax(0, 1fr) auto; min-height: 0; }
+.center-stage { display: grid; grid-template-columns: minmax(0, 1fr) auto; min-height: 0; overflow: hidden; }
 .canvas-shell { position: relative; min-height: 0; padding-bottom: calc(var(--simulation-dock-visible-height) + 14px); }
 .canvas-shell .react-flow { background: radial-gradient(circle at 50% 20%, rgba(57,96,140,0.16), transparent 30%), #07111c; }
 .panel { background: rgba(10, 18, 30, 0.88); backdrop-filter: blur(10px); overflow: auto; }
@@ -96,9 +96,9 @@ button.primary, .toolbox-actions .primary { background: linear-gradient(180deg, 
 .toolbox-meta-pill { border: 1px solid rgba(255,255,255,0.06); background: rgba(255,255,255,0.03); color: #b8c8da; border-radius: 999px; padding: 4px 8px; font-size: 11px; line-height: 1.2; }
 .toolbox-meta-pill.is-compatible { border-color: rgba(110, 223, 192, 0.35); color: #b9f4de; }
 
-.right-rail { display: grid; grid-template-columns: auto auto; min-height: 0; }
-.shell-right-drawer { width: min(360px, 32vw); border-left: 1px solid rgba(122, 150, 183, 0.14); padding: 18px; }
-.shell-side-panel { display: grid; gap: 12px; }
+.right-rail { display: grid; grid-template-columns: auto auto; min-height: 0; overflow: hidden; }
+.shell-right-drawer { width: clamp(320px, 32vw, 360px); border-left: 1px solid rgba(122, 150, 183, 0.14); padding: 18px; background: rgba(10, 18, 30, 0.88); backdrop-filter: blur(10px); min-height: 0; overflow: auto; }
+.shell-side-panel { display: grid; gap: 12px; min-height: 0; }
 .shell-panel-section { display: grid; gap: 10px; padding: 12px; }
 .inspector-panel.is-compact { padding: 0; border: 0; background: transparent; }
 .inspector-panel .tabs, .line-actions .action-grid { display: flex; flex-wrap: wrap; gap: 8px; }
