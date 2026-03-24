@@ -15,6 +15,7 @@ import {
 
 type SimulationPanelProps = {
   focusMode?: boolean;
+  rightPanelVisible?: boolean;
 };
 
 const speedOptions = [0.5, 1, 1.5, 2, 3];
@@ -35,7 +36,7 @@ const formatEventTime = (timestamp: string | number) => new Date(timestamp).toLo
   timeZone: 'UTC',
 });
 
-export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => {
+export const SimulationPanel = ({ focusMode = false, rightPanelVisible = false }: SimulationPanelProps) => {
   const flow = useReactFlow();
   const project = useAppStore((state) => state.project);
   const dockRef = useRef<HTMLElement>(null);
@@ -254,7 +255,7 @@ export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => 
   );
 
   return (
-    <section ref={dockRef} className={`simulation-dock sim-${simulationStatus} ${panelClassName} ${focusMode ? 'is-focus-mode' : ''}`} data-panel-mode={panelState} aria-label="Нижняя панель симуляции и диагностики">
+    <section ref={dockRef} className={`simulation-dock sim-${simulationStatus} ${panelClassName} ${focusMode ? 'is-focus-mode' : ''} ${rightPanelVisible ? 'is-right-panel-open' : 'is-right-panel-collapsed'}`} data-panel-mode={panelState} aria-label="Нижняя панель симуляции и диагностики">
       <div className="simulation-dock-launcher" aria-hidden={panelState !== 'hidden'}>
         <button
           type="button"
