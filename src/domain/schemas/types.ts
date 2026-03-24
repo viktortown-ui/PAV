@@ -337,6 +337,7 @@ export interface EventLogEntry {
 }
 
 export interface SimulationSettings {
+  status: 'idle' | 'running' | 'paused';
   running: boolean;
   speed: number;
   tick: number;

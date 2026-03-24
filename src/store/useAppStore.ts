@@ -129,6 +129,10 @@ const reapplyDerivedState = (project: ProjectDocument) => {
 
 const sanitizeProjectState = (project: ProjectDocument, revision = 0, persistedRevision = revision, viewportNonce = 0) => {
   const normalizedProject = normalizeProjectEdgeHandles(project);
+  normalizedProject.simulation = {
+    ...normalizedProject.simulation,
+    status: normalizedProject.simulation.status ?? (normalizedProject.simulation.running ? 'running' : 'idle'),
+  };
   return {
     project: normalizedProject,
     projectRevision: revision,
@@ -209,6 +213,7 @@ const leftHandleId = DEFAULT_TARGET_HANDLE;
 const rightHandleId = DEFAULT_SOURCE_HANDLE;
 
 const logEvent = (project: ProjectDocument, message: string, targetId?: string, severity: 'info' | 'warning' | 'error' = 'info', type = 'editor'): ProjectDocument => ({ ...project, eventLog: [...project.eventLog, { id: crypto.randomUUID(), timestamp: new Date().toISOString(), type, message, severity, targetId }] });
+const toSimulationStatus = (running: boolean): SimulationSettings['status'] => (running ? 'running' : 'paused');
 
 interface AppState {
   project: ProjectDocument; projectRevision: number; persistedRevision: number; viewportNonce: number; selectedNodeId?: string; selectedEdgeId?: string; search: string; inspectorTab: InspectorTab; showProblematicOnly: boolean; hoveredEdgeId?: string; edgeLabelMode: EdgeLabelMode; edgeEditorMode?: EdgeEditorMode; issues: ValidationIssue[]; pathSelection: { upstream: string[]; downstream: string[]; edges: string[] }; startupState: StartupState; startupNotice?: StartupNotice; startupError?: string; lastCommand?: string; wizard: { open: boolean; groupId?: EquipmentWizardGroupId; kind?: SoapNodeKind; values: Record<string, string | number | boolean>; namingRule: string; };
@@ -231,16 +236,47 @@ export const useAppStore = create<AppState>((set, get) => ({
   selectEdge: (selectedEdgeId) => set((state) => ({ selectedEdgeId, selectedNodeId: undefined, hoveredEdgeId: selectedEdgeId ?? state.hoveredEdgeId, edgeEditorMode: selectedEdgeId ? 'actions' : undefined, pathSelection: computePathSelection(state.project, undefined, selectedEdgeId) })),
   updateNodeField: (nodeId, path, value) => set((state) => { const updatedRevision = state.projectRevision + 1; const project = reapplyDerivedState(normalizeProjectEdgeHandles({ ...state.project, nodes: state.project.nodes.map((node) => node.id !== nodeId ? node : (() => { const copy = structuredClone(node); setByPath(copy, path, value); syncNodePresentation(copy); return copy; })()) })); scheduleSafePersist(project, updatedRevision); return { project, issues: validateProject(project), projectRevision: updatedRevision }; }),
   setSearch: (search) => set({ search }), setInspectorTab: (inspectorTab) => set({ inspectorTab }),
-  setSimulationRunning: (running) => set((state) => ({ project: { ...state.project, simulation: { ...state.project.simulation, running } }, projectRevision: state.projectRevision + 1 })),
+  setSimulationRunning: (running) => set((state) => {
+    const currentStatus = state.project.simulation.status ?? (state.project.simulation.running ? 'running' : 'idle');
+    const nextStatus: SimulationSettings['status'] = running
+      ? 'running'
+      : (currentStatus === 'running' ? 'paused' : currentStatus);
+    if (state.project.simulation.running === running && currentStatus === nextStatus) return state;
+    const nextEvent = running
+      ? currentStatus === 'paused' ? 'Симуляция продолжена.' : 'Симуляция запущена.'
+      : currentStatus === 'running' ? 'Симуляция на паузе.' : state.project.simulation.lastEvent;
+    return {
+      project: {
+        ...state.project,
+        simulation: { ...state.project.simulation, running, status: nextStatus, lastEvent: nextEvent },
+      },
+      projectRevision: state.projectRevision + 1,
+    };
+  }),
   setSimulationSpeed: (speed) => set((state) => ({ project: { ...state.project, simulation: { ...state.project.simulation, speed } }, projectRevision: state.projectRevision + 1 })),
   resetSimulation: () => set((state) => {
     const project = cloneProject(state.project);
-    project.simulation = { ...project.simulation, running: false, tick: 0, warnings: [], activeMedium: 'none', totalActiveFlow: 0, lastEvent: 'Симуляция сброшена' };
+    project.simulation = { ...project.simulation, running: false, status: 'idle', tick: 0, warnings: [], activeMedium: 'none', totalActiveFlow: 0, lastEvent: 'Симуляция сброшена' };
     project.edges = project.edges.map((edge) => ({ ...edge, animated: false, data: { mediumType: edge.data?.mediumType ?? edge.data?.medium ?? 'water', medium: edge.data?.medium ?? edge.data?.mediumType ?? 'water', flowLpm: 0, flowRate: 0, flowActive: false, blocked: false, routeState: 'idle', pressure: 0, directionMode: edge.data?.directionMode ?? 'derived', nominalDiameter: edge.data?.nominalDiameter ?? 'DN50', mediumMode: edge.data?.mediumMode ?? 'single', lineRole: edge.data?.lineRole ?? 'process', blockedBy: [], stateLabel: 'Ожидание', upstreamRef: edge.data?.upstreamRef, downstreamRef: edge.data?.downstreamRef, selectedPath: edge.data?.selectedPath, sourceLabel: edge.data?.sourceLabel, targetLabel: edge.data?.targetLabel, hovered: edge.data?.hovered, labelMode: edge.data?.labelMode, segmentId: edge.data?.segmentId, direction: edge.data?.direction, routeWarnings: [], composition: edge.data?.composition, mixedFlow: false } }));
     project.nodes = project.nodes.map((node) => ({ ...node, data: { ...node.data, status: node.data.visual.enabled ? (node.data.kind === 'pump' || node.data.kind === 'dosingPump' ? 'off' : 'idle') : 'disabled', alarms: [], visual: { ...node.data.visual, stateBadge: undefined }, runtime: { ...node.data.runtime, active: false, blocked: false, routeState: node.data.visual.enabled ? 'idle' : 'maintenance', flow: 0, flowLpm: 0, alarmText: '' }, simulation: { ...node.data.simulation, active: false, blocked: false, routeState: node.data.visual.enabled ? 'idle' : 'maintenance', flow: 0, flowLpm: 0, alarmText: '' } } }));
     return { project: logEvent(project, 'Симуляция сброшена.', undefined, 'info', 'simulation'), issues: validateProject(project), projectRevision: state.projectRevision + 1 };
   }),
-  tickSimulation: (dt) => set((state) => { if (!state.project.simulation.running) return state; const result = runSimulationStep(state.project, dt); const simulation: SimulationSettings = { ...state.project.simulation, tick: state.project.simulation.tick + 1, warnings: result.warnings, activeMedium: result.activeMedium, totalActiveFlow: result.totalActiveFlow, lastEvent: result.lastEvent }; const project = limitedLog({ ...state.project, nodes: result.nodes, edges: result.edges, simulation, eventLog: [...state.project.eventLog, ...result.events] }); return { project, issues: validateProject(project), projectRevision: state.projectRevision + 1 }; }),
+  tickSimulation: (dt) => set((state) => {
+    if ((state.project.simulation.status ?? toSimulationStatus(state.project.simulation.running)) !== 'running') return state;
+    const result = runSimulationStep(state.project, dt);
+    const simulation: SimulationSettings = {
+      ...state.project.simulation,
+      status: 'running',
+      running: true,
+      tick: state.project.simulation.tick + 1,
+      warnings: result.warnings,
+      activeMedium: result.activeMedium,
+      totalActiveFlow: result.totalActiveFlow,
+      lastEvent: result.lastEvent,
+    };
+    const project = limitedLog({ ...state.project, nodes: result.nodes, edges: result.edges, simulation, eventLog: [...state.project.eventLog, ...result.events] });
+    return { project, issues: validateProject(project), projectRevision: state.projectRevision + 1 };
+  }),
   resetProject: async () => { const state = get(); const project = { ...cloneProject(demoProject), id: state.project.id, name: `${state.project.name} — чистый проект`, appSchemaVersion: APP_SCHEMA_VERSION, projectSchemaVersion: PROJECT_SCHEMA_VERSION }; const revision = state.projectRevision + 1; set(sanitizeProjectState(project, revision, state.persistedRevision, state.viewportNonce + 1)); await resetCurrentProjectState(); },
   resetUserData: async () => { await clearUserData(); const project = cloneProject(demoProject); const revision = get().projectRevision + 1; set({ ...sanitizeProjectState(project, revision, revision, get().viewportNonce + 1), startupNotice: { type: 'info', message: 'Локальные проекты и восстановление вида удалены. Оболочка приложения сохранена.' } }); await saveStoredProject(project); },
   clearLocalDataAndLoadDemo: async () => { await clearPersistedState(); const project = cloneProject(demoProject); const revision = get().projectRevision + 1; set({ ...sanitizeProjectState(project, revision, revision, get().viewportNonce + 1), startupState: 'ready', startupError: undefined, startupNotice: { type: 'warning', message: 'Обнаружены данные старой версии. Выполнен безопасный сброс.' } }); await saveStoredProject(project); },
