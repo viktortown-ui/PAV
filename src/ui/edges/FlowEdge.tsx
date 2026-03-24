@@ -2,7 +2,7 @@ import { memo } from 'react';
 import { BaseEdge, EdgeLabelRenderer, EdgeProps, getSmoothStepPath, useStore } from 'reactflow';
 import { MediumType, RouteState } from '../../domain/schemas/types';
 import { mediumPalette, routeTone } from '../tokens/tokens';
-import { EdgeActionKind, useAppStore } from '../../store/useAppStore';
+import { useAppStore } from '../../store/useAppStore';
 
 const routeStateLabel: Record<RouteState, string> = { idle: 'Ожидание', primed: 'Подготовлен', flowing: 'Поток', blocked: 'Блокировка', starved: 'Нет подпитки', draining: 'Слив', cip: 'CIP', alarm: 'Авария', maintenance: 'Ремонт', offline: 'Отключён' };
 const routeParticleMode: Record<RouteState, string> = { idle: 'idle', primed: 'waiting', flowing: 'flowing', blocked: 'blocked', starved: 'starved', draining: 'draining', cip: 'cip', alarm: 'alarm', maintenance: 'idle', offline: 'idle' };
@@ -10,20 +10,6 @@ const mediumLabel: Record<MediumType | 'composite', string> = { water: 'Вода
 const directionGlyph: Record<string, string> = { forward: '→', reverse: '←', bidirectional: '↔' };
 const directionModeLabel: Record<string, string> = { derived: 'Авто', forward: 'Прямое', reverse: 'Обратное', bidirectional: 'Двунапр.' };
 const lineRoleLabel: Record<string, string> = { process: 'Технологическая', drain: 'Дренаж', utility: 'Сервисная', recycle: 'Рециркуляция', CIP: 'CIP' };
-const insertableActions: Array<{ label: string; action: EdgeActionKind }> = [
-  { label: 'Клапан', action: 'insert:shutoffValve' },
-  { label: 'Задвижка', action: 'insert:gateValve' },
-  { label: 'Обратный клапан', action: 'insert:checkValve' },
-  { label: 'Расходомер', action: 'insert:flowMeter' },
-  { label: 'Датчик', action: 'insert:pressureSensor' },
-  { label: 'Насос', action: 'insert:pump' },
-  { label: 'Фильтр', action: 'insert:inlineFilter' },
-  { label: 'Тройник', action: 'insert:tee' },
-  { label: 'Крестовина', action: 'insert:cross' },
-  { label: 'Дренаж', action: 'insert:drainBranch' },
-  { label: 'Пробоотбор', action: 'insert:samplePoint' },
-];
-
 const stopCanvasGesture = (event: React.MouseEvent<HTMLElement>) => {
   event.preventDefault();
   event.stopPropagation();
@@ -32,12 +18,13 @@ const stopCanvasGesture = (event: React.MouseEvent<HTMLElement>) => {
 const FlowEdgeComponent = ({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data, selected }: EdgeProps) => {
   const [path, labelX, labelY] = getSmoothStepPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, borderRadius: 18, offset: 18 });
   const zoom = useStore((state) => state.transform[2]);
-  const { selectedEdgeId, edgeEditorMode, selectEdge, setEdgeEditorMode, executeEdgeAction, simulationStatus, simulationSpeed } = useAppStore((state) => ({
+  const { selectedEdgeId, edgeEditorMode, selectEdge, setEdgeEditorMode, executeEdgeAction, openLibraryPicker, simulationStatus, simulationSpeed } = useAppStore((state) => ({
     selectedEdgeId: state.selectedEdgeId,
     edgeEditorMode: state.edgeEditorMode,
     selectEdge: state.selectEdge,
     setEdgeEditorMode: state.setEdgeEditorMode,
     executeEdgeAction: state.executeEdgeAction,
+    openLibraryPicker: state.openLibraryPicker,
     simulationStatus: state.project.simulation.status ?? (state.project.simulation.running ? 'running' : 'idle'),
     simulationSpeed: state.project.simulation.speed,
   }));
@@ -83,9 +70,9 @@ const FlowEdgeComponent = ({ id, sourceX, sourceY, targetX, targetY, sourcePosit
         <div className="edge-editor-popover nodrag nopan" style={{ left: labelX, top: labelY + 12, transform: 'translate(-50%, 0)' }} onPointerDown={stopCanvasGesture} onMouseDown={stopCanvasGesture} onClick={stopCanvasGesture}>
           {edgeEditorMode === 'insert' ? (
             <div className="edge-picker">
-              {insertableActions.map((item) => (
-                <button key={item.action} type="button" className="nodrag nopan" onMouseDown={stopCanvasGesture} onClick={(event) => { stopCanvasGesture(event); executeEdgeAction(item.action, id); }}>{item.label}</button>
-              ))}
+              <button type="button" className="nodrag nopan" onMouseDown={stopCanvasGesture} onClick={(event) => { stopCanvasGesture(event); openLibraryPicker('context-insert', { edgeId: id }); setEdgeEditorMode(undefined); }}>
+                Открыть picker
+              </button>
               <button type="button" className="is-secondary nodrag nopan" onMouseDown={stopCanvasGesture} onClick={(event) => { stopCanvasGesture(event); setEdgeEditorMode('actions'); }}>Назад</button>
             </div>
           ) : (

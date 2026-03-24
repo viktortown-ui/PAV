@@ -11,6 +11,7 @@ import { useAppStore } from '../store/useAppStore';
 import { buildSegmentList, summarizeDiagnostics } from '../features/editor/lineList';
 import { EdgeLabelMode, TemplateId } from '../domain/schemas/types';
 import { edgeLabelModes } from '../features/inspector/schemas';
+import { LibraryPicker } from '../features/library/LibraryPicker';
 
 class EditorErrorBoundary extends Component<{ children: ReactNode }, { error?: Error }> {
   public state: { error?: Error } = {};
@@ -142,6 +143,7 @@ export const App = () => {
   const rf = useReactFlow();
   const loadProject = useAppStore((state) => state.loadProject); const saveProject = useAppStore((state) => state.saveProject); const projectRevision = useAppStore((state) => state.projectRevision); const persistedRevision = useAppStore((state) => state.persistedRevision); const startupState = useAppStore((state) => state.startupState); const startupNotice = useAppStore((state) => state.startupNotice); const dismissStartupNotice = useAppStore((state) => state.dismissStartupNotice);
   const openEquipmentWizard = useAppStore((state) => state.openEquipmentWizard);
+  const openLibraryPicker = useAppStore((state) => state.openLibraryPicker);
   const setInspectorTab = useAppStore((state) => state.setInspectorTab);
   const setEdgeLabelMode = useAppStore((state) => state.setEdgeLabelMode);
   const edgeLabelMode = useAppStore((state) => state.edgeLabelMode);
@@ -238,6 +240,7 @@ export const App = () => {
 
     return [
       { id: 'add-equipment', title: 'Добавить оборудование', subtitle: 'Открыть форму и добавить оборудование', keywords: 'add equipment оборудование мастер wizard', group: 'Действия', hint: 'A', run: () => openEquipmentWizard() },
+      { id: 'open-library', title: 'Открыть библиотеку', subtitle: 'Полноэкранный режим выбора элемента', keywords: 'library picker библиотека', group: 'Режимы', run: () => openLibraryPicker('global') },
       { id: 'open-diagnostics', title: 'Открыть диагностику', subtitle: 'Показать ошибки, предупреждения и критичные сегменты', keywords: 'diagnostics диагностика ошибки предупреждения issues', group: 'Панели', run: () => openPanel('diagnostics') },
       { id: 'open-lines', title: 'Открыть список линий', subtitle: 'Показать все линии схемы', keywords: 'line list линии сегменты list', group: 'Панели', run: () => openPanel('lines') },
       { id: 'open-inspector', title: 'Открыть инспектор', subtitle: 'Вернуть правую панель свойств и действий', keywords: 'inspector инспектор свойства', group: 'Панели', run: () => { setInspectorTab('main'); openPanel('inspector'); } },
@@ -247,7 +250,7 @@ export const App = () => {
       ...inlineActions,
       ...templateActions,
     ];
-  }, [addNode, edgeLabelMode, focusMode, leftShell.quickAddCloseBehavior, loadTemplate, openEquipmentWizard, rf]);
+  }, [addNode, edgeLabelMode, focusMode, leftShell.quickAddCloseBehavior, loadTemplate, openEquipmentWizard, openLibraryPicker, rf]);
 
   const rightPanelNode = useMemo(() => {
     switch (rightPanel) {
@@ -260,5 +263,5 @@ export const App = () => {
     }
   }, [rightPanel]);
 
-  return <div className={`app-shell shell-refactor ${focusMode ? 'is-focus-mode' : ''}`}><TopToolbar focusMode={focusMode} onToggleFocusMode={toggleFocusMode} onToggleLibrary={() => updateLeftShell({ type: 'toggle-drawer' })} onOpenCommandPalette={() => setCommandPaletteOpen(true)} />{startupNotice && <div className={`startup-banner startup-banner-${startupNotice.type}`} role="status"><span>{startupNotice.message}</span><button onClick={dismissStartupNotice}>Закрыть</button></div>}{startupState !== 'ready' ? <div className="startup-fallback"><h2>Запуск редактора</h2><p>Подготавливаем данные проекта и восстанавливаем рабочее состояние.</p></div> : <EditorErrorBoundary><div className="workspace-shell"><ToolboxPanel leftShell={leftShell} stateMachineDefinition={leftShellStateMachineDefinition} onEvent={updateLeftShell} /><div className="center-stage"><CanvasEditor focusMode={focusMode} /><div className="right-rail"><div className="shell-rail shell-rail-right"><button type="button" className={rightPanel === 'inspector' ? 'is-active' : ''} onClick={() => setRightPanel((value) => value === 'inspector' ? null : 'inspector')} title="Инспектор">И</button><button type="button" className={rightPanel === 'diagnostics' ? 'is-active' : ''} onClick={() => setRightPanel((value) => value === 'diagnostics' ? null : 'diagnostics')} title="Диагностика">Д</button><button type="button" className={rightPanel === 'lines' ? 'is-active' : ''} onClick={() => setRightPanel((value) => value === 'lines' ? null : 'lines')} title="Линии">Л</button><button type="button" className={rightPanel === 'events' ? 'is-active' : ''} onClick={() => setRightPanel((value) => value === 'events' ? null : 'events')} title="События">С</button><button type="button" className={rightPanel === 'datasheet' ? 'is-active' : ''} onClick={() => setRightPanel((value) => value === 'datasheet' ? null : 'datasheet')} title="Паспорт">П</button></div>{!focusMode && rightPanelNode ? <aside className="shell-right-drawer">{rightPanelNode}</aside> : null}</div></div></div><SimulationPanel focusMode={focusMode} /></EditorErrorBoundary>}<EquipmentWizard /><CommandPalette open={commandPaletteOpen} onClose={() => setCommandPaletteOpen(false)} actions={commandActions} /></div>;
+  return <div className={`app-shell shell-refactor ${focusMode ? 'is-focus-mode' : ''}`}><TopToolbar focusMode={focusMode} onToggleFocusMode={toggleFocusMode} onOpenLibrary={() => openLibraryPicker('global')} onOpenCommandPalette={() => setCommandPaletteOpen(true)} />{startupNotice && <div className={`startup-banner startup-banner-${startupNotice.type}`} role="status"><span>{startupNotice.message}</span><button onClick={dismissStartupNotice}>Закрыть</button></div>}{startupState !== 'ready' ? <div className="startup-fallback"><h2>Запуск редактора</h2><p>Подготавливаем данные проекта и восстанавливаем рабочее состояние.</p></div> : <EditorErrorBoundary><div className="workspace-shell"><ToolboxPanel leftShell={leftShell} stateMachineDefinition={leftShellStateMachineDefinition} onEvent={updateLeftShell} onOpenLibrary={() => openLibraryPicker('global')} /><div className="center-stage"><CanvasEditor focusMode={focusMode} /><div className="right-rail"><div className="shell-rail shell-rail-right"><button type="button" className={rightPanel === 'inspector' ? 'is-active' : ''} onClick={() => setRightPanel((value) => value === 'inspector' ? null : 'inspector')} title="Инспектор">И</button><button type="button" className={rightPanel === 'diagnostics' ? 'is-active' : ''} onClick={() => setRightPanel((value) => value === 'diagnostics' ? null : 'diagnostics')} title="Диагностика">Д</button><button type="button" className={rightPanel === 'lines' ? 'is-active' : ''} onClick={() => setRightPanel((value) => value === 'lines' ? null : 'lines')} title="Линии">Л</button><button type="button" className={rightPanel === 'events' ? 'is-active' : ''} onClick={() => setRightPanel((value) => value === 'events' ? null : 'events')} title="События">С</button><button type="button" className={rightPanel === 'datasheet' ? 'is-active' : ''} onClick={() => setRightPanel((value) => value === 'datasheet' ? null : 'datasheet')} title="Паспорт">П</button></div>{!focusMode && rightPanelNode ? <aside className="shell-right-drawer">{rightPanelNode}</aside> : null}</div></div></div><SimulationPanel focusMode={focusMode} /></EditorErrorBoundary>}<EquipmentWizard /><LibraryPicker /><CommandPalette open={commandPaletteOpen} onClose={() => setCommandPaletteOpen(false)} actions={commandActions} /></div>;
 };
