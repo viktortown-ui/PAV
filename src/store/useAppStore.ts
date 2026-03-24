@@ -245,9 +245,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     const nextEvent = running
       ? currentStatus === 'paused' ? 'Симуляция продолжена.' : 'Симуляция запущена.'
       : currentStatus === 'running' ? 'Симуляция на паузе.' : state.project.simulation.lastEvent;
+    const freezeMotion = !running;
     return {
       project: {
         ...state.project,
+        edges: state.project.edges.map((edge) => ({
+          ...edge,
+          animated: freezeMotion ? false : Boolean(edge.data?.flowActive),
+        })),
         simulation: { ...state.project.simulation, running, status: nextStatus, lastEvent: nextEvent },
       },
       projectRevision: state.projectRevision + 1,

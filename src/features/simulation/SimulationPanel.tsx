@@ -101,7 +101,8 @@ export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => 
     : simulationStatus === 'paused'
       ? 'Симуляция на паузе'
       : 'Базовое состояние';
-  const modeChipLabel = simulationStatus === 'running' ? 'В работе' : simulationStatus === 'paused' ? 'Пауза' : 'Ожидание';
+  const modeChipLabel = simulationStatus === 'running' ? 'RUN' : simulationStatus === 'paused' ? 'PAUSE' : 'IDLE';
+  const modeChipReadableLabel = simulationStatus === 'running' ? 'В работе' : simulationStatus === 'paused' ? 'Пауза' : 'Ожидание';
 
   const panelClassName = getDiagnosticsPanelViewportClassName(panelState);
   const canClose = panelState === 'compact' || panelState === 'expanded';
@@ -179,23 +180,21 @@ export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => 
               >
                 ↺ Сбросить состояние
               </button>
-              {!isMiniDock ? (
-                <div className="dock-speed-field">
-                  <span className="dock-field-label">Скорость</span>
-                  <div className="dock-speed-options">
-                    {speedOptions.map((speed) => (
-                      <button
-                        type="button"
-                        key={speed}
-                        className={project.simulation.speed === speed ? 'is-selected' : ''}
-                        onClick={() => setSimulationSpeed(speed)}
-                      >
-                        {speed.toFixed(speed % 1 === 0 ? 0 : 1)}x
-                      </button>
-                    ))}
-                  </div>
+              <div className="dock-speed-field">
+                <span className="dock-field-label">Скорость</span>
+                <div className="dock-speed-options">
+                  {speedOptions.map((speed) => (
+                    <button
+                      type="button"
+                      key={speed}
+                      className={project.simulation.speed === speed ? 'is-selected' : ''}
+                      onClick={() => setSimulationSpeed(speed)}
+                    >
+                      {speed.toFixed(speed % 1 === 0 ? 0 : 1)}x
+                    </button>
+                  ))}
                 </div>
-              ) : null}
+              </div>
             </div>
           </div>
 
@@ -212,7 +211,7 @@ export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => 
               </div>
               <div className={`dock-status-item dock-status-state is-${simulationStatus}`}>
                 <span className="metric-label">Режим</span>
-                <strong>{modeChipLabel}</strong>
+                <strong>{modeChipReadableLabel}</strong>
               </div>
               {!isMiniDock ? (
                 <>
@@ -267,8 +266,8 @@ export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => 
                   <strong>{selectionLabel}</strong>
                 </div>
                 <div className="is-wide">
-                  <span className="metric-label">Активное предупреждение</span>
-                  <strong>{activeWarnings[0] ?? 'Нет активных предупреждений'}</strong>
+                  <span className="metric-label">Режим</span>
+                  <strong>{modeSummary}</strong>
                 </div>
               </div>
             </div>
@@ -279,18 +278,13 @@ export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => 
                 <button type="button" className={showProblematicOnly ? 'is-active' : ''} onClick={() => !showProblematicOnly && toggleProblematicOnly()}>Только проблемные</button>
                 <button type="button" className={(selectedNode || selectedEdge) ? 'is-active' : ''} disabled>Выбранное</button>
               </div>
-              {!isExpanded ? (
-                <div className="dock-summary-grid dock-summary-grid-compact">
-                  <div>
-                    <span className="metric-label">Режим</span>
-                    <strong>{modeChipLabel}</strong>
-                  </div>
-                  <div>
-                    <span className="metric-label">Скорость</span>
-                    <strong>{project.simulation.speed.toFixed(project.simulation.speed % 1 === 0 ? 0 : 1)}x</strong>
-                  </div>
-                </div>
-              ) : null}
+            </div>
+            <div className="dock-zone dock-zone-alert" aria-label="Текущее предупреждение">
+              <span className="dock-zone-label">Активное предупреждение</span>
+              <div className="dock-alert-card">
+                <strong>{activeWarnings[0] ?? 'Нет активных предупреждений'}</strong>
+                <span>Скорость: {project.simulation.speed.toFixed(project.simulation.speed % 1 === 0 ? 0 : 1)}x</span>
+              </div>
             </div>
           </div>
         ) : null}

@@ -56,6 +56,49 @@ describe('simulation hardening', () => {
     expect(nextState.project.edges[0]?.data?.flowRate ?? 0).toBe(0);
   });
 
+  it('freezes edge animation flags when simulation is paused', () => {
+    const runningProject = buildLinearProject(1);
+    const activeStep = runSimulationStep(runningProject, 0.5);
+
+    useAppStore.setState((state) => ({
+      ...state,
+      project: {
+        ...runningProject,
+        nodes: activeStep.nodes,
+        edges: activeStep.edges.map((edge) => ({ ...edge, animated: true })),
+        simulation: {
+          ...runningProject.simulation,
+          running: true,
+          status: 'running',
+        },
+      },
+    }));
+
+    useAppStore.getState().setSimulationRunning(false);
+    const pausedState = useAppStore.getState();
+
+    expect(pausedState.project.simulation.status).toBe('paused');
+    expect(pausedState.project.edges.every((edge) => edge.animated === false)).toBe(true);
+    expect(pausedState.project.edges.some((edge) => (edge.data?.flowActive ?? false))).toBe(true);
+  });
+
+  it('keeps speed multiplier consistent across pre-start, pause and resume', () => {
+    useAppStore.getState().resetSimulation();
+    useAppStore.getState().setSimulationSpeed(2);
+    useAppStore.getState().setSimulationRunning(true);
+
+    const runningState = useAppStore.getState();
+    expect(runningState.project.simulation.speed).toBe(2);
+
+    useAppStore.getState().setSimulationRunning(false);
+    useAppStore.getState().setSimulationSpeed(0.5);
+    useAppStore.getState().setSimulationRunning(true);
+
+    const resumedState = useAppStore.getState();
+    expect(resumedState.project.simulation.status).toBe('running');
+    expect(resumedState.project.simulation.speed).toBe(0.5);
+  });
+
   it('resetSimulation возвращает idle и очищает активный поток', () => {
     const runningProject = buildLinearProject(1.5);
     const activeStep = runSimulationStep(runningProject, 1);
