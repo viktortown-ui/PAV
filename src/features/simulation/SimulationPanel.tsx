@@ -65,6 +65,12 @@ export const SimulationPanel = ({ focusMode = false, rightPanelVisible = false }
   }, []);
 
   useEffect(() => {
+    if (!rightPanelVisible) {
+      setPanelState((currentState) => (currentState === 'full' ? 'standard' : currentState));
+    }
+  }, [rightPanelVisible]);
+
+  useEffect(() => {
     window.sessionStorage.setItem(diagnosticsPanelStateStorageKey, panelState);
     if (panelState !== 'hidden') {
       window.sessionStorage.setItem(diagnosticsPanelLastOpenStateStorageKey, panelState);
@@ -221,16 +227,18 @@ export const SimulationPanel = ({ focusMode = false, rightPanelVisible = false }
         </button>
       </div>
       {isNavigatorVisible ? (
-        <div className={`dock-navigator-viewport ${compactView ? 'is-compact' : ''}`} aria-label="Миникарта схемы">
-          <MiniMap
-            pannable
-            zoomable
-            className="dock-navigator-map"
-            maskColor="rgba(5,10,16,0.74)"
-            style={{ backgroundColor: 'transparent' }}
-            nodeColor="#7fb3ff"
-            nodeStrokeColor="#d9e8ff"
-          />
+        <div className={`dock-navigator-preview-shell ${compactView ? 'is-compact' : ''}`}>
+          <div className="dock-navigator-viewport" aria-label="Миникарта схемы">
+            <MiniMap
+              pannable
+              zoomable
+              className="dock-navigator-map"
+              maskColor="rgba(5,10,16,0.74)"
+              style={{ backgroundColor: 'transparent' }}
+              nodeColor="#7fb3ff"
+              nodeStrokeColor="#d9e8ff"
+            />
+          </div>
         </div>
       ) : (
         <div className="dock-navigator-collapsed">Навигатор скрыт</div>
