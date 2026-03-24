@@ -34,7 +34,7 @@ export const ProcessNode = memo(({ id, data, selected }: NodeProps<SoapNodeData>
   const isRunning = data.status === 'running' || routeState === 'flowing' || routeState === 'cip' || routeState === 'draining';
   const isRunningVisual = isRunning && simulationStatus === 'running';
   const blockedState = data.status === 'blocked' || routeState === 'blocked';
-  const stateBadge = data.visual.stateBadge ?? (isAlarmed ? 'ALM' : blockedState ? 'BLOCK' : isRunning ? 'RUN' : lowLevel ? 'LOW' : routeLabel[routeState]);
+  const stateBadge = data.visual.stateBadge ?? (isAlarmed ? 'АВР' : blockedState ? 'БЛК' : isRunning ? 'РАБ' : lowLevel ? 'НИЗК' : routeLabel[routeState]);
   const process = data.process as any;
   const heatingOn = Boolean(process.heatingOn);
   const agitatorOn = Boolean(process.agitatorOn ?? process.mixingOn);

@@ -137,8 +137,8 @@ export const transitionLeftShell = (state: LeftShellState, event: LeftShellEvent
 };
 
 export const leftShellStateMachineDefinition = `
-LEFT SHELL STATE MACHINE
-- Persistent state shape:
+СОСТОЯНИЕ ЛЕВОЙ ПАНЕЛИ
+- Сохраняемое состояние:
   mode ∈ {normal, focus}
   railVisible = true
   drawerOpen ∈ {true, false}
@@ -146,28 +146,10 @@ LEFT SHELL STATE MACHINE
   quickAddCloseBehavior ∈ {keep-open, close-drawer}
   lastNormal = { drawerOpen, activeFamily }
 
-VISUAL CONTRACT
-- Closed: rail visible, drawerOpen=false, no reserved drawer width.
-- Open: rail visible, drawerOpen=true, one overlay drawer fixed next to rail.
-- Switching families: select-family always reuses the same drawer instance and swaps content in place.
-- Quick add: quick-add-complete either keeps the drawer fully open or closes it fully based on quickAddCloseBehavior.
-- Focus mode: mode=focus forces drawerOpen=false while preserving lastNormal for restoration.
-
-TRANSITIONS
-- toggle-drawer: normal.closed ↔ normal.open for current activeFamily.
-- select-family(f):
-  * normal.closed -> normal.open(activeFamily=f)
-  * normal.open(a) -> normal.open(activeFamily=f)
-  * focus -> normal.open(activeFamily=f)
-- enter-focus: any normal state -> focus with drawer closed and lastNormal remembered exactly.
-- exit-focus: focus -> normal restored from lastNormal.
-- quick-add-complete:
-  * close-drawer -> normal.closed(activeFamily=current)
-  * keep-open -> state unchanged
-  * focus -> state unchanged
-
-FORBIDDEN STATES
-- drawer width reserved while drawerOpen=false
-- more than one left drawer rendered
-- partial drawer states or hybrid inline/overlay collapse
+ВИЗУАЛЬНЫЙ КОНТРАКТ
+- Закрыто: rail видим, drawerOpen=false, ширина выдвижной панели не резервируется.
+- Открыто: rail видим, drawerOpen=true, одна оверлей-панель рядом с rail.
+- Смена разделов: select-family переиспользует ту же панель и меняет контент без перестроения оболочки.
+- Быстрое добавление: quick-add-complete либо оставляет панель открытой, либо закрывает её по quickAddCloseBehavior.
+- Режим схемы: mode=focus принудительно делает drawerOpen=false, сохраняя lastNormal для восстановления.
 `;

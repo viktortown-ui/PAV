@@ -106,7 +106,7 @@ export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => 
     : simulationStatus === 'paused'
       ? 'Симуляция на паузе'
       : 'Базовое состояние';
-  const modeChipLabel = simulationStatus === 'running' ? 'RUN' : simulationStatus === 'paused' ? 'PAUSE' : 'IDLE';
+  const modeChipLabel = simulationStatus === 'running' ? 'РАБОТА' : simulationStatus === 'paused' ? 'ПАУЗА' : 'ОЖИДАНИЕ';
   const modeChipReadableLabel = simulationStatus === 'running' ? 'В работе' : simulationStatus === 'paused' ? 'Пауза' : 'Ожидание';
 
   const panelClassName = getDiagnosticsPanelViewportClassName(panelState);
@@ -162,7 +162,7 @@ export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => 
               className={project.simulation.speed === speed ? 'is-selected' : ''}
               onClick={() => setSimulationSpeed(speed)}
             >
-              {speed.toFixed(speed % 1 === 0 ? 0 : 1)}x
+              {speed.toFixed(speed % 1 === 0 ? 0 : 1)}×
             </button>
           ))}
         </div>
@@ -240,14 +240,14 @@ export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => 
           className="dock-mode-button"
           onClick={() => setPanelState(isCompact ? 'standard' : 'compact')}
         >
-          {isCompact ? 'Standard' : 'Compact'}
+          {isCompact ? 'Стандартная' : 'Компактная'}
         </button>
         <button
           type="button"
           className="dock-mode-button dock-mode-button--primary"
           onClick={() => setPanelState(isFull ? 'standard' : 'full')}
         >
-          {isFull ? 'Закрыть консоль' : 'Full diagnostics'}
+          {isFull ? 'Закрыть консоль' : 'Полная диагностика'}
         </button>
       </div>
     </section>
@@ -272,7 +272,7 @@ export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => 
         <div className="dock-topline">
           <div className="simulation-dock-titleblock">
             <span className="simulation-dock-kicker">Конструктор техсхем</span>
-            <strong>{isCompact ? 'Compact dock' : 'Standard dock'}</strong>
+            <strong>{isCompact ? 'Компактная панель' : 'Стандартная панель'}</strong>
             <small>{modeSummary}</small>
           </div>
           <div className="simulation-dock-toolbar-actions">
@@ -323,7 +323,7 @@ export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => 
                 <span className="dock-zone-label">Активное предупреждение</span>
                 <div className="dock-alert-card">
                   <strong>{activeWarnings[0] ?? 'Нет активных предупреждений'}</strong>
-                  <span>Скорость: {project.simulation.speed.toFixed(project.simulation.speed % 1 === 0 ? 0 : 1)}x</span>
+                  <span>Скорость: {project.simulation.speed.toFixed(project.simulation.speed % 1 === 0 ? 0 : 1)}×</span>
                 </div>
               </section>
             </div>
@@ -332,15 +332,15 @@ export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => 
       </div>
 
       {isFull ? (
-        <aside className="dock-full-console" aria-label="Full diagnostics console">
+        <aside className="dock-full-console" aria-label="Панель полной диагностики">
           <header className="dock-full-console-header">
             <div>
-              <span className="dock-zone-label">Full diagnostics mode</span>
-              <strong>Command console</strong>
+              <span className="dock-zone-label">Режим полной диагностики</span>
+              <strong>Консоль диагностики</strong>
               <small>{modeSummary}</small>
             </div>
             <div className="dock-full-console-actions">
-              <button type="button" className="dock-inline-button" onClick={() => setPanelState('standard')}>Свернуть до Standard</button>
+              <button type="button" className="dock-inline-button" onClick={() => setPanelState('standard')}>Свернуть до стандартной</button>
               <button type="button" className="dock-inline-button" onClick={() => setPanelState('hidden')}>Скрыть панель</button>
             </div>
           </header>

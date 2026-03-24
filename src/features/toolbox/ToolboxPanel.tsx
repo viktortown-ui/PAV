@@ -22,7 +22,7 @@ const railActions = [
 ];
 
 export const ToolboxPanel = ({ leftShell, stateMachineDefinition, onEvent, onOpenLibrary, activeCanvasTool, gridEnabled, activeRightPanel, onSelectTool, onToggleGrid, onTogglePanel }: ToolboxPanelProps) => (
-  <aside className="toolbox-shell tool-rail-shell" aria-label="Левый инструментальный rail">
+  <aside className="toolbox-shell tool-rail-shell" aria-label="Левая инструментальная панель">
     <div className="shell-rail shell-rail-left" aria-label="Инструменты схемы">
       {railActions.map((action) => (
         <button
@@ -66,6 +66,6 @@ export const ToolboxPanel = ({ leftShell, stateMachineDefinition, onEvent, onOpe
         <span className="tool-rail-glyph">{leftShell.mode === 'focus' ? '◉' : '○'}</span>
       </button>
     </div>
-    <div className="tool-rail-footnote">{stateMachineDefinition.split('\n')[1]?.trim() ?? 'LEFT SHELL STATE MACHINE'}</div>
+    <div className="tool-rail-footnote">{stateMachineDefinition.split('\n')[1]?.trim() ?? 'СОСТОЯНИЕ ЛЕВОЙ ПАНЕЛИ'}</div>
   </aside>
 );
