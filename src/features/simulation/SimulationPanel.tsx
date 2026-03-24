@@ -257,19 +257,21 @@ export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => 
               </div>
               {isNavigatorVisible ? (
                 <>
-                  <MiniMap
-                    pannable
-                    zoomable
-                    className="dock-navigator-map"
-                    maskColor="rgba(5,10,16,0.74)"
-                    style={{ backgroundColor: 'transparent' }}
-                    nodeColor="#7fb3ff"
-                    nodeStrokeColor="#d9e8ff"
-                  />
-                  <div className="dock-navigator-actions">
+                  <div className="dock-navigator-actions" role="group" aria-label="Быстрые действия навигатора">
                     <button type="button" className="dock-navigator-action" title="Вернуться к текущей схеме" aria-label="Вернуться к текущей схеме" onClick={() => void handleReturnToDiagram()}>К схеме</button>
                     <button type="button" className="dock-navigator-action dock-navigator-action--secondary" title="Вписать всю схему" aria-label="Вписать всю схему" onClick={() => void handleFitToView()}>Вписать</button>
                     <button type="button" className="dock-navigator-action dock-navigator-action--ghost" title={edgeLabelMode === 'hidden' ? 'Показать подписи линий' : 'Скрыть подписи линий'} onClick={() => setEdgeLabelMode(edgeLabelMode === 'hidden' ? 'selected' : 'hidden')}>{edgeLabelMode === 'hidden' ? 'Показать подписи' : 'Скрыть подписи'}</button>
+                  </div>
+                  <div className="dock-navigator-viewport" aria-label="Миникарта схемы">
+                    <MiniMap
+                      pannable
+                      zoomable
+                      className="dock-navigator-map"
+                      maskColor="rgba(5,10,16,0.74)"
+                      style={{ backgroundColor: 'transparent' }}
+                      nodeColor="#7fb3ff"
+                      nodeStrokeColor="#d9e8ff"
+                    />
                   </div>
                 </>
               ) : (

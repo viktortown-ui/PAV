@@ -279,15 +279,25 @@ button.primary, .toolbox-actions .primary { background: linear-gradient(180deg, 
 .dock-expand-button { height: 100%; min-height: 70px; display: grid; gap: 3px; align-content: center; justify-items: start; background: linear-gradient(180deg, rgba(18, 34, 52, 0.94), rgba(11, 20, 33, 0.96)); }
 .dock-expand-button span { font-size: 12px; line-height: 1.2; color: #c3d4e8; }
 .dock-expand-button strong { font-size: 15px; line-height: 1; }
-.dock-navigator-card { border: 1px solid rgba(132, 171, 218, 0.2); border-radius: 11px; background: linear-gradient(180deg, rgba(12, 22, 36, 0.94), rgba(8, 16, 26, 0.9)); padding: 7px; display: grid; gap: 6px; }
+.dock-navigator-card { border: 1px solid rgba(132, 171, 218, 0.2); border-radius: 11px; background: linear-gradient(180deg, rgba(12, 22, 36, 0.94), rgba(8, 16, 26, 0.9)); padding: 7px; display: grid; gap: 6px; align-content: start; }
 .dock-navigator-head { display: flex; justify-content: space-between; gap: 8px; align-items: start; }
 .dock-navigator-titleblock { display: grid; gap: 2px; min-width: 0; }
 .dock-navigator-titleblock strong { font-size: 12px; line-height: 1.2; color: #eef5ff; }
 .dock-navigator-titleblock span { font-size: 10px; line-height: 1.3; color: #8ea4bf; }
 .dock-navigator-toggle, .dock-navigator-action { border: 1px solid rgba(143, 181, 226, 0.16); background: rgba(16, 32, 51, 0.94); color: #edf4ff; border-radius: 10px; padding: 6px 8px; font-size: 11px; line-height: 1.2; }
-.dock-navigator-map { width: 100%; height: 108px; border-radius: 10px; overflow: hidden; border: 1px solid rgba(132, 171, 218, 0.22); background: rgba(6, 11, 18, 0.98); }
-.dock-navigator-map.react-flow__minimap { background: transparent !important; border-color: rgba(132, 171, 218, 0.22); }
 .dock-navigator-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
+.dock-navigator-viewport { position: relative; min-height: 108px; height: 108px; width: 100%; overflow: hidden; border-radius: 10px; isolation: isolate; contain: layout paint; border: 1px solid rgba(132, 171, 218, 0.22); background: rgba(6, 11, 18, 0.98); }
+.dock-navigator-map.react-flow__minimap {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  transform: none !important;
+  border: 0 !important;
+  border-radius: inherit !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
 .dock-navigator-action { width: 100%; text-align: center; }
 .dock-navigator-action--secondary { background: rgba(11, 22, 35, 0.88); color: #c8d7ea; }
 .dock-navigator-action--ghost { background: rgba(8, 17, 27, 0.74); }
