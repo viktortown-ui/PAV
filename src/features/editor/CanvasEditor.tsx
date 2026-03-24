@@ -9,7 +9,6 @@ import { instrumentCallsite } from '../../utils/instrumentation';
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const VIEWPORT_POSITION_EPSILON = 0.5;
 const VIEWPORT_ZOOM_EPSILON = 0.001;
-const RESIZE_APPLY_DELAY_MS = 120;
 const isDev = import.meta.env.DEV;
 
 const nodeTypes = { processNode: ProcessNode };
@@ -27,7 +26,7 @@ const debugLog = (scope: string, message: string, payload?: unknown) => {
   else console.debug(`[perf:${scope}] ${message}`, payload);
 };
 
-const CanvasEditorComponent = ({ focusMode = false }: { focusMode?: boolean }) => {
+const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridEnabled = true }: { focusMode?: boolean; activeTool?: 'select' | 'connect'; gridEnabled?: boolean }) => {
   const edgeLabelMode = useAppStore((state) => state.edgeLabelMode);
   const {
     nodes: projectNodes,
@@ -76,7 +75,6 @@ const CanvasEditorComponent = ({ focusMode = false }: { focusMode?: boolean }) =
   const shellRef = useRef<HTMLDivElement>(null);
   const suppressMoveEndRef = useRef(false);
   const appliedViewportNonceRef = useRef<number | null>(null);
-  const resizeTimerRef = useRef<number | null>(null);
   const latestViewRef = useRef(view);
   const [flow, setFlow] = useState<ReactFlowInstance | null>(null);
   const [isViewportLocked, setIsViewportLocked] = useState(false);
@@ -206,30 +204,18 @@ const CanvasEditorComponent = ({ focusMode = false }: { focusMode?: boolean }) =
     await flow.fitView({ padding: 0.2, duration: 220 });
   }, [flow]);
 
-  useEffect(() => {
-    if (!shellRef.current || !flow || latestViewRef.current.hasManualViewport) return;
-    const observer = new ResizeObserver(() => {
-      if (resizeTimerRef.current) window.clearTimeout(resizeTimerRef.current);
-      resizeTimerRef.current = window.setTimeout(() => {
-        debugLog('viewport', 'container resize scheduled curated viewport');
-        void applyViewport('curated', 'resize');
-      }, RESIZE_APPLY_DELAY_MS);
-    });
-    observer.observe(shellRef.current);
-    return () => {
-      observer.disconnect();
-      if (resizeTimerRef.current) window.clearTimeout(resizeTimerRef.current);
-    };
-  }, [applyViewport, flow, view.hasManualViewport]);
-
   return (
     <div className={`canvas-shell sim-${simulationStatus} ${focusMode ? 'is-focus-mode' : ''}`} ref={shellRef}>
       <ReactFlow
-        panOnDrag={!isViewportLocked}
+        panOnDrag={!isViewportLocked && activeTool === 'select'}
         zoomOnScroll={!isViewportLocked}
         zoomOnPinch={!isViewportLocked}
         zoomOnDoubleClick={!isViewportLocked}
         panOnScroll={!isViewportLocked}
+        nodesDraggable={activeTool === 'select'}
+        elementsSelectable={activeTool === 'select'}
+        nodesConnectable={activeTool === 'connect'}
+        selectionOnDrag={activeTool === 'select'}
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
@@ -256,14 +242,14 @@ const CanvasEditorComponent = ({ focusMode = false }: { focusMode?: boolean }) =
           debugLog('viewport', 'move end -> persist manual viewport', viewport);
           setViewportState(viewport, { manual: true });
         }}
-        snapToGrid
+        snapToGrid={gridEnabled}
         snapGrid={[20, 20]}
         minZoom={0.45}
         maxZoom={1.3}
         selectionMode={SelectionMode.Partial}
         multiSelectionKeyCode="Shift"
       >
-        <Background color="rgba(93,117,145,0.18)" gap={24} size={1.2} />
+        {gridEnabled ? <Background color="rgba(93,117,145,0.18)" gap={24} size={1.2} /> : null}
       </ReactFlow>
       {!focusMode ? (
         <div className="canvas-navigation-cluster" aria-label="Управление видом" onWheel={stopCanvasViewportPropagation} onPointerDown={stopCanvasViewportPropagation} onMouseDown={stopCanvasViewportPropagation}>
