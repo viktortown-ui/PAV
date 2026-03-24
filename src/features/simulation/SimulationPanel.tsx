@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { MiniMap, useReactFlow } from 'reactflow';
 import { useAppStore } from '../../store/useAppStore';
 import {
   DiagnosticsPanelState,
@@ -35,12 +36,15 @@ const formatEventTime = (timestamp: string | number) => new Date(timestamp).toLo
 });
 
 export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => {
+  const flow = useReactFlow();
   const project = useAppStore((state) => state.project);
   const dockRef = useRef<HTMLElement>(null);
   const selectedNodeId = useAppStore((state) => state.selectedNodeId);
   const selectedEdgeId = useAppStore((state) => state.selectedEdgeId);
   const setSimulationRunning = useAppStore((state) => state.setSimulationRunning);
   const setSimulationSpeed = useAppStore((state) => state.setSimulationSpeed);
+  const edgeLabelMode = useAppStore((state) => state.edgeLabelMode);
+  const setEdgeLabelMode = useAppStore((state) => state.setEdgeLabelMode);
   const resetSimulation = useAppStore((state) => state.resetSimulation);
   const toggleProblematicOnly = useAppStore((state) => state.toggleProblematicOnly);
   const issues = useAppStore((state) => state.issues);
@@ -53,6 +57,7 @@ export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => 
     if (typeof window === 'undefined') return 'miniDock';
     return getLastOpenDiagnosticsPanelState(window.sessionStorage.getItem(diagnosticsPanelLastOpenStateStorageKey));
   });
+  const [isNavigatorVisible, setIsNavigatorVisible] = useState(true);
 
   useEffect(() => {
     console.info(diagnosticsPanelStateMachineDefinition);
@@ -113,6 +118,14 @@ export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => 
   const isExpanded = panelState === 'expanded';
   const isRunning = simulationStatus === 'running';
   const isPaused = simulationStatus === 'paused';
+
+  const handleFitToView = useCallback(async () => {
+    await flow.fitView({ padding: 0.2, duration: 220 });
+  }, [flow]);
+
+  const handleReturnToDiagram = useCallback(async () => {
+    await flow.fitView({ padding: 0.17, duration: 180 });
+  }, [flow]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -178,22 +191,22 @@ export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => 
                 onClick={resetSimulation}
                 title="Сбросить поток, предупреждения, анимацию линий и статусы узлов к исходному состоянию"
               >
-                ↺ Сбросить состояние
+                ↺ Сброс
               </button>
-              <div className="dock-speed-field">
-                <span className="dock-field-label">Скорость</span>
-                <div className="dock-speed-options">
-                  {speedOptions.map((speed) => (
-                    <button
-                      type="button"
-                      key={speed}
-                      className={project.simulation.speed === speed ? 'is-selected' : ''}
-                      onClick={() => setSimulationSpeed(speed)}
-                    >
-                      {speed.toFixed(speed % 1 === 0 ? 0 : 1)}x
-                    </button>
-                  ))}
-                </div>
+            </div>
+            <div className="dock-speed-field" aria-label="Управление скоростью симуляции">
+              <span className="dock-field-label">Скорость</span>
+              <div className="dock-speed-options">
+                {speedOptions.map((speed) => (
+                  <button
+                    type="button"
+                    key={speed}
+                    className={project.simulation.speed === speed ? 'is-selected' : ''}
+                    onClick={() => setSimulationSpeed(speed)}
+                  >
+                    {speed.toFixed(speed % 1 === 0 ? 0 : 1)}x
+                  </button>
+                ))}
               </div>
             </div>
           </div>
@@ -206,7 +219,7 @@ export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => 
                 <strong>{Math.round(project.simulation.totalActiveFlow)} л/мин</strong>
               </div>
               <div className="dock-status-item warning-state">
-                <span className="metric-label">Предупреждения</span>
+                <span className="metric-label">Сигналы</span>
                 <strong>{warningCount}</strong>
               </div>
               <div className={`dock-status-item dock-status-state is-${simulationStatus}`}>
@@ -225,7 +238,44 @@ export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => 
           </div>
 
           <div className="dock-zone dock-zone-expand">
-            <span className="dock-zone-label">Панель</span>
+            <span className="dock-zone-label">Навигатор / Панель</span>
+            <div className="dock-navigator-card" aria-label="Навигатор схемы">
+              <div className="dock-navigator-head">
+                <div className="dock-navigator-titleblock">
+                  <strong>Навигатор</strong>
+                  <span>Обзор схемы и быстрый переход</span>
+                </div>
+                <button
+                  type="button"
+                  className="dock-navigator-toggle"
+                  title={isNavigatorVisible ? 'Скрыть навигатор' : 'Показать навигатор'}
+                  aria-label={isNavigatorVisible ? 'Скрыть навигатор' : 'Показать навигатор'}
+                  onClick={() => setIsNavigatorVisible((current) => !current)}
+                >
+                  {isNavigatorVisible ? 'Свернуть' : 'Развернуть'}
+                </button>
+              </div>
+              {isNavigatorVisible ? (
+                <>
+                  <MiniMap
+                    pannable
+                    zoomable
+                    className="dock-navigator-map"
+                    maskColor="rgba(5,10,16,0.74)"
+                    style={{ backgroundColor: 'transparent' }}
+                    nodeColor="#7fb3ff"
+                    nodeStrokeColor="#d9e8ff"
+                  />
+                  <div className="dock-navigator-actions">
+                    <button type="button" className="dock-navigator-action" title="Вернуться к текущей схеме" aria-label="Вернуться к текущей схеме" onClick={() => void handleReturnToDiagram()}>К схеме</button>
+                    <button type="button" className="dock-navigator-action dock-navigator-action--secondary" title="Вписать всю схему" aria-label="Вписать всю схему" onClick={() => void handleFitToView()}>Вписать</button>
+                    <button type="button" className="dock-navigator-action dock-navigator-action--ghost" title={edgeLabelMode === 'hidden' ? 'Показать подписи линий' : 'Скрыть подписи линий'} onClick={() => setEdgeLabelMode(edgeLabelMode === 'hidden' ? 'selected' : 'hidden')}>{edgeLabelMode === 'hidden' ? 'Показать подписи' : 'Скрыть подписи'}</button>
+                  </div>
+                </>
+              ) : (
+                <div className="dock-navigator-collapsed">Навигатор свернут. Разверните его для обзора схемы.</div>
+              )}
+            </div>
             <div className="dock-expand-actions">
               <button
                 type="button"
@@ -238,7 +288,7 @@ export const SimulationPanel = ({ focusMode = false }: SimulationPanelProps) => 
                 aria-expanded={panelState === 'expanded'}
                 disabled={!canExpand && !canCollapse}
               >
-                <span>{panelState === 'expanded' ? 'Свернуть до compact' : panelState === 'compact' ? 'Развернуть до expanded' : 'Открыть compact'}</span>
+                <span>{panelState === 'expanded' ? 'Свернуть до компактного вида' : panelState === 'compact' ? 'Развернуть до полного вида' : 'Открыть компактный вид'}</span>
                 <strong>{panelState === 'expanded' ? '▾' : '▴'}</strong>
               </button>
               {canClose ? (

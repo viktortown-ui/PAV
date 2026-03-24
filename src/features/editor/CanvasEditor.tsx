@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, WheelEvent as ReactWheelEvent, PointerEvent as ReactPointerEvent, MouseEvent as ReactMouseEvent } from 'react';
-import ReactFlow, { Background, MiniMap, ReactFlowInstance, SelectionMode, Viewport, getViewportForBounds } from 'reactflow';
+import ReactFlow, { Background, ReactFlowInstance, SelectionMode, Viewport, getViewportForBounds } from 'reactflow';
 import { shallow } from 'zustand/shallow';
 import { FlowEdge } from '../../ui/edges/FlowEdge';
 import { ProcessNode } from '../../ui/nodes/ProcessNode';
@@ -28,7 +28,6 @@ const debugLog = (scope: string, message: string, payload?: unknown) => {
 };
 
 const CanvasEditorComponent = ({ focusMode = false }: { focusMode?: boolean }) => {
-  const setEdgeLabelMode = useAppStore((state) => state.setEdgeLabelMode);
   const edgeLabelMode = useAppStore((state) => state.edgeLabelMode);
   const {
     nodes: projectNodes,
@@ -80,7 +79,6 @@ const CanvasEditorComponent = ({ focusMode = false }: { focusMode?: boolean }) =
   const resizeTimerRef = useRef<number | null>(null);
   const latestViewRef = useRef(view);
   const [flow, setFlow] = useState<ReactFlowInstance | null>(null);
-  const [isMinimapVisible, setIsMinimapVisible] = useState(true);
   const [isViewportLocked, setIsViewportLocked] = useState(false);
 
   useEffect(() => {
@@ -208,10 +206,6 @@ const CanvasEditorComponent = ({ focusMode = false }: { focusMode?: boolean }) =
     await flow.fitView({ padding: 0.2, duration: 220 });
   }, [flow]);
 
-  const handleReturnToDiagram = useCallback(async () => {
-    await applyViewport(view.hasManualViewport ? 'restore' : 'curated', 'return-to-diagram');
-  }, [applyViewport, view.hasManualViewport]);
-
   useEffect(() => {
     if (!shellRef.current || !flow || latestViewRef.current.hasManualViewport) return;
     const observer = new ResizeObserver(() => {
@@ -272,63 +266,24 @@ const CanvasEditorComponent = ({ focusMode = false }: { focusMode?: boolean }) =
         <Background color="rgba(93,117,145,0.18)" gap={24} size={1.2} />
       </ReactFlow>
       {!focusMode ? (
-        <div className="canvas-navigation-cluster" aria-label="Навигация по схеме" onWheel={stopCanvasViewportPropagation} onPointerDown={stopCanvasViewportPropagation} onMouseDown={stopCanvasViewportPropagation}>
-          <section className="navigation-stack-shell">
-            <div className="viewport-controls-card" aria-label="Управление видом">
-              <div className="viewport-controls-card__title">Вид схемы</div>
-              <div className="viewport-controls-stack">
-                <button type="button" className="viewport-control-button" title="Увеличить" aria-label="Увеличить" onClick={() => void flow?.zoomIn({ duration: 180 })}>+</button>
-                <button type="button" className="viewport-control-button" title="Уменьшить" aria-label="Уменьшить" onClick={() => void flow?.zoomOut({ duration: 180 })}>−</button>
-                <button type="button" className="viewport-control-button viewport-control-button--fit" title="Вписать схему" aria-label="Вписать схему" onClick={() => void handleFitToView()}>⤢</button>
-                <button
-                  type="button"
-                  className={`viewport-control-button ${isViewportLocked ? 'is-active' : ''}`}
-                  title={isViewportLocked ? 'Разблокировать перемещение' : 'Зафиксировать вид'}
-                  aria-label={isViewportLocked ? 'Разблокировать перемещение' : 'Зафиксировать вид'}
-                  onClick={() => setIsViewportLocked((current) => !current)}
-                >
-                  {isViewportLocked ? '🔒' : '🔓'}
-                </button>
-              </div>
+        <div className="canvas-navigation-cluster" aria-label="Управление видом" onWheel={stopCanvasViewportPropagation} onPointerDown={stopCanvasViewportPropagation} onMouseDown={stopCanvasViewportPropagation}>
+          <div className="viewport-controls-card" aria-label="Управление видом">
+            <div className="viewport-controls-card__title">Вид схемы</div>
+            <div className="viewport-controls-stack">
+              <button type="button" className="viewport-control-button" title="Увеличить" aria-label="Увеличить" onClick={() => void flow?.zoomIn({ duration: 180 })}>+</button>
+              <button type="button" className="viewport-control-button" title="Уменьшить" aria-label="Уменьшить" onClick={() => void flow?.zoomOut({ duration: 180 })}>−</button>
+              <button type="button" className="viewport-control-button viewport-control-button--fit" title="Вписать схему" aria-label="Вписать схему" onClick={() => void handleFitToView()}>⤢</button>
+              <button
+                type="button"
+                className={`viewport-control-button ${isViewportLocked ? 'is-active' : ''}`}
+                title={isViewportLocked ? 'Разблокировать перемещение' : 'Зафиксировать вид'}
+                aria-label={isViewportLocked ? 'Разблокировать перемещение' : 'Зафиксировать вид'}
+                onClick={() => setIsViewportLocked((current) => !current)}
+              >
+                {isViewportLocked ? '🔒' : '🔓'}
+              </button>
             </div>
-            <div className="minimap-card" aria-label="Навигатор">
-              <div className="minimap-card__header">
-                <div>
-                  <div className="minimap-card__title">Навигатор</div>
-                  <div className="minimap-card__caption">Обзор схемы и быстрый переход</div>
-                </div>
-                <button
-                  type="button"
-                  className="minimap-card__toggle"
-                  title={isMinimapVisible ? 'Скрыть навигатор' : 'Показать навигатор'}
-                  aria-label={isMinimapVisible ? 'Скрыть навигатор' : 'Показать навигатор'}
-                  onClick={() => setIsMinimapVisible((current) => !current)}
-                >
-                  {isMinimapVisible ? 'Скрыть' : 'Показать'}
-                </button>
-              </div>
-              {isMinimapVisible ? (
-                <>
-                  <MiniMap
-                    pannable
-                    zoomable
-                    className="minimap-card__map"
-                    maskColor="rgba(5,10,16,0.74)"
-                    style={{ backgroundColor: 'transparent' }}
-                    nodeColor="#7fb3ff"
-                    nodeStrokeColor="#d9e8ff"
-                  />
-                  <div className="minimap-card__footer">
-                    <button type="button" className="minimap-card__action" title="Вернуться к схеме" aria-label="Вернуться к схеме" onClick={() => void handleReturnToDiagram()}>К схеме</button>
-                    <button type="button" className="minimap-card__action minimap-card__action--secondary" title="Вписать всю схему" aria-label="Вписать всю схему" onClick={() => void handleFitToView()}>Вписать</button>
-                    <button type="button" className="minimap-card__action minimap-card__action--secondary minimap-card__action--ghost" title={edgeLabelMode === 'hidden' ? 'Показать подписи линий' : 'Скрыть подписи линий'} onClick={() => setEdgeLabelMode(edgeLabelMode === 'hidden' ? 'selected' : 'hidden')}>{edgeLabelMode === 'hidden' ? 'Показать подписи' : 'Скрыть подписи'}</button>
-                  </div>
-                </>
-              ) : (
-                <div className="minimap-card__collapsed">Навигатор скрыт. Откройте его, чтобы видеть положение схемы.</div>
-              )}
-            </div>
-          </section>
+          </div>
         </div>
       ) : null}
     </div>
