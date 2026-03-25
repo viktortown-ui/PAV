@@ -24,7 +24,7 @@ export const ProcessNode = memo(({ id, data, selected }: NodeProps<SoapNodeData>
   const topologyNode = className === 'topology';
   const routeState = data.simulation.routeState;
   const level = Math.round(Number(data.visual.fill ?? (data.process as any).levelPercent ?? 0));
-  const flow = Math.round(Number(data.process.flowRate ?? data.process.actualFlowLpm ?? data.simulation.flow ?? 0));
+  const flow = Math.round(Number(data.simulation.flowLpm ?? data.runtime.flowLpm ?? data.process.netFlowLpm ?? 0));
   const handles = getHandleSpecs(data);
   const compactInline = microInline || topologyNode;
   const terminalNode = data.className === 'terminal';

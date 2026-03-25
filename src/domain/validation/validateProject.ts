@@ -67,6 +67,15 @@ const sanitizeSimulation = (value: unknown, fallback: SimulationSettings): Simul
     activeMedium: (isObject(value) && (value.activeMedium === 'mixed' || value.activeMedium === 'none')) ? value.activeMedium as any : asMedium(isObject(value) ? value.activeMedium : undefined, fallback.activeMedium === 'mixed' || fallback.activeMedium === 'none' ? 'water' : fallback.activeMedium),
     totalActiveFlow: Math.max(0, asNumber(isObject(value) ? value.totalActiveFlow : undefined, fallback.totalActiveFlow)),
     lastEvent: asString(isObject(value) ? value.lastEvent : undefined, fallback.lastEvent),
+    fluid: isObject(value) && isObject(value.fluid) ? {
+      id: asString(value.fluid.id, fallback.fluid.id),
+      kind: (value.fluid.kind === 'water' || value.fluid.kind === 'oil' || value.fluid.kind === 'glycol' || value.fluid.kind === 'custom') ? value.fluid.kind : fallback.fluid.kind,
+      name: asString(value.fluid.name, fallback.fluid.name),
+      densityKgPerM3: Math.max(1, asNumber(value.fluid.densityKgPerM3, fallback.fluid.densityKgPerM3)),
+      dynamicViscosityPaS: Math.max(0.000001, asNumber(value.fluid.dynamicViscosityPaS, fallback.fluid.dynamicViscosityPaS)),
+      bulkModulusPa: value.fluid.bulkModulusPa === undefined ? fallback.fluid.bulkModulusPa : asNumber(value.fluid.bulkModulusPa, fallback.fluid.bulkModulusPa ?? 0),
+    } : fallback.fluid,
+    scenarioRevision: Math.max(0, asNumber(isObject(value) ? value.scenarioRevision : undefined, fallback.scenarioRevision)),
   };
 };
 const sanitizeEventLog = (value: unknown, fallback: EventLogEntry[]) => Array.isArray(value) ? value.filter(isObject).map((entry, index) => ({ id: asString(entry.id, `event-${index}`), timestamp: asString(entry.timestamp, new Date().toISOString()), type: asString(entry.type, 'restore'), message: asString(entry.message, 'Восстановлено состояние проекта'), severity: asSeverity(entry.severity), targetId: typeof entry.targetId === 'string' ? entry.targetId : undefined })).slice(-80) : fallback;

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { MiniMap, useReactFlow } from 'reactflow';
 import { useAppStore } from '../../store/useAppStore';
+import { FLUID_PRESETS } from '../../domain/physics/fluids';
 import {
   DiagnosticsPanelState,
   coerceDiagnosticsPanelState,
@@ -49,6 +50,8 @@ export const SimulationPanel = ({ focusMode = false, rightPanelVisible = false, 
   const edgeLabelMode = useAppStore((state) => state.edgeLabelMode);
   const setEdgeLabelMode = useAppStore((state) => state.setEdgeLabelMode);
   const resetSimulation = useAppStore((state) => state.resetSimulation);
+  const setSimulationFluid = useAppStore((state) => state.setSimulationFluid);
+  const runFluidScenario = useAppStore((state) => state.runFluidScenario);
   const toggleProblematicOnly = useAppStore((state) => state.toggleProblematicOnly);
   const issues = useAppStore((state) => state.issues);
   const showProblematicOnly = useAppStore((state) => state.showProblematicOnly);
@@ -124,6 +127,7 @@ export const SimulationPanel = ({ focusMode = false, rightPanelVisible = false, 
   const isFull = panelState === 'full';
   const isRunning = simulationStatus === 'running';
   const isPaused = simulationStatus === 'paused';
+  const currentFluid = project.simulation.fluid ?? { id: 'water', kind: 'water', name: 'Вода', densityKgPerM3: 998, dynamicViscosityPaS: 0.001002 };
 
   const handleFitToView = useCallback(async () => {
     await flow.fitView({ padding: 0.2, duration: 220 });
@@ -169,6 +173,32 @@ export const SimulationPanel = ({ focusMode = false, rightPanelVisible = false, 
         </button>
         <button type="button" onClick={() => setSimulationRunning(false)} disabled={!isRunning}>❚❚ Пауза</button>
         <button type="button" onClick={resetSimulation}>↺ Сброс</button>
+      </div>
+      <div className="dock-fluid-block" aria-label="Параметры жидкости">
+        <span className="dock-field-label">Жидкость</span>
+        <select
+          value={currentFluid.id}
+          onChange={(event) => {
+            const preset = FLUID_PRESETS.find((item) => item.id === event.target.value);
+            if (!preset) return;
+            setSimulationFluid({
+              id: preset.id,
+              kind: preset.id === 'water' ? 'water' : preset.id === 'ethylene-glycol' ? 'glycol' : 'custom',
+              name: preset.name,
+              densityKgPerM3: preset.density_kg_m3,
+              dynamicViscosityPaS: preset.dynamicViscosity_Pa_s,
+            });
+          }}
+        >
+          {FLUID_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
+        </select>
+        <label className="dock-field-label">Плотность, кг/м³
+          <input type="number" value={Number(project.simulation.fluid?.densityKgPerM3 ?? 998)} onChange={(event) => setSimulationFluid({ ...currentFluid, densityKgPerM3: Number(event.target.value) })} />
+        </label>
+        <label className="dock-field-label">Вязкость, Па·с
+          <input type="number" step={0.0001} value={Number(project.simulation.fluid?.dynamicViscosityPaS ?? 0.001)} onChange={(event) => setSimulationFluid({ ...currentFluid, dynamicViscosityPaS: Number(event.target.value) })} />
+        </label>
+        <button type="button" onClick={runFluidScenario}>Запустить сценарий</button>
       </div>
       <div className="dock-speed-block" aria-label="Скорость симуляции">
         <span className="dock-field-label">Скорость</span>
