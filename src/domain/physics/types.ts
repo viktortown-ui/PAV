@@ -25,6 +25,10 @@ export interface TankNode {
   volumeM3: number;
   liquidLevelM: number;
   crossSectionAreaM2: number;
+  minVolumeM3?: number;
+  maxVolumeM3?: number;
+  minLiquidLevelM?: number;
+  maxLiquidLevelM?: number;
 }
 
 export type HydraulicNode = JunctionNode | TankNode;
@@ -85,6 +89,13 @@ export interface TankState {
   nodeId: PhysicsId;
   volumeM3: number;
   liquidLevelM: number;
+  minVolumeM3: number;
+  maxVolumeM3: number;
+  qInM3PerS: number;
+  qOutM3PerS: number;
+  netFlowM3PerS: number;
+  fillTimeSeconds: number | null;
+  drainTimeSeconds: number | null;
 }
 
 export interface SolverSnapshot {
@@ -97,12 +108,18 @@ export interface SimulationUiNodeResult {
   nodeId: PhysicsId;
   pressureBar: number;
   levelPercent?: number;
+  liquidLevelM?: number;
+  volumeM3?: number;
+  netFlowLpm?: number;
+  fillTimeSeconds?: number | null;
+  drainTimeSeconds?: number | null;
 }
 
 export interface SimulationUiEdgeResult {
   edgeId: PhysicsId;
   flowLpm: number;
   pressureDropBar: number;
+  velocityMPerS?: number;
 }
 
 export interface SimulationUiResult {
@@ -111,8 +128,16 @@ export interface SimulationUiResult {
   warnings: string[];
 }
 
+export interface SimulationStepOverrides {
+  fluid?: FluidProperties;
+  pumpSpeedRatioById?: Record<PhysicsId, number>;
+  valveOpeningRatioById?: Record<PhysicsId, number>;
+  tankBoundaryFlowM3PerSByNodeId?: Record<PhysicsId, number>;
+}
+
 export interface SimulationStepInput {
   dtSeconds: number;
+  overrides?: SimulationStepOverrides;
 }
 
 export interface SimulationState {
