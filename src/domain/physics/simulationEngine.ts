@@ -1,9 +1,16 @@
 import { ENGINE_LIMITS, PHYSICS_CONSTANTS } from './constants';
+import { darcyFrictionFactor } from './frictionFactor';
+import { flowVelocityMPerS } from './flowVelocity';
+import { localResistancePressureLossPa } from './localResistance';
 import { validatePhysicsInput } from './physicsInputValidation';
+import { pumpHeadMAtFlow } from './pumpCurve';
+import { darcyWeisbachPressureLossPa } from './pressureLoss';
+import { classifyFlowRegime, reynoldsNumber } from './reynolds';
 import { advanceSimulationClock, createInitialSimulationState, setSolverSnapshot } from './state';
 import {
   HydraulicEdge,
   HydraulicNetworkInput,
+  PipeEdge,
   SimulationState,
   SimulationStepInput,
   SimulationUiResult,
@@ -53,9 +60,10 @@ export class PhysicsSimulationEngine {
   }
 
   private solveSteadyStateFlow(network: HydraulicNetworkInput): SolverSnapshot {
-    const fluidDensity = network.fluid.densityKgPerM3;
-
-    const edgeResults = network.edges.map((edge) => this.solveEdge(edge, fluidDensity));
+    const { densityKgPerM3, dynamicViscosityPaS } = network.fluid;
+    const seriesCapable = this.isSeriesNetwork(network);
+    const flowM3PerS = seriesCapable ? this.solveSeriesNetworkFlow(network) : 0;
+    const edgeResults = network.edges.map((edge) => this.solveEdge(edge, densityKgPerM3, dynamicViscosityPaS, flowM3PerS));
     const nodeResults = network.nodes.map((node) => ({
       nodeId: node.id,
       pressurePa: PHYSICS_CONSTANTS.atmosphericPressurePa,
@@ -65,29 +73,44 @@ export class PhysicsSimulationEngine {
     return {
       nodeResults,
       edgeResults,
-      warnings: ['Steady-state solver currently uses baseline placeholders for pressure/flow.'],
+      warnings: seriesCapable
+        ? []
+        : ['Steady-state solver currently supports series hydraulic chains without branching; non-series graphs return zero flow.'],
     };
   }
 
-  private solveEdge(edge: HydraulicEdge, fluidDensity: number) {
+  private solveEdge(
+    edge: HydraulicEdge,
+    fluidDensity: number,
+    dynamicViscosityPaS: number,
+    flowM3PerS: number,
+  ) {
     if (edge.kind === 'pipe') {
-      const area = Math.PI * (edge.innerDiameterM ** 2) * 0.25;
-      const nominalVelocity = 1;
-      const flowM3PerS = area * nominalVelocity;
-      const pressureDropPa = fluidDensity * PHYSICS_CONSTANTS.gravityMps2 * edge.lengthM * 0.01;
+      const velocityMPerS = flowVelocityMPerS(flowM3PerS, edge.innerDiameterM);
+      const re = reynoldsNumber(fluidDensity, velocityMPerS, edge.innerDiameterM, dynamicViscosityPaS);
+      const frictionFactor = darcyFrictionFactor(re, edge.roughnessM, edge.innerDiameterM);
+      const frictionLossPa = darcyWeisbachPressureLossPa(
+        frictionFactor,
+        edge.lengthM,
+        edge.innerDiameterM,
+        fluidDensity,
+        velocityMPerS,
+      );
+      const minorLossPa = localResistancePressureLossPa(edge.minorLossCoefficient ?? 0, fluidDensity, velocityMPerS);
+      const pressureDropPa = frictionLossPa + minorLossPa;
 
       return {
         edgeId: edge.id,
         flowM3PerS,
         pressureDropPa,
-        velocityMPerS: nominalVelocity,
+        velocityMPerS,
+        flowRegime: classifyFlowRegime(re),
       };
     }
 
     if (edge.kind === 'pump') {
-      const speedRatio = edge.speedRatio ?? 1;
-      const flowM3PerS = edge.ratedFlowM3PerS * speedRatio;
-      const pressureDropPa = -fluidDensity * PHYSICS_CONSTANTS.gravityMps2 * edge.ratedHeadM * speedRatio;
+      const headGainM = pumpHeadMAtFlow(edge, flowM3PerS);
+      const pressureDropPa = -fluidDensity * PHYSICS_CONSTANTS.gravityMps2 * headGainM;
 
       return {
         edgeId: edge.id,
@@ -97,14 +120,119 @@ export class PhysicsSimulationEngine {
     }
 
     const openingRatio = clamp(edge.openingRatio, 0, 1);
-    const flowM3PerS = (edge.kvM3PerHour / 3600) * openingRatio;
-    const pressureDropPa = openingRatio > 0 ? fluidDensity * PHYSICS_CONSTANTS.gravityMps2 * (1 - openingRatio) : PHYSICS_CONSTANTS.atmosphericPressurePa;
+    if (openingRatio <= 0) {
+      return {
+        edgeId: edge.id,
+        flowM3PerS: 0,
+        pressureDropPa: PHYSICS_CONSTANTS.atmosphericPressurePa,
+      };
+    }
+    const qM3PerHour = Math.abs(flowM3PerS) * 3600;
+    const kvEffective = Math.max(edge.kvM3PerHour * openingRatio, 1e-9);
+    const baseDropPa = ((qM3PerHour / kvEffective) ** 2) * 100_000;
+    const pressureDropPa = baseDropPa;
 
     return {
       edgeId: edge.id,
       flowM3PerS,
       pressureDropPa,
     };
+  }
+
+  private isSeriesNetwork(network: HydraulicNetworkInput): boolean {
+    const byNode = new Map<string, { incoming: number; outgoing: number }>();
+    network.nodes.forEach((node) => byNode.set(node.id, { incoming: 0, outgoing: 0 }));
+    network.edges.forEach((edge) => {
+      const source = byNode.get(edge.fromNodeId);
+      const target = byNode.get(edge.toNodeId);
+      if (source) source.outgoing += 1;
+      if (target) target.incoming += 1;
+    });
+
+    const branching = Array.from(byNode.values()).some((entry) => entry.incoming > 1 || entry.outgoing > 1);
+    return !branching;
+  }
+
+  private solveSeriesNetworkFlow(network: HydraulicNetworkInput): number {
+    const pumps = network.edges.filter((edge): edge is Extract<HydraulicEdge, { kind: 'pump' }> => edge.kind === 'pump');
+    const commandedFlow = pumps.length > 0
+      ? Math.min(...pumps.map((pump) => Math.max(0, pump.ratedFlowM3PerS * Math.max(pump.speedRatio ?? 1, 0))))
+      : 0;
+    const qUpper = Math.max(
+      pumps.length > 0
+        ? pumps.reduce((sum, pump) => sum + Math.max(0, pump.ratedFlowM3PerS * Math.max(pump.speedRatio ?? 1, 0)), 0) * 2
+        : 0.05,
+      PHYSICS_CONSTANTS.minimumPositiveFlowM3PerS,
+    );
+
+    const rootResidual = (flow: number): number => {
+      const pumpHead = pumps.reduce((sum, pump) => sum + pumpHeadMAtFlow(pump, flow), 0);
+      const lossHead = network.edges.reduce((sum, edge) => sum + this.edgeLossHeadM(edge, flow, network), 0);
+      const staticHead = this.computeStaticHeadM(network);
+      return pumpHead - staticHead - lossHead;
+    };
+
+    if (rootResidual(0) <= 0) return 0;
+    if (commandedFlow > 0 && rootResidual(commandedFlow) >= 0) return commandedFlow;
+
+    let low = 0;
+    let high = commandedFlow > 0 ? commandedFlow : qUpper;
+    for (let i = 0; i < 40; i += 1) {
+      const mid = 0.5 * (low + high);
+      const residual = rootResidual(mid);
+      if (Math.abs(residual) < 1e-6) return mid;
+      if (residual > 0) low = mid;
+      else high = mid;
+    }
+    return 0.5 * (low + high);
+  }
+
+  private edgeLossHeadM(edge: HydraulicEdge, flowM3PerS: number, network: HydraulicNetworkInput): number {
+    const fluidDensity = network.fluid.densityKgPerM3;
+    const fluidViscosity = network.fluid.dynamicViscosityPaS;
+    const gravity = PHYSICS_CONSTANTS.gravityMps2;
+
+    if (edge.kind === 'pump') return 0;
+    if (edge.kind === 'valve') {
+      const opening = clamp(edge.openingRatio, 0, 1);
+      if (opening <= 0) return Number.POSITIVE_INFINITY;
+      const qM3PerHour = Math.abs(flowM3PerS) * 3600;
+      const kvEffective = Math.max(edge.kvM3PerHour * opening, 1e-9);
+      const dropPa = ((qM3PerHour / kvEffective) ** 2) * 100_000;
+      return dropPa / (fluidDensity * gravity);
+    }
+
+    return this.pipeLossHeadM(edge, flowM3PerS, fluidDensity, fluidViscosity);
+  }
+
+  private pipeLossHeadM(
+    pipe: PipeEdge,
+    flowM3PerS: number,
+    densityKgPerM3: number,
+    dynamicViscosityPaS: number,
+  ): number {
+    const velocity = flowVelocityMPerS(flowM3PerS, pipe.innerDiameterM);
+    const re = reynoldsNumber(densityKgPerM3, velocity, pipe.innerDiameterM, dynamicViscosityPaS);
+    const frictionFactor = darcyFrictionFactor(re, pipe.roughnessM, pipe.innerDiameterM);
+    const pressureLoss = darcyWeisbachPressureLossPa(
+      frictionFactor,
+      pipe.lengthM,
+      pipe.innerDiameterM,
+      densityKgPerM3,
+      velocity,
+    ) + localResistancePressureLossPa(pipe.minorLossCoefficient ?? 0, densityKgPerM3, velocity);
+    return pressureLoss / (densityKgPerM3 * PHYSICS_CONSTANTS.gravityMps2);
+  }
+
+  private computeStaticHeadM(network: HydraulicNetworkInput): number {
+    const nodeById = new Map(network.nodes.map((node) => [node.id, node]));
+    const startNode = network.nodes.find((candidate) => !network.edges.some((edge) => edge.toNodeId === candidate.id));
+    const endNode = network.nodes.find((candidate) => !network.edges.some((edge) => edge.fromNodeId === candidate.id));
+    if (!startNode || !endNode) return 0;
+    const start = nodeById.get(startNode.id);
+    const end = nodeById.get(endNode.id);
+    if (!start || !end) return 0;
+    return end.elevationM - start.elevationM;
   }
 
   private updateTankVolumes(snapshot: SolverSnapshot, dtSeconds: number): void {
