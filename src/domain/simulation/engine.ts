@@ -288,7 +288,7 @@ export const runSimulationStep = (project: ProjectDocument, dt: number): Simulat
     const hydraulicFlowLpm = edgeFlows.length > 0 ? Math.min(...edgeFlows) : 0;
     const blockers: string[] = [];
 
-    if (!sourceNode || !targetNode) blockers.push('broken route');
+    if (!sourceNode || !targetNode) blockers.push('маршрут разорван');
     const sourceProcess = (sourceNode?.data.process ?? {}) as any;
     if (sourceNode && tankKinds.has(sourceNode.data.kind)) {
       const canDischarge = Boolean(sourceProcess.allowDischarge ?? sourceProcess.canDischarge ?? true);
@@ -302,7 +302,7 @@ export const runSimulationStep = (project: ProjectDocument, dt: number): Simulat
       const gate = nodeCanPassFlow(node);
       if (!gate.pass) blockers.push(gate.reason);
     });
-    if (targetNode && !nodeAcceptsFlow(targetNode)) blockers.push(`${targetNode.data.visibleName}: downstream приём запрещён`);
+    if (targetNode && !nodeAcceptsFlow(targetNode)) blockers.push(`${targetNode.data.visibleName}: приём далее по линии запрещён`);
     const hasPumpOnRoute = route.nodeIds.some((nodeId) => pumpKinds.has(nodeById.get(nodeId)?.data.kind ?? 'source'));
     const pumpCommandedFlowLpm = route.nodeIds.reduce((maxFlow, nodeId) => {
       const node = nodeById.get(nodeId);

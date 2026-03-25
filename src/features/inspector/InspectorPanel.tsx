@@ -3,12 +3,12 @@ import { EquipmentStatus, EventLogEntry, PropertyField, SoapNode, ValidationIssu
 import { EdgeActionKind, useAppStore } from '../../store/useAppStore';
 import { createEdgeInspectorSchema, edgeInspectorFields } from './schemas';
 import { buildSegmentList, summarizeDiagnostics } from '../editor/lineList';
+import { formatEventTime, formatSmartNumber, presentEvent } from './presentation';
 
 const ruMedium: Record<string, string> = { water: 'Вода', product: 'Продукт', cip: 'СИП', waste: 'Сток', composite: 'Смесь' };
 const ruState: Record<string, string> = { idle: 'Ожидание', primed: 'Подготовлен', flowing: 'Поток', blocked: 'Блокировка', starved: 'Нет подпитки', draining: 'Слив', cip: 'СИП', alarm: 'Авария', maintenance: 'Ремонт', offline: 'Отключён' };
 const ruStatus: Record<EquipmentStatus, string> = { off: 'Выключен', idle: 'Ожидание', standby: 'Готовность', running: 'Работает', blocked: 'Блокирован', alarm: 'Авария', maintenance: 'Ремонт', normal: 'Норма', active: 'Активен', warning: 'Предупреждение', disabled: 'Отключён' };
 const ruProcessState: Record<string, string> = { idle: 'Ожидание', waiting: 'Ожидание', transferring: 'Передача', blocked: 'Блокировка', running: 'Работает', fault: 'Авария', offline: 'Отключён' };
-const ruEventType: Record<string, string> = { editor: 'Команда', simulation: 'Симуляция', physics: 'Физика', route: 'Маршрут', warning: 'Предупреждение', alarm: 'Авария', template: 'Шаблон' };
 
 const edgeActionButtons: Array<{ label: string; action: EdgeActionKind; tone?: 'base' | 'danger' }> = [
   { label: 'Вставить клапан', action: 'insert:shutoffValve' },
@@ -45,7 +45,6 @@ const statusTone = (status: string) => {
   return 'idle';
 };
 
-const formatTime = (timestamp: string) => new Date(timestamp).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'UTC' });
 
 const DiagnosticsSection = () => {
   const project = useAppStore((state) => state.project);
@@ -94,6 +93,7 @@ const DiagnosticsSection = () => {
 };
 
 const buildNodeActions = (node: SoapNode) => {
+  type ActionSpec = { label: string; action: string; active: boolean; tone?: 'warn'; disabled?: boolean };
   const process = node.data.process as any;
   const running = Boolean(process.isRunning ?? process.pumpOn ?? node.data.status === 'running');
   const intake = Boolean(process.allowIntake ?? process.canReceive ?? true);
@@ -103,53 +103,55 @@ const buildNodeActions = (node: SoapNode) => {
 
   if (node.data.kind === 'reactor' || node.data.kind === 'heatedReactor') {
     return [
-      { label: 'Пуск', action: 'reactor:start', active: running },
-      { label: 'Стоп', action: 'reactor:stop', active: !running, tone: 'warn' as const },
-      { label: 'Ожидание', action: 'reactor:setIdle', active: node.data.status === 'idle' },
-      { label: 'Ремонт', action: 'reactor:setMaintenance', active: node.data.status === 'maintenance', tone: 'warn' as const },
-    ];
+      { label: 'Пуск', action: 'reactor:start', active: running, disabled: running },
+      { label: 'Стоп', action: 'reactor:stop', active: !running, tone: 'warn' as const, disabled: !running },
+      { label: 'Ожидание', action: 'reactor:setIdle', active: node.data.status === 'idle', disabled: node.data.status === 'idle' },
+      { label: 'Ремонт', action: 'reactor:setMaintenance', active: node.data.status === 'maintenance', tone: 'warn' as const, disabled: node.data.status === 'maintenance' },
+    ] as ActionSpec[];
   }
 
   if (node.data.kind === 'pump' || node.data.kind === 'dosingPump') {
+    const hasAlarm = Boolean(node.data.alarms?.length || node.data.runtime.alarmText || node.data.simulation.alarmText);
     return [
-      { label: 'Включить', action: 'pump:start', active: running },
-      { label: 'Остановить', action: 'pump:stop', active: !running, tone: 'warn' as const },
-      { label: 'Сброс тревоги', action: 'pump:clearAlarm', active: false },
-    ];
+      { label: 'Включить', action: 'pump:start', active: running, disabled: running },
+      { label: 'Остановить', action: 'pump:stop', active: !running, tone: 'warn' as const, disabled: !running },
+      { label: 'Сброс тревоги', action: 'pump:clearAlarm', active: false, disabled: !hasAlarm },
+    ] as ActionSpec[];
   }
 
   if (node.data.className === 'valve') {
     return [
-      { label: 'Открыть', action: 'valve:open', active: valveOpen },
-      { label: 'Закрыть', action: 'valve:close', active: !valveOpen, tone: 'warn' as const },
-      { label: 'Автомат', action: 'valve:auto', active: autoMode },
-      { label: 'Ручной', action: 'valve:manual', active: !autoMode },
-    ];
+      { label: 'Открыть', action: 'valve:open', active: valveOpen, disabled: valveOpen },
+      { label: 'Закрыть', action: 'valve:close', active: !valveOpen, tone: 'warn' as const, disabled: !valveOpen },
+      { label: 'Автомат', action: 'valve:auto', active: autoMode, disabled: autoMode },
+      { label: 'Ручной', action: 'valve:manual', active: !autoMode, disabled: !autoMode },
+    ] as ActionSpec[];
   }
 
   if (node.data.kind === 'tank' || node.data.kind === 'bufferTank') {
     return [
-      { label: 'Приём разрешён', action: 'tank:enableReceive', active: intake },
-      { label: 'Приём закрыт', action: 'tank:disableReceive', active: !intake, tone: 'warn' as const },
-      { label: 'Выдача разрешена', action: 'tank:enableDischarge', active: discharge },
-      { label: 'Выдача закрыта', action: 'tank:disableDischarge', active: !discharge, tone: 'warn' as const },
-    ];
+      { label: 'Приём разрешён', action: 'tank:enableReceive', active: intake, disabled: intake },
+      { label: 'Приём закрыт', action: 'tank:disableReceive', active: !intake, tone: 'warn' as const, disabled: !intake },
+      { label: 'Выдача разрешена', action: 'tank:enableDischarge', active: discharge, disabled: discharge },
+      { label: 'Выдача закрыта', action: 'tank:disableDischarge', active: !discharge, tone: 'warn' as const, disabled: !discharge },
+    ] as ActionSpec[];
   }
 
   if (node.data.kind === 'fillingStation') {
     return [
-      { label: 'Приём разрешён', action: 'station:enableIntake', active: intake },
-      { label: 'Приём закрыт', action: 'station:disableIntake', active: !intake, tone: 'warn' as const },
-    ];
+      { label: 'Приём разрешён', action: 'station:enableIntake', active: intake, disabled: intake },
+      { label: 'Приём закрыт', action: 'station:disableIntake', active: !intake, tone: 'warn' as const, disabled: !intake },
+    ] as ActionSpec[];
   }
 
   if (node.data.className === 'instrument') {
     const enabled = Boolean(process.sensorEnabled ?? true);
+    const hasAlarm = Boolean(node.data.alarms?.length || node.data.runtime.alarmText || node.data.simulation.alarmText);
     return [
-      { label: 'Контроль включён', action: 'sensor:enable', active: enabled },
-      { label: 'Контроль отключён', action: 'sensor:disable', active: !enabled, tone: 'warn' as const },
-      { label: 'Сброс предупреждения', action: 'sensor:clearWarning', active: false },
-    ];
+      { label: 'Контроль включён', action: 'sensor:enable', active: enabled, disabled: enabled },
+      { label: 'Контроль отключён', action: 'sensor:disable', active: !enabled, tone: 'warn' as const, disabled: !enabled },
+      { label: 'Сброс предупреждения', action: 'sensor:clearWarning', active: false, disabled: !hasAlarm },
+    ] as ActionSpec[];
   }
 
   return [];
@@ -159,13 +161,14 @@ const EventList = ({ events }: { events: EventLogEntry[] }) => (
   <section className="route-card inspector-card">
     <strong>События</strong>
     <div className="segment-list">
-      {events.map((event) => (
-        <div key={event.id} className={`issue-card severity-${event.severity}`}>
-          <strong>{ruEventType[event.type] ?? 'Событие'}</strong>
-          <span>{event.message}</span>
-          <span>{formatTime(event.timestamp)}</span>
-        </div>
-      ))}
+      {events.map((rawEvent) => {
+        const event = presentEvent(rawEvent);
+        return <div key={event.id} className={`issue-card severity-${event.severity}`}>
+          <strong>{event.uiType}</strong>
+          <span>{event.uiMessage}</span>
+          <small>{formatEventTime(event.timestamp)}</small>
+        </div>;
+      })}
       {!events.length ? <div className="issue-card severity-info"><strong>События</strong><span>Записей пока нет.</span></div> : null}
     </div>
   </section>
@@ -230,7 +233,8 @@ export const InspectorPanel = ({ compact = false }: { compact?: boolean }) => {
 
       <section className="route-card inspector-card">
         <strong>Диагностика линии</strong>
-        {relatedIssues.length ? relatedIssues.map((issue) => <div key={issue.id} className={`issue-card severity-${issue.severity}`}><strong>{issueTitle(issue)}</strong><span>{issue.message}</span></div>) : <div className="issue-card severity-info"><strong>Проверка</strong><span>Для выбранной линии критичных замечаний нет.</span></div>}
+        <span className="panel-caption">Показывает совместимость сегмента, блокировки маршрута и причины отсутствия потока.</span>
+        {relatedIssues.length ? relatedIssues.map((issue) => <div key={issue.id} className={`issue-card severity-${issue.severity}`}><strong>{issueTitle(issue)}</strong><span>{issue.message}</span></div>) : <div className="issue-card severity-info"><strong>Маршрут совместим</strong><span>Блокировок потока и физических замечаний для выбранной линии не выявлено.</span></div>}
       </section>
 
       <EventList events={events} />
@@ -270,17 +274,17 @@ export const InspectorPanel = ({ compact = false }: { compact?: boolean }) => {
         <span className="status-pill">{ruMedium[node!.data.mediumType]}</span>
       </div>
       <div className="kpi-grid">
-        <div><span>Поток</span><strong>{summaryFlow.toFixed(1)} л/мин</strong></div>
-        <div className={summaryTemp >= 80 ? 'is-alert' : ''}><span>Температура</span><strong>{summaryTemp.toFixed(1)} °C</strong></div>
+        <div><span>Поток</span><strong>{formatSmartNumber(summaryFlow, 1)} л/мин</strong></div>
+        <div className={summaryTemp >= 80 ? 'is-alert' : ''}><span>Температура</span><strong>{formatSmartNumber(summaryTemp, 1)} °C</strong></div>
         <div><span>Уровень</span><strong>{Math.round(summaryLevel)} л</strong></div>
-        <div><span>Давление</span><strong>{pressure.toFixed(2)} бар</strong></div>
+        <div><span>Давление</span><strong>{formatSmartNumber(pressure, 2)} бар</strong></div>
       </div>
     </section>
 
     <section className="route-card inspector-card">
       <strong>Панель управления</strong>
       <div className="control-group">
-        {actions.map((item) => <button key={item.action} className={`control-button ${item.active ? 'is-active' : ''} ${item.tone === 'warn' ? 'is-warning' : ''}`} onClick={() => executeNodeAction(node!.id, item.action)}>{item.label}</button>)}
+        {actions.map((item) => <button key={item.action} className={`control-button ${item.active ? 'is-active' : ''} ${item.tone === 'warn' ? 'is-warning' : ''}`} disabled={item.disabled} onClick={() => executeNodeAction(node!.id, item.action)}>{item.label}</button>)}
       </div>
     </section>
 
@@ -290,17 +294,17 @@ export const InspectorPanel = ({ compact = false }: { compact?: boolean }) => {
         <span>Режим процесса: <b>{ruProcessState[processState] ?? processState}</b></span>
         <span>Командный статус: <b>приём {commandIntake ? 'разрешён' : 'закрыт'} • выдача {commandDischarge ? 'разрешена' : 'закрыта'} • привод {commandRunning ? 'включён' : 'остановлен'} • блок {commandBlocked ? 'да' : 'нет'}</b></span>
         <span>Статус потока: <b>{summaryFlow > 0.001 ? 'Поток есть' : 'Поток отсутствует'}</b></span>
-        <span>Причина: <b>{statusReason || 'Ограничений нет'}</b></span>
+        <span>Причина текущего состояния: <b>{statusReason || 'Ограничений и блокировок не обнаружено'}</b></span>
       </div>
     </section>
 
     <section className="route-card inspector-card">
-      <strong>Диагностический блок</strong>
+      <strong>Диагностика состояния</strong>
       <div className="gauge-grid">
-        <div className="gauge"><span>Термометр</span><div className="gauge-track"><i style={{ width: `${Math.max(0, Math.min(100, summaryTemp))}%` }} /></div><small>{summaryTemp.toFixed(1)} °C</small></div>
-        <div className="gauge"><span>Манометр</span><div className="gauge-track"><i style={{ width: `${Math.max(0, Math.min(100, pressure * 10))}%` }} /></div><small>{pressure.toFixed(2)} бар</small></div>
-        <div className="gauge"><span>Расходомер</span><div className="gauge-track"><i style={{ width: `${Math.max(0, Math.min(100, summaryFlow))}%` }} /></div><small>{summaryFlow.toFixed(1)} л/мин</small></div>
-        <div className="gauge"><span>Вязкость</span><div className="gauge-track"><i style={{ width: `${Math.max(0, Math.min(100, viscosity * 10000))}%` }} /></div><small>{viscosity.toFixed(4)} Па·с</small></div>
+        <div className="gauge"><span>Термометр</span><div className="gauge-track"><i style={{ width: `${Math.max(0, Math.min(100, summaryTemp))}%` }} /></div><small>{formatSmartNumber(summaryTemp, 1)} °C</small></div>
+        <div className="gauge"><span>Манометр</span><div className="gauge-track"><i style={{ width: `${Math.max(0, Math.min(100, pressure * 10))}%` }} /></div><small>{formatSmartNumber(pressure, 2)} бар</small></div>
+        <div className="gauge"><span>Расходомер</span><div className="gauge-track"><i style={{ width: `${Math.max(0, Math.min(100, summaryFlow))}%` }} /></div><small>{formatSmartNumber(summaryFlow, 1)} л/мин</small></div>
+        <div className="gauge"><span>Вязкость</span><div className="gauge-track"><i style={{ width: `${Math.max(0, Math.min(100, viscosity * 10000))}%` }} /></div><small>{formatSmartNumber(viscosity, 5)} Па·с</small></div>
         <div className="gauge"><span>Плотность</span><div className="gauge-track"><i style={{ width: `${Math.max(0, Math.min(100, density / 15))}%` }} /></div><small>{Math.round(density)} кг/м³</small></div>
         <div className="gauge"><span>Уровень</span><div className="gauge-track"><i style={{ width: `${Math.max(0, Math.min(100, Number(process.levelPercent ?? 0)))}%` }} /></div><small>{Math.round(Number(process.levelPercent ?? 0))} %</small></div>
       </div>

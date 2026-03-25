@@ -110,7 +110,7 @@ export class PhysicsSimulationEngine {
         ...warnings,
         ...(seriesCapable
           ? []
-          : ['Steady-state solver currently supports series hydraulic chains without branching; non-series graphs return zero flow.']),
+          : ['Проверка потока пока поддерживает только последовательные цепочки без разветвлений: для разветвлённых графов расход равен нулю.']),
       ],
     };
   }
@@ -124,16 +124,16 @@ export class PhysicsSimulationEngine {
       if (!edge) return;
 
       if (result.flowM3PerS < 0 && !this.isReverseFlowAllowed(edge)) {
-        warnings.push(`Edge ${edge.id} produced negative flow that is disallowed by its direction model.`);
+        warnings.push(`Сегмент ${edge.id}: обратный поток запрещён текущей моделью направления.`);
       }
 
       if (edge.kind === 'pipe' && Number.isFinite(result.velocityMPerS) && Math.abs(result.velocityMPerS ?? 0) > ENGINE_LIMITS.unrealisticVelocityMPerS) {
-        warnings.push(`Edge ${edge.id} has unrealistic velocity ${Math.abs(result.velocityMPerS ?? 0).toFixed(2)} m/s.`);
+        warnings.push(`Сегмент ${edge.id}: скорость ${Math.abs(result.velocityMPerS ?? 0).toFixed(2)} м/с вне рабочего диапазона.`);
       }
     });
 
     if (network.edges.some((edge) => edge.kind === 'pump')) {
-      warnings.push('Cavitation risk check is a placeholder (NPSH and vapor pressure are not yet modeled).');
+      warnings.push('Проверка кавитационного риска пока упрощённая: расчёт NPSH и давления насыщения ещё не полный.');
     }
 
     return warnings;
