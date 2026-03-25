@@ -23,6 +23,8 @@ const tankKinds = new Set(['source', 'tank', 'bufferTank', 'reactor', 'heatedRea
 const pumpKinds = new Set(['pump', 'dosingPump']);
 const valveKinds = new Set(['manualValve', 'shutoffValve', 'solenoidValve', 'checkValve', 'controlValve', 'gateValve', 'drainValve', 'reliefValve']);
 const sensorKinds = new Set(['flowMeter', 'pressureSensor', 'temperatureSensor', 'levelSensor', 'phSensor', 'conductivitySensor', 'indicator']);
+const reactorKinds = new Set(['reactor', 'heatedReactor']);
+const intakeControlledKinds = new Set(['tank', 'bufferTank', 'reactor', 'heatedReactor', 'fillingStation', 'consumer', 'utilityDrain']);
 
 const parseDnToMeters = (dn?: string) => {
   const parsed = Number(String(dn ?? 'DN50').replace(/[^\d.]/g, ''));
@@ -137,6 +139,18 @@ const pushEvent = (events: EventLogEntry[], type: string, message: string, sever
   events.push({ id: crypto.randomUUID(), timestamp: new Date().toISOString(), type, message, severity, targetId });
 };
 
+const syncProcessCommandState = (node: SoapNode) => {
+  const process = node.data.process as any;
+  process.allowIntake = Boolean(process.allowIntake ?? process.canReceive ?? true);
+  process.allowDischarge = Boolean(process.allowDischarge ?? process.canDischarge ?? true);
+  process.isRunning = Boolean(process.isRunning ?? process.pumpOn ?? process.mixingOn ?? process.heatingOn ?? node.data.status === 'running');
+  process.isBlocked = Boolean(process.isBlocked ?? false);
+  process.processState = String(process.processState ?? 'idle');
+  process.mode = String(process.mode ?? node.data.mode ?? 'auto');
+  process.canReceive = process.allowIntake;
+  process.canDischarge = process.allowDischarge;
+};
+
 type RouteSegment = {
   id: string;
   sourceId: string;
@@ -150,31 +164,36 @@ type RouteCandidate = {
 
 const nodeAcceptsFlow = (node: SoapNode) => {
   const process = node.data.process as any;
+  syncProcessCommandState(node);
   if (!Boolean(node.data.isEnabled ?? true)) return false;
-  if (tankKinds.has(node.data.kind)) return Boolean(process.canReceive ?? true) && toFiniteNumber(process.currentLevelLiters ?? process.level, 0) < toFiniteNumber(process.capacityLiters ?? process.capacity, 0);
-  if (node.data.kind === 'consumer' || node.data.kind === 'utilityDrain') return Boolean(process.canReceive ?? true);
-  return Boolean(process.canReceive ?? true);
+  if (tankKinds.has(node.data.kind)) return Boolean(process.allowIntake) && toFiniteNumber(process.currentLevelLiters ?? process.level, 0) < toFiniteNumber(process.capacityLiters ?? process.capacity, 0);
+  if (node.data.kind === 'consumer' || node.data.kind === 'utilityDrain' || node.data.kind === 'fillingStation') return Boolean(process.allowIntake);
+  return Boolean(process.allowIntake);
 };
 
 const nodeCanPassFlow = (node: SoapNode) => {
   const process = node.data.process as any;
+  syncProcessCommandState(node);
   if (!Boolean(node.data.isEnabled ?? true) || !Boolean(node.data.simulationEnabled ?? true)) {
-    return { pass: false, reason: `${node.data.visibleName}: element disabled` };
+    return { pass: false, reason: `${node.data.visibleName}: элемент отключён` };
   }
   if (pumpKinds.has(node.data.kind)) {
-    const pumpOn = Boolean(process.pumpOn ?? process.isOn ?? process.enabled ?? node.data.status === 'running');
+    const pumpOn = Boolean(process.isRunning ?? process.pumpOn ?? process.isOn ?? process.enabled ?? node.data.status === 'running');
     const startAllowed = Boolean(process.startAllowed ?? true);
     const suctionAvailable = Boolean(process.suctionAvailable ?? true);
-    if (!pumpOn) return { pass: false, reason: `${node.data.visibleName}: pump off` };
-    if (!startAllowed) return { pass: false, reason: `${node.data.visibleName}: pump start not allowed` };
-    if (!suctionAvailable) return { pass: false, reason: `${node.data.visibleName}: no suction` };
+    if (!pumpOn) return { pass: false, reason: `${node.data.visibleName}: насос выключен` };
+    if (!startAllowed) return { pass: false, reason: `${node.data.visibleName}: пуск насоса запрещён` };
+    if (!suctionAvailable) return { pass: false, reason: `${node.data.visibleName}: нет подпитки на всасе` };
   }
   if (valveKinds.has(node.data.kind)) {
     const isOpen = Boolean(process.isOpen ?? process.valveOpen ?? process.valveState !== 'closed');
-    if (!isOpen) return { pass: false, reason: `${node.data.visibleName}: valve closed` };
+    if (!isOpen) return { pass: false, reason: `${node.data.visibleName}: клапан закрыт` };
   }
-  if (tankKinds.has(node.data.kind) && Boolean(process.canDischarge) === false) {
-    return { pass: false, reason: `${node.data.visibleName}: discharge forbidden` };
+  if (tankKinds.has(node.data.kind) && Boolean(process.allowDischarge) === false) {
+    return { pass: false, reason: `${node.data.visibleName}: выдача запрещена` };
+  }
+  if (reactorKinds.has(node.data.kind) && Boolean(process.isRunning ?? true) === false) {
+    return { pass: false, reason: `${node.data.visibleName}: реактор в ожидании` };
   }
   return { pass: true, reason: '' };
 };
@@ -196,13 +215,14 @@ const enumerateRoutes = (nodes: SoapNode[], edges: SoapEdge[]): RouteCandidate[]
     if (edgeIds.length > maxDepth) return;
     const currentNode = nodeById.get(currentNodeId);
     if (!currentNode) return;
-    const isTerminalReceiver = nodeIds.length > 1 && nodeAcceptsFlow(currentNode);
+    const nextEdges = outgoing.get(currentNodeId) ?? [];
+    const isSinkKind = currentNode.data.kind === 'fillingStation' || currentNode.data.kind === 'consumer' || currentNode.data.kind === 'utilityDrain';
+    const isTerminalReceiver = nodeIds.length > 1 && nodeAcceptsFlow(currentNode) && (isSinkKind || nextEdges.length === 0);
     if (isTerminalReceiver) {
       routes.push({ nodeIds: [...nodeIds], edgeIds: [...edgeIds] });
       return;
     }
 
-    const nextEdges = outgoing.get(currentNodeId) ?? [];
     nextEdges.forEach((segment) => {
       if (visitedNodes.has(segment.targetId)) return;
       visitedNodes.add(segment.targetId);
@@ -237,6 +257,7 @@ export const runSimulationStep = (project: ProjectDocument, dt: number): Simulat
   const nodeById = new Map(nextNodes.map((node) => [node.id, node]));
 
   nextNodes.forEach((node) => {
+    syncProcessCommandState(node);
     node.data.simulation.flowLpm = 0;
     node.data.simulation.flow = 0;
     node.data.simulation.active = false;
@@ -270,10 +291,10 @@ export const runSimulationStep = (project: ProjectDocument, dt: number): Simulat
     if (!sourceNode || !targetNode) blockers.push('broken route');
     const sourceProcess = (sourceNode?.data.process ?? {}) as any;
     if (sourceNode && tankKinds.has(sourceNode.data.kind)) {
-      const canDischarge = Boolean(sourceProcess.canDischarge ?? true);
+      const canDischarge = Boolean(sourceProcess.allowDischarge ?? sourceProcess.canDischarge ?? true);
       const sourceLevel = Math.max(0, toFiniteNumber(sourceProcess.currentLevelLiters ?? sourceProcess.level, 0));
-      if (!canDischarge) blockers.push(`${sourceNode.data.visibleName}: discharge forbidden`);
-      if (sourceLevel <= 0) blockers.push(`${sourceNode.data.visibleName}: no volume`);
+      if (!canDischarge) blockers.push(`${sourceNode.data.visibleName}: выдача запрещена`);
+      if (sourceLevel <= 0) blockers.push(`${sourceNode.data.visibleName}: пустая ёмкость`);
     }
     route.nodeIds.forEach((nodeId) => {
       const node = nodeById.get(nodeId);
@@ -281,14 +302,23 @@ export const runSimulationStep = (project: ProjectDocument, dt: number): Simulat
       const gate = nodeCanPassFlow(node);
       if (!gate.pass) blockers.push(gate.reason);
     });
-    if (targetNode && !nodeAcceptsFlow(targetNode)) blockers.push(`${targetNode.data.visibleName}: downstream not accepting`);
+    if (targetNode && !nodeAcceptsFlow(targetNode)) blockers.push(`${targetNode.data.visibleName}: downstream приём запрещён`);
     const hasPumpOnRoute = route.nodeIds.some((nodeId) => pumpKinds.has(nodeById.get(nodeId)?.data.kind ?? 'source'));
+    const pumpCommandedFlowLpm = route.nodeIds.reduce((maxFlow, nodeId) => {
+      const node = nodeById.get(nodeId);
+      if (!node || !pumpKinds.has(node.data.kind)) return maxFlow;
+      const process = node.data.process as any;
+      return Math.max(maxFlow, Math.max(0, toFiniteNumber(process.nominalFlowLpm ?? process.flowRate ?? process.actualFlowLpm, 0)));
+    }, 0) * project.simulation.speed;
     const sourceCommandedFlowLpm = Math.max(0, toFiniteNumber(sourceProcess.actualFlowLpm ?? sourceProcess.flowRate, 0)) * project.simulation.speed;
     let requestedFlowLpm = hydraulicFlowLpm;
     if (!hasPumpOnRoute && requestedFlowLpm <= 0.001) {
       requestedFlowLpm = sourceCommandedFlowLpm;
     }
-    if (requestedFlowLpm <= 0.001) blockers.push('hydraulic flow = 0');
+    if (hasPumpOnRoute && requestedFlowLpm <= 0.001) {
+      requestedFlowLpm = pumpCommandedFlowLpm;
+    }
+    if (requestedFlowLpm <= 0.001) blockers.push('гидравлика: Q = 0');
 
     let flowLpm = blockers.length > 0 ? 0 : requestedFlowLpm;
     if (flowLpm > 0 && sourceNode) {
@@ -300,7 +330,7 @@ export const runSimulationStep = (project: ProjectDocument, dt: number): Simulat
       const sinkRemaining = receivableLitersByNodeId.get(targetNode.id) ?? 0;
       const sinkLimitLpm = (sinkRemaining / dtSeconds) * 60;
       flowLpm = Math.min(flowLpm, sinkLimitLpm);
-      if (sinkLimitLpm <= 0.001) blockers.push(`${targetNode.data.visibleName}: full`);
+      if (sinkLimitLpm <= 0.001) blockers.push(`${targetNode.data.visibleName}: ёмкость заполнена`);
     }
     if (flowLpm <= 0.001) flowLpm = 0;
 
@@ -335,6 +365,14 @@ export const runSimulationStep = (project: ProjectDocument, dt: number): Simulat
     if (!source || !target) return;
     const flowLpm = Math.max(0, toFiniteNumber(edgeFlowById.get(edge.id), 0));
     const blockedReasons = Array.from(new Set(edgeBlockedBy.get(edge.id) ?? []));
+    if (flowLpm <= 0.001 && blockedReasons.length === 0) {
+      const sourceGate = nodeCanPassFlow(source);
+      const targetGate = nodeCanPassFlow(target);
+      if (!sourceGate.pass) blockedReasons.push(sourceGate.reason);
+      if (!targetGate.pass) blockedReasons.push(targetGate.reason);
+      if (!nodeAcceptsFlow(target)) blockedReasons.push(`${target.data.visibleName}: приём запрещён downstream`);
+      if (!blockedReasons.length) blockedReasons.push('маршрут в ожидании: Q = 0');
+    }
     const blocked = flowLpm <= 0.001 && blockedReasons.length > 0;
     const routeState = mapRouteState(flowLpm, blocked);
     const hydraulic = edgeResultById.get(edge.id);
@@ -368,6 +406,14 @@ export const runSimulationStep = (project: ProjectDocument, dt: number): Simulat
     const flowLpm = Math.max(0, toFiniteNumber(edge.data?.flowLpm, 0));
     qOutByNodeId.set(edge.source, (qOutByNodeId.get(edge.source) ?? 0) + flowLpm);
     qInByNodeId.set(edge.target, (qInByNodeId.get(edge.target) ?? 0) + flowLpm);
+  });
+
+  const nodeBlockedReasons = new Map<string, string[]>();
+  nextEdges.forEach((edge) => {
+    const reasons = edgeBlockedBy.get(edge.id) ?? [];
+    if (!reasons.length) return;
+    nodeBlockedReasons.set(edge.source, [...(nodeBlockedReasons.get(edge.source) ?? []), ...reasons]);
+    nodeBlockedReasons.set(edge.target, [...(nodeBlockedReasons.get(edge.target) ?? []), ...reasons]);
   });
 
   nextNodes.forEach((node) => {
@@ -411,8 +457,16 @@ export const runSimulationStep = (project: ProjectDocument, dt: number): Simulat
       process.signalValue = Number(process.currentValue ?? 0);
     }
 
+    const reason = Array.from(new Set(nodeBlockedReasons.get(node.id) ?? []))[0] ?? '';
+    process.isBlocked = node.data.simulation.blocked;
+    if (!Boolean(node.data.simulationEnabled ?? true)) process.processState = 'offline';
+    else if (node.data.simulation.blocked) process.processState = 'blocked';
+    else if (node.data.simulation.active) process.processState = 'transferring';
+    else if (Boolean(process.isRunning)) process.processState = 'waiting';
+    else process.processState = 'idle';
+
     if (pumpKinds.has(node.data.kind)) {
-      const pumpOn = Boolean(process.pumpOn ?? process.isOn ?? process.enabled ?? node.data.status === 'running');
+      const pumpOn = Boolean(process.isRunning ?? process.pumpOn ?? process.isOn ?? process.enabled ?? node.data.status === 'running');
       node.data.status = !pumpOn ? 'off' : node.data.simulation.active ? 'running' : 'blocked';
     } else if (valveKinds.has(node.data.kind)) {
       const isOpen = Boolean(process.isOpen ?? process.valveOpen ?? process.valveState !== 'closed');
@@ -420,6 +474,14 @@ export const runSimulationStep = (project: ProjectDocument, dt: number): Simulat
     } else if (tankKinds.has(node.data.kind)) {
       node.data.status = Math.abs(netFlowLpm) > 0.001 ? 'running' : 'idle';
     }
+    if (intakeControlledKinds.has(node.data.kind)) {
+      process.canReceive = process.allowIntake;
+      process.canDischarge = process.allowDischarge;
+    }
+    node.data.runtime.lastEvent = reason;
+    node.data.runtime.alarmText = reason;
+    node.data.simulation.lastEvent = reason;
+    node.data.simulation.alarmText = reason;
     node.data.runtime = { ...node.data.runtime, ...node.data.simulation };
   });
 
