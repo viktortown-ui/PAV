@@ -16,6 +16,7 @@ import {
   SimulationUiResult,
   SolverSnapshot,
   TankNode,
+  TankState,
 } from './types';
 import { convertM3PerSToLpm, convertPaToBar } from './units';
 
@@ -40,19 +41,49 @@ export class PhysicsSimulationEngine {
 
   step(stepInput: SimulationStepInput): SimulationUiResult {
     const dtSeconds = clamp(stepInput.dtSeconds, ENGINE_LIMITS.minTimeStepSeconds, ENGINE_LIMITS.maxTimeStepSeconds);
-
-    const network = this.buildNetwork();
+    const network = this.buildNetwork(stepInput);
     const networkWithFluid = this.applyFluidProperties(network);
+    this.state = {
+      ...this.state,
+      network: networkWithFluid,
+    };
+
     const snapshot = this.solveSteadyStateFlow(networkWithFluid);
-    this.updateTankVolumes(snapshot, dtSeconds);
-    this.state = setSolverSnapshot(this.state, snapshot);
+    const tankWarnings = this.updateTankVolumes(snapshot, dtSeconds, stepInput);
+    this.state = setSolverSnapshot(this.state, {
+      ...snapshot,
+      warnings: [...snapshot.warnings, ...tankWarnings],
+    });
     this.state = advanceSimulationClock(this.state, dtSeconds);
 
-    return this.toUiResult(snapshot);
+    return this.toUiResult(this.state.latestSnapshot);
   }
 
-  private buildNetwork(): HydraulicNetworkInput {
-    return this.state.network;
+  private buildNetwork(stepInput: SimulationStepInput): HydraulicNetworkInput {
+    const overrides = stepInput.overrides;
+    if (!overrides) return this.state.network;
+
+    return {
+      ...this.state.network,
+      fluid: overrides.fluid ?? this.state.network.fluid,
+      edges: this.state.network.edges.map((edge) => {
+        if (edge.kind === 'pump' && overrides.pumpSpeedRatioById?.[edge.id] !== undefined) {
+          return {
+            ...edge,
+            speedRatio: clamp(overrides.pumpSpeedRatioById[edge.id], 0, 2),
+          };
+        }
+
+        if (edge.kind === 'valve' && overrides.valveOpeningRatioById?.[edge.id] !== undefined) {
+          return {
+            ...edge,
+            openingRatio: clamp(overrides.valveOpeningRatioById[edge.id], 0, 1),
+          };
+        }
+
+        return edge;
+      }),
+    };
   }
 
   private applyFluidProperties(network: HydraulicNetworkInput): HydraulicNetworkInput {
@@ -235,32 +266,79 @@ export class PhysicsSimulationEngine {
     return end.elevationM - start.elevationM;
   }
 
-  private updateTankVolumes(snapshot: SolverSnapshot, dtSeconds: number): void {
-    const inflowByTankId = new Map<string, number>();
+  private updateTankVolumes(snapshot: SolverSnapshot, dtSeconds: number, stepInput: SimulationStepInput): string[] {
+    const qInByTankId = new Map<string, number>();
+    const qOutByTankId = new Map<string, number>();
+    const warnings: string[] = [];
+
     snapshot.edgeResults.forEach((edgeResult) => {
       const edge = this.state.network.edges.find((candidate) => candidate.id === edgeResult.edgeId);
       if (!edge) return;
 
-      const targetNode = this.state.network.nodes.find((node) => node.id === edge.toNodeId);
-      if (!targetNode || targetNode.kind !== 'tank') return;
-
-      inflowByTankId.set(targetNode.id, (inflowByTankId.get(targetNode.id) ?? 0) + edgeResult.flowM3PerS);
+      const flow = edgeResult.flowM3PerS;
+      if (flow >= 0) {
+        const targetNode = this.state.network.nodes.find((node) => node.id === edge.toNodeId);
+        if (targetNode?.kind === 'tank') {
+          qInByTankId.set(targetNode.id, (qInByTankId.get(targetNode.id) ?? 0) + flow);
+        }
+        const sourceNode = this.state.network.nodes.find((node) => node.id === edge.fromNodeId);
+        if (sourceNode?.kind === 'tank') {
+          qOutByTankId.set(sourceNode.id, (qOutByTankId.get(sourceNode.id) ?? 0) + flow);
+        }
+      } else {
+        const reverseFlow = Math.abs(flow);
+        const sourceNode = this.state.network.nodes.find((node) => node.id === edge.fromNodeId);
+        if (sourceNode?.kind === 'tank') {
+          qInByTankId.set(sourceNode.id, (qInByTankId.get(sourceNode.id) ?? 0) + reverseFlow);
+        }
+        const targetNode = this.state.network.nodes.find((node) => node.id === edge.toNodeId);
+        if (targetNode?.kind === 'tank') {
+          qOutByTankId.set(targetNode.id, (qOutByTankId.get(targetNode.id) ?? 0) + reverseFlow);
+        }
+      }
     });
 
     Object.entries(this.state.tankStates).forEach(([tankId, tankState]) => {
       const node = this.state.network.nodes.find((candidate): candidate is TankNode => candidate.id === tankId && candidate.kind === 'tank');
       if (!node) return;
 
-      const deltaVolume = (inflowByTankId.get(tankId) ?? 0) * dtSeconds;
-      const nextVolume = Math.max(0, tankState.volumeM3 + deltaVolume);
-      const nextLevel = nextVolume / Math.max(node.crossSectionAreaM2, ENGINE_LIMITS.minTankCrossSectionM2);
+      const qIn = qInByTankId.get(tankId) ?? 0;
+      const qOut = qOutByTankId.get(tankId) ?? 0;
+      const boundaryFlow = stepInput.overrides?.tankBoundaryFlowM3PerSByNodeId?.[tankId] ?? 0;
+      const netFlow = qIn - qOut + boundaryFlow;
+      const deltaVolume = netFlow * dtSeconds;
+      const unclampedVolume = tankState.volumeM3 + deltaVolume;
+      const nextVolume = clamp(unclampedVolume, tankState.minVolumeM3, tankState.maxVolumeM3);
+      const area = Math.max(node.crossSectionAreaM2, ENGINE_LIMITS.minTankCrossSectionM2);
+      const nextLevel = nextVolume / area;
+
+      const fillTimeSeconds = netFlow > PHYSICS_CONSTANTS.minimumPositiveFlowM3PerS && Number.isFinite(tankState.maxVolumeM3)
+        ? Math.max(0, (tankState.maxVolumeM3 - nextVolume) / netFlow)
+        : null;
+      const drainTimeSeconds = netFlow < -PHYSICS_CONSTANTS.minimumPositiveFlowM3PerS
+        ? Math.max(0, (nextVolume - tankState.minVolumeM3) / Math.abs(netFlow))
+        : null;
+
+      if (nextVolume === tankState.maxVolumeM3 && netFlow > 0) {
+        warnings.push(`Tank ${tankId} reached max volume limit.`);
+      }
+      if (nextVolume === tankState.minVolumeM3 && netFlow < 0) {
+        warnings.push(`Tank ${tankId} reached min volume limit.`);
+      }
 
       this.state.tankStates[tankId] = {
-        nodeId: tankId,
+        ...tankState,
         volumeM3: nextVolume,
         liquidLevelM: nextLevel,
+        qInM3PerS: qIn + Math.max(boundaryFlow, 0),
+        qOutM3PerS: qOut + Math.max(-boundaryFlow, 0),
+        netFlowM3PerS: netFlow,
+        fillTimeSeconds,
+        drainTimeSeconds,
       };
     });
+
+    return warnings;
   }
 
   private toUiResult(snapshot: SolverSnapshot): SimulationUiResult {
@@ -268,13 +346,20 @@ export class PhysicsSimulationEngine {
       const tank = this.state.tankStates[nodeResult.nodeId];
       const networkNode = this.state.network.nodes.find((node) => node.id === nodeResult.nodeId);
       const levelPercent = networkNode?.kind === 'tank' && tank
-        ? Math.max(0, Math.min(100, (tank.liquidLevelM / Math.max(networkNode.liquidLevelM, 1e-6)) * 100))
+        ? Number.isFinite(tank.maxVolumeM3)
+          ? Math.max(0, Math.min(100, (tank.volumeM3 / Math.max(tank.maxVolumeM3, 1e-6)) * 100))
+          : undefined
         : undefined;
 
       return {
         nodeId: nodeResult.nodeId,
         pressureBar: convertPaToBar(nodeResult.pressurePa),
         levelPercent,
+        liquidLevelM: tank?.liquidLevelM,
+        volumeM3: tank?.volumeM3,
+        netFlowLpm: tank ? convertM3PerSToLpm(tank.netFlowM3PerS) : undefined,
+        fillTimeSeconds: tank?.fillTimeSeconds,
+        drainTimeSeconds: tank?.drainTimeSeconds,
       };
     });
 
@@ -282,6 +367,7 @@ export class PhysicsSimulationEngine {
       edgeId: edgeResult.edgeId,
       flowLpm: convertM3PerSToLpm(edgeResult.flowM3PerS),
       pressureDropBar: convertPaToBar(edgeResult.pressureDropPa),
+      velocityMPerS: edgeResult.velocityMPerS,
     }));
 
     return {

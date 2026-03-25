@@ -28,6 +28,16 @@ export const validatePhysicsInput = (network: HydraulicNetworkInput): Validation
       if (node.volumeM3 < 0 || node.liquidLevelM < 0) {
         issues.push({ code: 'TANK_STATE_INVALID', message: 'Tank state must be non-negative.', targetId: node.id });
       }
+
+      const minVolume = Math.max(0, node.minVolumeM3 ?? 0);
+      const maxVolume = node.maxVolumeM3 ?? Number.POSITIVE_INFINITY;
+      if (maxVolume < minVolume) {
+        issues.push({ code: 'TANK_LIMITS_INVALID', message: 'Tank max volume must be greater than or equal to min volume.', targetId: node.id });
+      }
+
+      if (node.maxLiquidLevelM !== undefined && node.minLiquidLevelM !== undefined && node.maxLiquidLevelM < node.minLiquidLevelM) {
+        issues.push({ code: 'TANK_LEVEL_LIMITS_INVALID', message: 'Tank max liquid level must be greater than or equal to min level.', targetId: node.id });
+      }
     }
   });
 

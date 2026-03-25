@@ -13,7 +13,7 @@ const networkFixture: HydraulicNetworkInput = {
   },
   nodes: [
     { id: 'n1', kind: 'junction', elevationM: 0 },
-    { id: 'tank-1', kind: 'tank', elevationM: 1, volumeM3: 2, liquidLevelM: 1, crossSectionAreaM2: 2 },
+    { id: 'tank-1', kind: 'tank', elevationM: 1, volumeM3: 2, liquidLevelM: 1, crossSectionAreaM2: 2, minVolumeM3: 0.5, maxVolumeM3: 3 },
   ],
   edges: [
     {
@@ -34,6 +34,6 @@ describe('physics state factory', () => {
 
     expect(state.timeSeconds).toBe(0);
     expect(state.latestSnapshot.nodeResults).toEqual([]);
-    expect(state.tankStates['tank-1']).toMatchObject({ volumeM3: 2, liquidLevelM: 1 });
+    expect(state.tankStates['tank-1']).toMatchObject({ volumeM3: 2, liquidLevelM: 1, minVolumeM3: 0.5, maxVolumeM3: 3 });
   });
 });
