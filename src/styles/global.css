@@ -108,6 +108,35 @@ button.primary, .toolbox-actions .primary { background: linear-gradient(180deg, 
 .inspector-panel.is-compact { padding: 0; border: 0; background: transparent; }
 .inspector-panel .tabs, .line-actions .action-grid { display: flex; flex-wrap: wrap; gap: 8px; }
 .inspector-stack, .segment-list, .issue-list-detailed, .shell-event-log-list { display: grid; gap: 12px; }
+.inspector-card { border-radius: 12px; padding: 10px; gap: 8px; }
+.inspector-hero { background: linear-gradient(180deg, rgba(31, 51, 73, 0.82), rgba(14, 25, 38, 0.92)); border-color: rgba(121, 159, 204, 0.28); }
+.inspector-hero-title { display: grid; gap: 4px; }
+.status-pill-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.status-pill { border: 1px solid rgba(143, 181, 226, 0.2); background: rgba(255,255,255,0.04); color: #d8e7fa; border-radius: 999px; padding: 3px 8px; font-size: 11px; }
+.status-pill.tone-ok { border-color: rgba(108, 223, 182, 0.42); color: #bff7dd; }
+.status-pill.tone-warn { border-color: rgba(255, 201, 109, 0.45); color: #ffe2a4; }
+.status-pill.tone-alarm { border-color: rgba(255, 116, 146, 0.52); color: #ffd0da; }
+.kpi-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.kpi-grid div { border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; background: rgba(255,255,255,0.03); padding: 6px 8px; }
+.kpi-grid div.is-alert { border-color: rgba(255, 148, 97, 0.46); }
+.kpi-grid span { display: block; color: #90a7c2; font-size: 11px; margin-bottom: 2px; }
+.kpi-grid strong { font-size: 13px; line-height: 1.2; }
+.control-group { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.control-button { border: 1px solid rgba(143, 181, 226, 0.2); background: #13283f; color: #ecf4ff; border-radius: 10px; padding: 7px 9px; font-size: 12px; line-height: 1.2; text-align: left; }
+.control-button.is-active { border-color: rgba(109, 223, 182, 0.54); background: linear-gradient(180deg, rgba(42, 112, 89, 0.95), rgba(28, 66, 55, 0.95)); }
+.control-button.is-warning { border-color: rgba(255, 201, 109, 0.45); }
+.control-button.is-danger { border-color: rgba(255, 125, 153, 0.42); background: rgba(72, 29, 41, 0.94); }
+.live-grid { display: grid; gap: 6px; }
+.live-grid span { color: #a8bdd6; line-height: 1.35; font-size: 12px; }
+.live-grid b { color: #edf4ff; font-weight: 600; }
+.gauge-grid { display: grid; gap: 7px; }
+.gauge { display: grid; gap: 4px; }
+.gauge span { font-size: 11px; color: #91a8c3; }
+.gauge small { color: #c8d8eb; font-size: 11px; }
+.gauge-track { height: 8px; border-radius: 999px; border: 1px solid rgba(143, 181, 226, 0.22); background: rgba(255,255,255,0.04); overflow: hidden; }
+.gauge-track i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #4ca5ff, #66e3b2); }
+.service-details { display: grid; gap: 5px; color: #92a8c3; font-size: 12px; border: 1px dashed rgba(143, 181, 226, 0.24); border-radius: 10px; padding: 7px 8px; }
+.service-details summary { cursor: pointer; color: #cad9eb; font-weight: 600; }
 .diagnostics-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .diagnostics-summary span { border: 1px solid rgba(255,255,255,0.05); background: rgba(255,255,255,0.03); border-radius: 12px; padding: 8px 10px; color: #9bb0ca; }
 .issue-list-detailed .issue-card, .segment-card { width: 100%; text-align: left; display: grid; gap: 6px; padding: 12px; color: inherit; }

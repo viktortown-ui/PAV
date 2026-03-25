@@ -31,7 +31,7 @@ describe('line list helpers', () => {
     const entries = buildSegmentList(project, issues);
     expect(entries).toHaveLength(2);
     expect(entries[0]).toMatchObject({ edgeId: drainEdge.id, severity: 'error', issueCount: 1, warningCount: 1, nominalDiameter: 'DN40' });
-    expect(entries[1].lineTag).toBe(`WATER-${source.data.technicalTag}-${tank.data.technicalTag}-DN80`);
+    expect(entries[1].lineTag).toBe(`ВОДА · ${source.data.technicalTag} → ${tank.data.technicalTag} · DN80`);
   });
 
   it('summarizes diagnostics counts by severity', () => {
