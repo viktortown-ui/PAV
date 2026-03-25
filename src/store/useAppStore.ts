@@ -83,6 +83,15 @@ const syncNodePresentation = (node: SoapNode) => {
   if (process.currentValue !== undefined && process.signalValue === undefined) process.signalValue = Number(process.currentValue);
   if (process.signalType !== undefined && process.measuredProperty === undefined) process.measuredProperty = process.signalType;
 
+  process.allowIntake = Boolean(process.allowIntake ?? process.canReceive ?? true);
+  process.allowDischarge = Boolean(process.allowDischarge ?? process.canDischarge ?? true);
+  process.isRunning = Boolean(process.isRunning ?? process.pumpOn ?? process.mixingOn ?? process.heatingOn ?? node.data.status === 'running');
+  process.isBlocked = Boolean(process.isBlocked ?? false);
+  process.processState = String(process.processState ?? 'idle');
+  process.mode = String(process.mode ?? node.data.mode ?? 'auto');
+  process.canReceive = process.allowIntake;
+  process.canDischarge = process.allowDischarge;
+
   if (node.data.className === 'valve') {
     const valveOpen = Boolean(process.isOpen ?? process.valveOpen ?? process.valveState !== 'closed');
     process.isOpen = valveOpen;
@@ -98,6 +107,7 @@ const syncNodePresentation = (node: SoapNode) => {
     if (!pumpOn) process.actualFlowLpm = 0;
     else if (process.actualFlowLpm === undefined) process.actualFlowLpm = Number(process.nominalFlowLpm ?? process.flowRate ?? 0);
     node.data.status = pumpOn ? 'running' : 'off';
+    process.isRunning = pumpOn;
     node.data.runtime.active = pumpOn;
     node.data.simulation.active = pumpOn;
   }
