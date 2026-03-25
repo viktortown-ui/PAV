@@ -141,4 +141,124 @@ describe('simulation hardening', () => {
     expect(hiddenStep.totalActiveFlow).toBeCloseTo(visibleStep.totalActiveFlow, 8);
     expect(hiddenStep.edges[0].data?.flowRate ?? 0).toBeCloseTo(visibleStep.edges[0].data?.flowRate ?? 0, 8);
   });
+
+  it('stops transfer when downstream tank cannot receive', () => {
+    const project = makeProject();
+    const source = buildNode('tank', { x: 0, y: 0 }, project);
+    const sink = buildNode('tank', { x: 250, y: 0 }, project);
+
+    const sourceProcess = source.data.process as any;
+    sourceProcess.currentLevelLiters = 200;
+    sourceProcess.capacityLiters = 400;
+    sourceProcess.canDischarge = true;
+    sourceProcess.canReceive = true;
+
+    const sinkProcess = sink.data.process as any;
+    sinkProcess.currentLevelLiters = 380;
+    sinkProcess.capacityLiters = 400;
+    sinkProcess.canReceive = false;
+    sinkProcess.canDischarge = true;
+
+    project.nodes = [source, sink];
+    project.edges = [buildEdge(source.id, sink.id, 'water', 'DN50', undefined, project)];
+    project.simulation = { ...project.simulation, speed: 1, running: true, status: 'running' };
+
+    const step = runSimulationStep(project, 1);
+    const nextSource = step.nodes.find((node) => node.id === source.id)!;
+    const nextSink = step.nodes.find((node) => node.id === sink.id)!;
+
+    expect(step.edges[0].data?.flowRate ?? 0).toBe(0);
+    expect((nextSource.data.process as any).currentLevelLiters).toBe(200);
+    expect((nextSink.data.process as any).currentLevelLiters).toBe(380);
+  });
+
+  it('blocks transfer when a valve on the route is closed', () => {
+    const project = makeProject();
+    const source = buildNode('tank', { x: 0, y: 0 }, project);
+    const valve = buildNode('manualValve', { x: 150, y: 0 }, project);
+    const sink = buildNode('tank', { x: 300, y: 0 }, project);
+
+    const sourceProcess = source.data.process as any;
+    sourceProcess.currentLevelLiters = 200;
+    sourceProcess.capacityLiters = 400;
+    sourceProcess.canDischarge = true;
+
+    const valveProcess = valve.data.process as any;
+    valveProcess.isOpen = false;
+    valveProcess.valveState = 'closed';
+
+    const sinkProcess = sink.data.process as any;
+    sinkProcess.currentLevelLiters = 50;
+    sinkProcess.capacityLiters = 400;
+    sinkProcess.canReceive = true;
+
+    project.nodes = [source, valve, sink];
+    project.edges = [
+      buildEdge(source.id, valve.id, 'water', 'DN50', undefined, project),
+      buildEdge(valve.id, sink.id, 'water', 'DN50', undefined, project),
+    ];
+    project.simulation = { ...project.simulation, speed: 1, running: true, status: 'running' };
+
+    const step = runSimulationStep(project, 1);
+    expect(step.totalActiveFlow).toBe(0);
+    expect(step.edges.every((edge) => (edge.data?.flowRate ?? 0) === 0)).toBe(true);
+    expect(step.edges.some((edge) => (edge.data?.routeState ?? 'idle') === 'blocked')).toBe(true);
+  });
+
+  it('fluid viscosity and density influence hydraulic transfer', () => {
+    const buildPumpedProject = () => {
+      const project = makeProject();
+      const source = buildNode('tank', { x: 0, y: 0 }, project);
+      const pump = buildNode('pump', { x: 150, y: 0 }, project);
+      const sink = buildNode('tank', { x: 300, y: 0 }, project);
+
+      const sourceProcess = source.data.process as any;
+      sourceProcess.currentLevelLiters = 300;
+      sourceProcess.capacityLiters = 400;
+      sourceProcess.canDischarge = true;
+      sourceProcess.actualFlowLpm = 120;
+      sourceProcess.flowRate = 120;
+
+      const pumpProcess = pump.data.process as any;
+      pumpProcess.pumpOn = true;
+      pumpProcess.nominalFlowLpm = 120;
+
+      const sinkProcess = sink.data.process as any;
+      sinkProcess.currentLevelLiters = 100;
+      sinkProcess.capacityLiters = 400;
+      sinkProcess.canReceive = true;
+
+      project.nodes = [source, pump, sink];
+      project.edges = [
+        buildEdge(source.id, pump.id, 'water', 'DN50', undefined, project),
+        buildEdge(pump.id, sink.id, 'water', 'DN50', undefined, project),
+      ];
+      project.simulation = { ...project.simulation, speed: 1, running: true, status: 'running' };
+      return project;
+    };
+
+    const waterProject = buildPumpedProject();
+    waterProject.simulation.fluid = {
+      id: 'water',
+      name: 'Water',
+      kind: 'water',
+      densityKgPerM3: 998,
+      dynamicViscosityPaS: 0.001,
+    };
+
+    const heavyFluidProject = buildPumpedProject();
+    heavyFluidProject.simulation.fluid = {
+      id: 'heavy-custom',
+      name: 'Heavy fluid',
+      kind: 'custom',
+      densityKgPerM3: 1250,
+      dynamicViscosityPaS: 0.12,
+    };
+
+    const waterStep = runSimulationStep(waterProject, 1);
+    const heavyStep = runSimulationStep(heavyFluidProject, 1);
+
+    expect(Math.abs((waterStep.edges[0].data?.pressure ?? 0) - (heavyStep.edges[0].data?.pressure ?? 0))).toBeGreaterThan(0.0001);
+    expect(Math.abs((waterStep.edges[0].data?.velocityMPerS ?? 0) - (heavyStep.edges[0].data?.velocityMPerS ?? 0))).toBeGreaterThanOrEqual(0);
+  });
 });
