@@ -15,6 +15,10 @@ interface SimulationResult {
 }
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+const toFiniteNumber = (value: unknown, fallback = 0) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
 const tankKinds = new Set(['source', 'tank', 'bufferTank', 'reactor', 'heatedReactor']);
 const pumpKinds = new Set(['pump', 'dosingPump']);
 const valveKinds = new Set(['manualValve', 'shutoffValve', 'solenoidValve', 'checkValve', 'controlValve', 'gateValve', 'drainValve', 'reliefValve']);
@@ -133,6 +137,92 @@ const pushEvent = (events: EventLogEntry[], type: string, message: string, sever
   events.push({ id: crypto.randomUUID(), timestamp: new Date().toISOString(), type, message, severity, targetId });
 };
 
+type RouteSegment = {
+  id: string;
+  sourceId: string;
+  targetId: string;
+};
+
+type RouteCandidate = {
+  nodeIds: string[];
+  edgeIds: string[];
+};
+
+const nodeAcceptsFlow = (node: SoapNode) => {
+  const process = node.data.process as any;
+  if (!Boolean(node.data.isEnabled ?? true)) return false;
+  if (tankKinds.has(node.data.kind)) return Boolean(process.canReceive ?? true) && toFiniteNumber(process.currentLevelLiters ?? process.level, 0) < toFiniteNumber(process.capacityLiters ?? process.capacity, 0);
+  if (node.data.kind === 'consumer' || node.data.kind === 'utilityDrain') return Boolean(process.canReceive ?? true);
+  return Boolean(process.canReceive ?? true);
+};
+
+const nodeCanPassFlow = (node: SoapNode) => {
+  const process = node.data.process as any;
+  if (!Boolean(node.data.isEnabled ?? true) || !Boolean(node.data.simulationEnabled ?? true)) {
+    return { pass: false, reason: `${node.data.visibleName}: element disabled` };
+  }
+  if (pumpKinds.has(node.data.kind)) {
+    const pumpOn = Boolean(process.pumpOn ?? process.isOn ?? process.enabled ?? node.data.status === 'running');
+    const startAllowed = Boolean(process.startAllowed ?? true);
+    const suctionAvailable = Boolean(process.suctionAvailable ?? true);
+    if (!pumpOn) return { pass: false, reason: `${node.data.visibleName}: pump off` };
+    if (!startAllowed) return { pass: false, reason: `${node.data.visibleName}: pump start not allowed` };
+    if (!suctionAvailable) return { pass: false, reason: `${node.data.visibleName}: no suction` };
+  }
+  if (valveKinds.has(node.data.kind)) {
+    const isOpen = Boolean(process.isOpen ?? process.valveOpen ?? process.valveState !== 'closed');
+    if (!isOpen) return { pass: false, reason: `${node.data.visibleName}: valve closed` };
+  }
+  if (tankKinds.has(node.data.kind) && Boolean(process.canDischarge) === false) {
+    return { pass: false, reason: `${node.data.visibleName}: discharge forbidden` };
+  }
+  return { pass: true, reason: '' };
+};
+
+const enumerateRoutes = (nodes: SoapNode[], edges: SoapEdge[]): RouteCandidate[] => {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const outgoing = new Map<string, RouteSegment[]>();
+  edges.forEach((edge) => {
+    const list = outgoing.get(edge.source) ?? [];
+    list.push({ id: edge.id, sourceId: edge.source, targetId: edge.target });
+    outgoing.set(edge.source, list);
+  });
+
+  const routes: RouteCandidate[] = [];
+  const maxDepth = Math.max(1, edges.length + 1);
+  const sourceNodes = nodes.filter((node) => tankKinds.has(node.data.kind));
+
+  const dfs = (currentNodeId: string, visitedNodes: Set<string>, nodeIds: string[], edgeIds: string[]) => {
+    if (edgeIds.length > maxDepth) return;
+    const currentNode = nodeById.get(currentNodeId);
+    if (!currentNode) return;
+    const isTerminalReceiver = nodeIds.length > 1 && nodeAcceptsFlow(currentNode);
+    if (isTerminalReceiver) {
+      routes.push({ nodeIds: [...nodeIds], edgeIds: [...edgeIds] });
+      return;
+    }
+
+    const nextEdges = outgoing.get(currentNodeId) ?? [];
+    nextEdges.forEach((segment) => {
+      if (visitedNodes.has(segment.targetId)) return;
+      visitedNodes.add(segment.targetId);
+      nodeIds.push(segment.targetId);
+      edgeIds.push(segment.id);
+      dfs(segment.targetId, visitedNodes, nodeIds, edgeIds);
+      edgeIds.pop();
+      nodeIds.pop();
+      visitedNodes.delete(segment.targetId);
+    });
+  };
+
+  sourceNodes.forEach((sourceNode) => {
+    const visited = new Set<string>([sourceNode.id]);
+    dfs(sourceNode.id, visited, [sourceNode.id], []);
+  });
+
+  return routes;
+};
+
 export const runSimulationStep = (project: ProjectDocument, dt: number): SimulationResult => {
   const events: EventLogEntry[] = [];
   const warnings: string[] = [];
@@ -144,24 +234,110 @@ export const runSimulationStep = (project: ProjectDocument, dt: number): Simulat
   const uiResult = engine.step({ dtSeconds: Math.max(0.01, dt * project.simulation.speed) });
   const edgeResultById = new Map(uiResult.edges.map((edge) => [edge.edgeId, edge]));
   const nodeResultById = new Map(uiResult.nodes.map((node) => [node.nodeId, node]));
-  const fallbackSourceFlowLpm = project.nodes.reduce((maxFlow, node) => {
-    const process = node.data.process as any;
-    return Math.max(maxFlow, Number(process.actualFlowLpm ?? process.flowRate ?? 0));
-  }, 0) * project.simulation.speed;
+  const nodeById = new Map(nextNodes.map((node) => [node.id, node]));
+
+  nextNodes.forEach((node) => {
+    node.data.simulation.flowLpm = 0;
+    node.data.simulation.flow = 0;
+    node.data.simulation.active = false;
+    node.data.simulation.blocked = false;
+    node.data.simulation.routeState = 'idle';
+  });
 
   let totalActiveFlow = 0;
   const activeMediums = new Set<string>();
 
-  nextEdges.forEach((edge) => {
-    const result = edgeResultById.get(edge.id);
-    const source = nextNodes.find((node) => node.id === edge.source);
-    const target = nextNodes.find((node) => node.id === edge.target);
-    if (!result || !source || !target) return;
+  const dtSeconds = Math.max(0.01, dt * project.simulation.speed);
+  const routeCandidates = enumerateRoutes(nextNodes, nextEdges);
+  const availableLitersByNodeId = new Map<string, number>();
+  const receivableLitersByNodeId = new Map<string, number>();
+  nextNodes.forEach((node) => {
+    if (!tankKinds.has(node.data.kind)) return;
+    const process = node.data.process as any;
+    const current = Math.max(0, toFiniteNumber(process.currentLevelLiters ?? process.level, 0));
+    const capacity = Math.max(0, toFiniteNumber(process.capacityLiters ?? process.capacity, 0));
+    availableLitersByNodeId.set(node.id, current);
+    receivableLitersByNodeId.set(node.id, Math.max(0, capacity - current));
+  });
 
-    const flowFromSolver = Math.max(0, Number(result.flowLpm));
-    const flowLpm = flowFromSolver > 0.001 ? flowFromSolver : (fallbackSourceFlowLpm > 0 && nextEdges.length === 1 ? fallbackSourceFlowLpm : 0);
-    const blocked = flowLpm <= 0.001 && (pumpKinds.has(source.data.kind) || valveKinds.has(source.data.kind) || valveKinds.has(target.data.kind));
+  const routeFlows = routeCandidates.map((route) => {
+    const sourceNode = nodeById.get(route.nodeIds[0]);
+    const targetNode = nodeById.get(route.nodeIds[route.nodeIds.length - 1]);
+    const edgeFlows = route.edgeIds.map((edgeId) => Math.max(0, toFiniteNumber(edgeResultById.get(edgeId)?.flowLpm, 0)));
+    const hydraulicFlowLpm = edgeFlows.length > 0 ? Math.min(...edgeFlows) : 0;
+    const blockers: string[] = [];
+
+    if (!sourceNode || !targetNode) blockers.push('broken route');
+    const sourceProcess = (sourceNode?.data.process ?? {}) as any;
+    if (sourceNode && tankKinds.has(sourceNode.data.kind)) {
+      const canDischarge = Boolean(sourceProcess.canDischarge ?? true);
+      const sourceLevel = Math.max(0, toFiniteNumber(sourceProcess.currentLevelLiters ?? sourceProcess.level, 0));
+      if (!canDischarge) blockers.push(`${sourceNode.data.visibleName}: discharge forbidden`);
+      if (sourceLevel <= 0) blockers.push(`${sourceNode.data.visibleName}: no volume`);
+    }
+    route.nodeIds.forEach((nodeId) => {
+      const node = nodeById.get(nodeId);
+      if (!node) return;
+      const gate = nodeCanPassFlow(node);
+      if (!gate.pass) blockers.push(gate.reason);
+    });
+    if (targetNode && !nodeAcceptsFlow(targetNode)) blockers.push(`${targetNode.data.visibleName}: downstream not accepting`);
+    const hasPumpOnRoute = route.nodeIds.some((nodeId) => pumpKinds.has(nodeById.get(nodeId)?.data.kind ?? 'source'));
+    const sourceCommandedFlowLpm = Math.max(0, toFiniteNumber(sourceProcess.actualFlowLpm ?? sourceProcess.flowRate, 0)) * project.simulation.speed;
+    let requestedFlowLpm = hydraulicFlowLpm;
+    if (!hasPumpOnRoute && requestedFlowLpm <= 0.001) {
+      requestedFlowLpm = sourceCommandedFlowLpm;
+    }
+    if (requestedFlowLpm <= 0.001) blockers.push('hydraulic flow = 0');
+
+    let flowLpm = blockers.length > 0 ? 0 : requestedFlowLpm;
+    if (flowLpm > 0 && sourceNode) {
+      const sourceRemaining = availableLitersByNodeId.get(sourceNode.id) ?? Number.POSITIVE_INFINITY;
+      const sourceLimitLpm = (sourceRemaining / dtSeconds) * 60;
+      flowLpm = Math.min(flowLpm, sourceLimitLpm);
+    }
+    if (flowLpm > 0 && targetNode && tankKinds.has(targetNode.data.kind)) {
+      const sinkRemaining = receivableLitersByNodeId.get(targetNode.id) ?? 0;
+      const sinkLimitLpm = (sinkRemaining / dtSeconds) * 60;
+      flowLpm = Math.min(flowLpm, sinkLimitLpm);
+      if (sinkLimitLpm <= 0.001) blockers.push(`${targetNode.data.visibleName}: full`);
+    }
+    if (flowLpm <= 0.001) flowLpm = 0;
+
+    if (flowLpm > 0 && sourceNode) {
+      const movedLiters = flowLpm * dtSeconds / 60;
+      if (availableLitersByNodeId.has(sourceNode.id)) availableLitersByNodeId.set(sourceNode.id, Math.max(0, (availableLitersByNodeId.get(sourceNode.id) ?? 0) - movedLiters));
+      if (targetNode && receivableLitersByNodeId.has(targetNode.id)) receivableLitersByNodeId.set(targetNode.id, Math.max(0, (receivableLitersByNodeId.get(targetNode.id) ?? 0) - movedLiters));
+    }
+
+    return {
+      route,
+      flowLpm,
+      blocked: blockers.length > 0 || flowLpm <= 0,
+      blockers: Array.from(new Set(blockers)),
+    };
+  });
+
+  const edgeFlowById = new Map<string, number>();
+  const edgeBlockedBy = new Map<string, string[]>();
+  routeFlows.forEach((entry) => {
+    entry.route.edgeIds.forEach((edgeId) => {
+      edgeFlowById.set(edgeId, (edgeFlowById.get(edgeId) ?? 0) + entry.flowLpm);
+      if (entry.blocked && entry.blockers.length > 0) {
+        edgeBlockedBy.set(edgeId, [...(edgeBlockedBy.get(edgeId) ?? []), ...entry.blockers]);
+      }
+    });
+  });
+
+  nextEdges.forEach((edge) => {
+    const source = nodeById.get(edge.source);
+    const target = nodeById.get(edge.target);
+    if (!source || !target) return;
+    const flowLpm = Math.max(0, toFiniteNumber(edgeFlowById.get(edge.id), 0));
+    const blockedReasons = Array.from(new Set(edgeBlockedBy.get(edge.id) ?? []));
+    const blocked = flowLpm <= 0.001 && blockedReasons.length > 0;
     const routeState = mapRouteState(flowLpm, blocked);
+    const hydraulic = edgeResultById.get(edge.id);
     edge.animated = flowLpm > 0.001;
     edge.data = {
       ...edge.data,
@@ -170,46 +346,59 @@ export const runSimulationStep = (project: ProjectDocument, dt: number): Simulat
       flowActive: flowLpm > 0.001,
       blocked,
       routeState,
-      pressure: Number(result.pressureDropBar),
-      velocityMPerS: Number(result.velocityMPerS ?? 0),
+      pressure: Number(hydraulic?.pressureDropBar ?? 0),
+      velocityMPerS: Number(hydraulic?.velocityMPerS ?? 0),
       sourceLabel: source.data.visibleName,
       targetLabel: target.data.visibleName,
       stateLabel: routeState === 'flowing' ? 'Поток' : blocked ? 'Блокировка' : 'Ожидание',
       direction: (edge.data?.direction ?? 'forward') as FlowDirection,
-      routeWarnings: blocked ? ['Нулевой расход по расчёту'] : [],
+      routeWarnings: blockedReasons,
+      blockedBy: blockedReasons,
     } as any;
 
-    source.data.simulation.flowLpm = Math.max(source.data.simulation.flowLpm, flowLpm);
-    target.data.simulation.flowLpm = Math.max(target.data.simulation.flowLpm, flowLpm);
-    source.data.simulation.flow = source.data.simulation.flowLpm;
-    target.data.simulation.flow = target.data.simulation.flowLpm;
-    source.data.simulation.active = source.data.simulation.flowLpm > 0.001;
-    target.data.simulation.active = target.data.simulation.flowLpm > 0.001;
-    source.data.simulation.routeState = source.data.simulation.active ? routeState : 'idle';
-    target.data.simulation.routeState = target.data.simulation.active ? routeState : 'idle';
-    source.data.runtime = { ...source.data.runtime, ...source.data.simulation };
-    target.data.runtime = { ...target.data.runtime, ...target.data.simulation };
+    source.data.simulation.flowLpm += flowLpm;
+    target.data.simulation.flowLpm += flowLpm;
     totalActiveFlow += flowLpm;
     activeMediums.add(String(edge.data?.mediumType ?? source.data.mediumType));
+  });
+
+  const qInByNodeId = new Map<string, number>();
+  const qOutByNodeId = new Map<string, number>();
+  nextEdges.forEach((edge) => {
+    const flowLpm = Math.max(0, toFiniteNumber(edge.data?.flowLpm, 0));
+    qOutByNodeId.set(edge.source, (qOutByNodeId.get(edge.source) ?? 0) + flowLpm);
+    qInByNodeId.set(edge.target, (qInByNodeId.get(edge.target) ?? 0) + flowLpm);
   });
 
   nextNodes.forEach((node) => {
     const process = node.data.process as any;
     const result = nodeResultById.get(node.id);
-    if (!result) return;
+    const qInLpm = qInByNodeId.get(node.id) ?? 0;
+    const qOutLpm = qOutByNodeId.get(node.id) ?? 0;
+    const netFlowLpm = qInLpm - qOutLpm;
+    const localGate = nodeCanPassFlow(node);
 
-    process.pressureBar = Number(result.pressureBar ?? process.pressureBar ?? 0);
+    process.pressureBar = Number(result?.pressureBar ?? process.pressureBar ?? 0);
     process.pressure = process.pressureBar;
+    node.data.simulation.flowLpm = Math.max(0, node.data.simulation.flowLpm);
+    node.data.simulation.flow = node.data.simulation.flowLpm;
+    node.data.simulation.active = node.data.simulation.flowLpm > 0.001;
+    node.data.simulation.blocked = !localGate.pass || (!node.data.simulation.active && (qInLpm > 0 || qOutLpm > 0));
+    node.data.simulation.routeState = node.data.simulation.active ? 'flowing' : node.data.simulation.blocked ? 'blocked' : 'idle';
 
     if (tankKinds.has(node.data.kind)) {
-      const levelPercent = Number(result.levelPercent ?? 0);
-      const volumeLiters = litersFromM3(Number(result.volumeM3 ?? 0));
+      const currentVolumeLiters = Math.max(0, toFiniteNumber(process.currentLevelLiters ?? process.level, 0));
+      const capacityLiters = Math.max(1, toFiniteNumber(process.capacityLiters ?? process.capacity, 1));
+      const nextVolumeLiters = clamp(currentVolumeLiters + (netFlowLpm * dtSeconds) / 60, 0, capacityLiters);
+      const levelPercent = (nextVolumeLiters / capacityLiters) * 100;
+      const remainingToFillL = Math.max(0, capacityLiters - nextVolumeLiters);
+      const remainingToDrainL = Math.max(0, nextVolumeLiters);
       process.levelPercent = levelPercent;
-      process.currentLevelLiters = volumeLiters;
-      process.level = volumeLiters;
-      process.fillTimeSeconds = result.fillTimeSeconds ?? null;
-      process.drainTimeSeconds = result.drainTimeSeconds ?? null;
-      process.netFlowLpm = Number(result.netFlowLpm ?? 0);
+      process.currentLevelLiters = nextVolumeLiters;
+      process.level = nextVolumeLiters;
+      process.fillTimeSeconds = netFlowLpm > 0.001 ? (remainingToFillL / netFlowLpm) * 60 : null;
+      process.drainTimeSeconds = netFlowLpm < -0.001 ? (remainingToDrainL / Math.abs(netFlowLpm)) * 60 : null;
+      process.netFlowLpm = netFlowLpm;
       node.data.visual.fill = levelPercent;
       if (levelPercent >= 99.9) warnings.push(`${node.data.visibleName}: ёмкость заполнена.`);
     }
@@ -221,6 +410,17 @@ export const runSimulationStep = (project: ProjectDocument, dt: number): Simulat
       if (measured.includes('level')) process.currentValue = Number(process.levelPercent ?? 0);
       process.signalValue = Number(process.currentValue ?? 0);
     }
+
+    if (pumpKinds.has(node.data.kind)) {
+      const pumpOn = Boolean(process.pumpOn ?? process.isOn ?? process.enabled ?? node.data.status === 'running');
+      node.data.status = !pumpOn ? 'off' : node.data.simulation.active ? 'running' : 'blocked';
+    } else if (valveKinds.has(node.data.kind)) {
+      const isOpen = Boolean(process.isOpen ?? process.valveOpen ?? process.valveState !== 'closed');
+      node.data.status = !isOpen ? 'blocked' : node.data.simulation.active ? 'active' : 'idle';
+    } else if (tankKinds.has(node.data.kind)) {
+      node.data.status = Math.abs(netFlowLpm) > 0.001 ? 'running' : 'idle';
+    }
+    node.data.runtime = { ...node.data.runtime, ...node.data.simulation };
   });
 
   warnings.push(...uiResult.warnings);
