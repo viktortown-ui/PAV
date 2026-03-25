@@ -12,6 +12,7 @@ import { buildSegmentList, summarizeDiagnostics } from '../features/editor/lineL
 import { EdgeLabelMode, TemplateId } from '../domain/schemas/types';
 import { edgeLabelModes } from '../features/inspector/schemas';
 import { LibraryPicker } from '../features/library/LibraryPicker';
+import { formatEventTime, presentEvent, severityTitle } from '../features/inspector/presentation';
 
 class EditorErrorBoundary extends Component<{ children: ReactNode }, { error?: Error }> {
   public state: { error?: Error } = {};
@@ -26,8 +27,8 @@ type PaletteAction = { id: string; title: string; subtitle: string; keywords: st
 
 const shellStateKey = 'pav-shell-state';
 const commandPaletteKey = 'k';
-const datasheetMediumLabel: Record<string, string> = { water: 'Вода', product: 'Продукт', cip: 'CIP', waste: 'Сток', none: 'Нет', mixed: 'Смешанная' };
-const datasheetRouteLabel: Record<string, string> = { idle: 'Ожидание', primed: 'Подготовлен', flowing: 'Поток', blocked: 'Блокировка', starved: 'Нет подпитки', draining: 'Слив', cip: 'CIP', alarm: 'Авария', maintenance: 'Ремонт', offline: 'Отключён' };
+const datasheetMediumLabel: Record<string, string> = { water: 'Вода', product: 'Продукт', cip: 'СИП', waste: 'Сток', none: 'Нет', mixed: 'Смешанная' };
+const datasheetRouteLabel: Record<string, string> = { idle: 'Ожидание', primed: 'Подготовлен', flowing: 'Поток', blocked: 'Блокировка', starved: 'Нет подпитки', draining: 'Слив', cip: 'СИП', alarm: 'Авария', maintenance: 'Ремонт', offline: 'Отключён' };
 const inlineInsertActions = [
   { id: 'inline-shutoff', title: 'Вставить запорный клапан', subtitle: 'На линию • запорная арматура', keywords: 'insert inline valve shutoff клапан арматура on line', kind: 'shutoffValve' },
   { id: 'inline-flowmeter', title: 'Вставить расходомер', subtitle: 'На линию • контроль расхода', keywords: 'insert inline flow meter расходомер кип line', kind: 'flowMeter' },
@@ -45,7 +46,7 @@ const DiagnosticsPanel = () => {
   const recentIssues = issues.slice(0, 8);
   const segmentList = buildSegmentList(project, issues).slice(0, 6);
 
-  return <div className="shell-side-panel"><div className="panel-title">Диагностика</div><div className="shell-panel-section"><div className="diagnostics-summary"><span><b>{summary.errors}</b> ошибок</span><span><b>{summary.warnings}</b> предупреждений</span><span><b>{summary.infos}</b> подсказок</span></div></div><div className="shell-panel-section"><strong>Критичные замечания</strong><div className="issue-list-detailed">{recentIssues.length ? recentIssues.map((issue) => <button key={issue.id} type="button" className={`issue-card severity-${issue.severity}`} onClick={() => { if (issue.edgeIds?.[0]) selectEdge(issue.edgeIds[0]); else if (issue.nodeIds?.[0]) selectNode(issue.nodeIds[0]); }}><strong>{issue.severity === 'error' ? 'Ошибка' : issue.severity === 'warning' ? 'Предупреждение' : 'Подсказка'}</strong><span>{issue.message}</span></button>) : <div className="issue-card severity-info"><strong>Проверка</strong><span>Активных замечаний нет.</span></div>}</div></div><div className="shell-panel-section"><strong>Совместимые сегменты</strong><div className="segment-list">{segmentList.map((segment) => <button key={segment.edgeId} type="button" className={`segment-card severity-${segment.severity === 'ok' ? 'info' : segment.severity}`} onClick={() => selectEdge(segment.edgeId)}><strong>{segment.lineTag}</strong><span>{segment.sourceName} → {segment.targetName}</span><span>{segment.mediumLabel} • {segment.nominalDiameter} • {segment.routeStateLabel}</span></button>)}</div></div></div>;
+  return <div className="shell-side-panel"><div className="panel-title">Диагностика</div><div className="shell-panel-section"><strong>Что проверяет блок</strong><span className="panel-caption">Состояние объекта и линии, совместимость сегмента, блокировки маршрута, причины отсутствия потока и предупреждения по физике.</span><div className="diagnostics-summary"><span><b>{summary.errors}</b> ошибок</span><span><b>{summary.warnings}</b> предупреждений</span><span><b>{summary.infos}</b> подсказок</span></div></div><div className="shell-panel-section"><strong>Активные причины и блокировки</strong><div className="issue-list-detailed">{recentIssues.length ? recentIssues.map((issue) => <button key={issue.id} type="button" className={`issue-card severity-${issue.severity}`} onClick={() => { if (issue.edgeIds?.[0]) selectEdge(issue.edgeIds[0]); else if (issue.nodeIds?.[0]) selectNode(issue.nodeIds[0]); }}><strong>{severityTitle(issue.severity)}</strong><span>{issue.message}</span></button>) : <div className="issue-card severity-info"><strong>Физических замечаний не найдено</strong><span>Поток не заблокирован: ошибок и предупреждений не выявлено.</span></div>}</div></div><div className="shell-panel-section"><strong>Сегменты маршрута (для перехода)</strong><span className="panel-caption">Показывает состояние и применимость линии для текущего маршрута.</span><div className="segment-list">{segmentList.map((segment) => <button key={segment.edgeId} type="button" className={`segment-card severity-${segment.severity === 'ok' ? 'info' : segment.severity}`} onClick={() => selectEdge(segment.edgeId)}><strong>{segment.lineTag}</strong><span>{segment.sourceName} → {segment.targetName}</span><span>{segment.mediumLabel} • {segment.nominalDiameter} • {segment.routeStateLabel}</span><span>{segment.issueCount ? `Есть замечания: ${segment.issueCount}` : 'Маршрут совместим'}</span></button>)}</div></div></div>;
 };
 
 const LineListPanel = () => {
@@ -60,7 +61,10 @@ const LineListPanel = () => {
 const EventLogPanel = () => {
   const project = useAppStore((state) => state.project);
   const events = [...project.eventLog].slice(-18).reverse();
-  return <div className="shell-side-panel"><div className="panel-title">События</div><div className="shell-panel-section"><strong>Последние события</strong><div className="event-log-list shell-event-log-list">{events.map((event) => <div key={event.id} className={`event-log-item severity-${event.severity}`}><span>{new Date(event.timestamp).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span><strong>{event.message}</strong><small>{event.type}</small></div>)}</div></div></div>;
+  return <div className="shell-side-panel"><div className="panel-title">События</div><div className="shell-panel-section"><strong>Последние события</strong><div className="event-log-list shell-event-log-list">{events.map((rawEvent) => {
+    const event = presentEvent(rawEvent);
+    return <div key={event.id} className={`event-log-item severity-${event.severity}`}><span>{formatEventTime(event.timestamp)}</span><strong>{event.uiMessage}</strong><small>{event.uiType}</small></div>;
+  })}</div></div></div>;
 };
 
 const DatasheetPanel = () => {

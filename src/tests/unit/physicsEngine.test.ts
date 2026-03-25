@@ -262,7 +262,7 @@ describe('physics simulation engine skeleton', () => {
       ],
     });
     const step = engine.step({ dtSeconds: 1 });
-    expect(step.warnings.some((item) => item.includes('unrealistic velocity'))).toBe(true);
-    expect(step.warnings.some((item) => item.includes('Cavitation risk check is a placeholder'))).toBe(true);
+    expect(step.warnings.some((item) => item.includes('скорость') && item.includes('вне рабочего диапазона'))).toBe(true);
+    expect(step.warnings.some((item) => item.includes('Проверка кавитационного риска пока упрощённая'))).toBe(true);
   });
 });
