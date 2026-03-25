@@ -28,9 +28,20 @@ export const validatePhysicsInput = (network: HydraulicNetworkInput): Validation
       if (node.volumeM3 < 0 || node.liquidLevelM < 0) {
         issues.push({ code: 'TANK_STATE_INVALID', message: 'Tank state must be non-negative.', targetId: node.id });
       }
+      const expectedLevelM = node.volumeM3 / Math.max(node.crossSectionAreaM2, ENGINE_LIMITS.minTankCrossSectionM2);
+      if (Math.abs(expectedLevelM - node.liquidLevelM) > 1e-6) {
+        issues.push({
+          code: 'TANK_LEVEL_VOLUME_INCONSISTENT',
+          message: 'Tank liquid level and volume are inconsistent with the declared cross section area.',
+          targetId: node.id,
+        });
+      }
 
       const minVolume = Math.max(0, node.minVolumeM3 ?? 0);
       const maxVolume = node.maxVolumeM3 ?? Number.POSITIVE_INFINITY;
+      if (maxVolume <= 0) {
+        issues.push({ code: 'TANK_CAPACITY_INVALID', message: 'Tank capacity must be positive.', targetId: node.id });
+      }
       if (maxVolume < minVolume) {
         issues.push({ code: 'TANK_LIMITS_INVALID', message: 'Tank max volume must be greater than or equal to min volume.', targetId: node.id });
       }
@@ -50,8 +61,16 @@ export const validatePhysicsInput = (network: HydraulicNetworkInput): Validation
       issues.push({ code: 'EDGE_SELF_LOOP', message: 'Edge cannot connect node to itself.', targetId: edge.id });
     }
 
-    if (edge.kind === 'pipe' && edge.innerDiameterM < ENGINE_LIMITS.minPipeDiameterM) {
-      issues.push({ code: 'PIPE_DIAMETER_TOO_SMALL', message: 'Pipe diameter is too small.', targetId: edge.id });
+    if (edge.kind === 'pipe') {
+      if (edge.innerDiameterM <= 0) {
+        issues.push({ code: 'PIPE_DIAMETER_INVALID', message: 'Pipe diameter must be positive.', targetId: edge.id });
+      } else if (edge.innerDiameterM < ENGINE_LIMITS.minPipeDiameterM) {
+        issues.push({ code: 'PIPE_DIAMETER_TOO_SMALL', message: 'Pipe diameter is too small.', targetId: edge.id });
+      }
+
+      if (edge.lengthM <= 0) {
+        issues.push({ code: 'PIPE_LENGTH_INVALID', message: 'Pipe length must be positive.', targetId: edge.id });
+      }
     }
 
     if (edge.kind === 'pump' && edge.efficiency <= 0) {

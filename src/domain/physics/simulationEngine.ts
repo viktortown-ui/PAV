@@ -101,13 +101,48 @@ export class PhysicsSimulationEngine {
       headM: node.elevationM,
     }));
 
+    const warnings = this.collectSolverWarnings(network, edgeResults);
+
     return {
       nodeResults,
       edgeResults,
-      warnings: seriesCapable
-        ? []
-        : ['Steady-state solver currently supports series hydraulic chains without branching; non-series graphs return zero flow.'],
+      warnings: [
+        ...warnings,
+        ...(seriesCapable
+          ? []
+          : ['Steady-state solver currently supports series hydraulic chains without branching; non-series graphs return zero flow.']),
+      ],
     };
+  }
+
+  private collectSolverWarnings(network: HydraulicNetworkInput, edgeResults: SolverSnapshot['edgeResults']): string[] {
+    const warnings: string[] = [];
+    const edgesById = new Map(network.edges.map((edge) => [edge.id, edge]));
+
+    edgeResults.forEach((result) => {
+      const edge = edgesById.get(result.edgeId);
+      if (!edge) return;
+
+      if (result.flowM3PerS < 0 && !this.isReverseFlowAllowed(edge)) {
+        warnings.push(`Edge ${edge.id} produced negative flow that is disallowed by its direction model.`);
+      }
+
+      if (edge.kind === 'pipe' && Number.isFinite(result.velocityMPerS) && Math.abs(result.velocityMPerS ?? 0) > ENGINE_LIMITS.unrealisticVelocityMPerS) {
+        warnings.push(`Edge ${edge.id} has unrealistic velocity ${Math.abs(result.velocityMPerS ?? 0).toFixed(2)} m/s.`);
+      }
+    });
+
+    if (network.edges.some((edge) => edge.kind === 'pump')) {
+      warnings.push('Cavitation risk check is a placeholder (NPSH and vapor pressure are not yet modeled).');
+    }
+
+    return warnings;
+  }
+
+  private isReverseFlowAllowed(edge: HydraulicEdge): boolean {
+    if (edge.kind === 'pipe') return true;
+    if (edge.kind === 'valve') return !edge.isCheckValve;
+    return false;
   }
 
   private solveEdge(
@@ -321,9 +356,14 @@ export class PhysicsSimulationEngine {
 
       if (nextVolume === tankState.maxVolumeM3 && netFlow > 0) {
         warnings.push(`Tank ${tankId} reached max volume limit.`);
+        warnings.push(`Tank ${tankId} has impossible fill state: positive net inflow while already full.`);
       }
       if (nextVolume === tankState.minVolumeM3 && netFlow < 0) {
         warnings.push(`Tank ${tankId} reached min volume limit.`);
+        warnings.push(`Tank ${tankId} has impossible drain state: negative net inflow while already empty.`);
+      }
+      if (fillTimeSeconds !== null && drainTimeSeconds !== null) {
+        warnings.push(`Tank ${tankId} has inconsistent fill/drain timing state.`);
       }
 
       this.state.tankStates[tankId] = {

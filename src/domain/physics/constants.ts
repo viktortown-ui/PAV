@@ -12,4 +12,5 @@ export const ENGINE_LIMITS = {
   maxTimeStepSeconds: 60,
   minTankCrossSectionM2: 1e-6,
   minPipeDiameterM: 1e-4,
+  unrealisticVelocityMPerS: 2,
 } as const;
