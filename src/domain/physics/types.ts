@@ -72,6 +72,7 @@ export interface EdgeHydraulicResult {
   flowM3PerS: number;
   pressureDropPa: number;
   velocityMPerS?: number;
+  flowRegime?: 'laminar' | 'transitional' | 'turbulent';
 }
 
 export interface NodeHydraulicResult {
