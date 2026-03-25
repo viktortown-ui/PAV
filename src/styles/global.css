@@ -8,7 +8,7 @@ button { cursor: pointer; }
 .shell-refactor { display: grid; grid-template-rows: auto auto minmax(0, 1fr); }
 .workspace-shell { display: grid; grid-template-columns: 68px minmax(0, 1fr); min-height: 0; overflow: hidden; }
 .center-stage { display: grid; grid-template-columns: minmax(0, 1fr) auto; min-height: 0; overflow: hidden; }
-.canvas-shell { position: relative; min-height: 0; padding-bottom: calc(var(--simulation-dock-visible-height) + 14px); }
+.canvas-shell { position: relative; min-height: 0; padding-bottom: 0; }
 .canvas-shell .react-flow { background: radial-gradient(circle at 50% 20%, rgba(57,96,140,0.16), transparent 30%), #07111c; }
 .panel { background: rgba(10, 18, 30, 0.88); backdrop-filter: blur(10px); overflow: auto; }
 .panel-title { font-size: 14px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #dce8f8; margin-bottom: 10px; }
@@ -343,14 +343,18 @@ button.primary, .toolbox-actions .primary { background: linear-gradient(180deg, 
 .dock-navigator-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
 .dock-navigator-action { width: 100%; text-align: center; }
 .dock-navigator-preview-shell {
-  width: min(100%, 244px);
-  aspect-ratio: 16 / 10;
+  width: 100%;
+  max-width: 244px;
+  height: clamp(92px, 11dvh, 126px);
   justify-self: center;
   overflow: hidden;
   border-radius: 10px;
   isolation: isolate;
 }
-.dock-navigator-preview-shell.is-compact { width: min(100%, 220px); }
+.dock-navigator-preview-shell.is-compact {
+  max-width: 220px;
+  height: clamp(82px, 10dvh, 110px);
+}
 .dock-navigator-viewport { position: relative; width: 100%; height: 100%; overflow: hidden; border-radius: inherit; border: 1px solid rgba(132, 171, 218, 0.22); background: rgba(6, 11, 18, 0.98); }
 .dock-navigator-map.react-flow__minimap { position: absolute !important; inset: 0 !important; width: 100% !important; height: 100% !important; transform: none !important; border: 0 !important; border-radius: inherit !important; background: transparent !important; box-shadow: none !important; }
 .dock-navigator-collapsed { border: 1px dashed rgba(132, 171, 218, 0.2); border-radius: 10px; padding: 8px; font-size: 11px; color: #9ab0ca; }
