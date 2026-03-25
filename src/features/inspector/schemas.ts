@@ -13,18 +13,69 @@ export interface EdgeInspectorSchema {
 }
 
 export const edgeInspectorFields: Array<{ key: keyof EdgeInspectorSchema; label: string; type: 'text' | 'number' | 'select'; options?: Array<{ value: string; label: string }> }> = [
-  { key: 'mediumType', label: 'Среда', type: 'select', options: [
-    { value: 'water', label: 'Вода' },
-    { value: 'product', label: 'Продукт' },
-    { value: 'cip', label: 'CIP' },
-    { value: 'waste', label: 'Сток' },
-  ] },
+  {
+    key: 'mediumType',
+    label: 'Среда',
+    type: 'select',
+    options: [
+      { value: 'water', label: 'Вода' },
+      { value: 'product', label: 'Продукт' },
+      { value: 'cip', label: 'СИП' },
+      { value: 'waste', label: 'Сток' },
+    ],
+  },
   { key: 'flowLpm', label: 'Расход, л/мин', type: 'number' },
   { key: 'nominalDiameter', label: 'Диаметр', type: 'text' },
-  { key: 'routeState', label: 'Состояние', type: 'select', options: ['idle', 'primed', 'flowing', 'blocked', 'starved', 'draining', 'cip', 'alarm', 'maintenance', 'offline'].map((value) => ({ value, label: value })) },
-  { key: 'directionMode', label: 'Направление', type: 'select', options: ['forward', 'reverse', 'bidirectional', 'derived'].map((value) => ({ value, label: value })) },
-  { key: 'mediumMode', label: 'Модель среды', type: 'select', options: ['single', 'mixed', 'unknown'].map((value) => ({ value, label: value })) },
-  { key: 'lineRole', label: 'Роль линии', type: 'select', options: ['process', 'drain', 'CIP', 'utility', 'recycle'].map((value) => ({ value, label: value })) },
+  {
+    key: 'routeState',
+    label: 'Состояние',
+    type: 'select',
+    options: [
+      { value: 'idle', label: 'Ожидание' },
+      { value: 'primed', label: 'Подготовлен' },
+      { value: 'flowing', label: 'Поток' },
+      { value: 'blocked', label: 'Блокировка' },
+      { value: 'starved', label: 'Нет подпитки' },
+      { value: 'draining', label: 'Слив' },
+      { value: 'cip', label: 'СИП' },
+      { value: 'alarm', label: 'Авария' },
+      { value: 'maintenance', label: 'Ремонт' },
+      { value: 'offline', label: 'Отключён' },
+    ],
+  },
+  {
+    key: 'directionMode',
+    label: 'Направление',
+    type: 'select',
+    options: [
+      { value: 'forward', label: 'Прямое' },
+      { value: 'reverse', label: 'Обратное' },
+      { value: 'bidirectional', label: 'Двунаправленное' },
+      { value: 'derived', label: 'Автоопределение' },
+    ],
+  },
+  {
+    key: 'mediumMode',
+    label: 'Режим среды',
+    type: 'select',
+    options: [
+      { value: 'single', label: 'Одна среда' },
+      { value: 'mixed', label: 'Смешанная' },
+      { value: 'unknown', label: 'Не определено' },
+    ],
+  },
+  {
+    key: 'lineRole',
+    label: 'Роль линии',
+    type: 'select',
+    options: [
+      { value: 'process', label: 'Основная' },
+      { value: 'drain', label: 'Дренаж' },
+      { value: 'CIP', label: 'СИП' },
+      { value: 'utility', label: 'Служебная' },
+      { value: 'recycle', label: 'Рециркуляция' },
+    ],
+  },
   { key: 'upstreamRef', label: 'Откуда', type: 'text' },
   { key: 'downstreamRef', label: 'Куда', type: 'text' },
 ];

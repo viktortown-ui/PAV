@@ -26,7 +26,7 @@ export interface DiagnosticsSummary {
 const mediumLabelMap: Record<string, string> = {
   water: 'Вода',
   product: 'Продукт',
-  cip: 'CIP',
+  cip: 'СИП',
   waste: 'Сток',
   composite: 'Смесь',
 };
@@ -38,7 +38,7 @@ const routeStateLabelMap: Record<string, string> = {
   blocked: 'Блокировка',
   starved: 'Нет подпитки',
   draining: 'Слив',
-  cip: 'CIP',
+  cip: 'СИП',
   alarm: 'Авария',
   maintenance: 'Ремонт',
   offline: 'Отключён',
@@ -51,11 +51,11 @@ const pickSeverity = (issues: ValidationIssue[]): Severity | 'ok' => issues.redu
 ), 'ok');
 
 const makeLineTag = (edge: SoapEdge, sourceName: string, targetName: string) => {
-  const service = edge.data?.lineRole === 'CIP' ? 'CIP' : (edge.data?.medium ?? 'water').toUpperCase();
+  const service = edge.data?.lineRole === 'CIP' ? 'СИП' : mediumLabelMap[edge.data?.medium ?? 'water']?.toUpperCase() ?? 'ЛИНИЯ';
   const sourceRef = edge.data?.upstreamRef ?? sourceName;
   const targetRef = edge.data?.downstreamRef ?? targetName;
   const diameter = edge.data?.nominalDiameter ?? 'DN50';
-  return `${service}-${sourceRef}-${targetRef}-${diameter}`;
+  return `${service} · ${sourceRef} → ${targetRef} · ${diameter}`;
 };
 
 export const buildSegmentList = (project: ProjectDocument, issues: ValidationIssue[]): SegmentListEntry[] => {
