@@ -49,8 +49,9 @@ const FlowEdgeComponent = ({ id, sourceX, sourceY, targetX, targetY, sourcePosit
   const isPausedSimulation = simulationStatus === 'paused';
   const shouldAnimateFlow = (isRunningSimulation || isPausedSimulation) && active;
   const effectiveSpeed = Math.max(0.5, simulationSpeed || 1);
-  const primaryBase = Math.max(0.65, 2.6 - Number(data?.flowRate ?? 0) / 36);
-  const secondaryBase = Math.max(0.85, 3.2 - Number(data?.flowRate ?? 0) / 44);
+  const velocity = Number(data?.velocityMPerS ?? 0);
+  const primaryBase = Math.max(0.45, 2.8 - velocity * 0.9);
+  const secondaryBase = Math.max(0.6, 3.4 - velocity * 1.05);
   const directionMode = directionModeLabel[data?.directionMode ?? 'derived'] ?? 'Авто';
   const lineRole = lineRoleLabel[data?.lineRole ?? 'process'] ?? String(data?.lineRole ?? 'Технологическая');
 
@@ -64,7 +65,7 @@ const FlowEdgeComponent = ({ id, sourceX, sourceY, targetX, targetY, sourcePosit
     <EdgeLabelRenderer>
       <button type="button" className={`edge-hitbox nodrag nopan ${isSelected ? 'is-selected' : ''}`} style={{ left: labelX, top: labelY, transform: 'translate(-50%, -50%)' }} onMouseDown={stopCanvasGesture} onClick={(event) => { stopCanvasGesture(event); selectEdge(id); }} />
     </EdgeLabelRenderer>
-    {shouldShowBadge ? <EdgeLabelRenderer><div style={{ left: labelX, top: labelY - (showToolbar ? 74 : 0), transform: 'translate(-50%, -50%)' }} className={`edge-badge sim-${simulationStatus} ${emphasis ? 'is-focus' : ''} ${active ? 'is-active' : ''} ${blocked ? 'is-warning' : ''} ${mixedFlow ? 'is-focus' : ''}`}><strong>{directionGlyph[direction]} {Math.round(Number(data?.flowRate ?? 0))} л/мин • {data?.nominalDiameter ?? 'DN50'}</strong><span>{routeStateLabel[routeKey]} • {mediumLabel[mediumKey]}</span>{data?.lineRole ? <span>{lineRole} • {directionMode}</span> : null}{warnings.length ? <span>{warnings.join(' · ')}</span> : null}</div></EdgeLabelRenderer> : null}
+    {shouldShowBadge ? <EdgeLabelRenderer><div style={{ left: labelX, top: labelY - (showToolbar ? 74 : 0), transform: 'translate(-50%, -50%)' }} className={`edge-badge sim-${simulationStatus} ${emphasis ? 'is-focus' : ''} ${active ? 'is-active' : ''} ${blocked ? 'is-warning' : ''} ${mixedFlow ? 'is-focus' : ''}`}><strong>{directionGlyph[direction]} {Math.round(Number(data?.flowRate ?? 0))} л/мин • {Number(data?.velocityMPerS ?? 0).toFixed(2)} м/с • {data?.nominalDiameter ?? 'DN50'}</strong><span>{routeStateLabel[routeKey]} • {mediumLabel[mediumKey]}</span>{data?.lineRole ? <span>{lineRole} • {directionMode}</span> : null}{warnings.length ? <span>{warnings.join(' · ')}</span> : null}</div></EdgeLabelRenderer> : null}
     {showToolbar ? (
       <EdgeLabelRenderer>
         <div className="edge-editor-popover nodrag nopan" style={{ left: labelX, top: labelY + 12, transform: 'translate(-50%, 0)' }} onPointerDown={stopCanvasGesture} onMouseDown={stopCanvasGesture} onClick={stopCanvasGesture}>

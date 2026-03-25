@@ -288,6 +288,10 @@ export interface SoapEdgeData {
   routeWarnings?: string[];
   composition?: Partial<Record<MediumType, number>>;
   mixedFlow?: boolean;
+  velocityMPerS?: number;
+  lengthM?: number;
+  roughnessM?: number;
+  minorLossCoefficient?: number;
 }
 
 export type SoapNode = Node<SoapNodeData>;
@@ -336,6 +340,15 @@ export interface EventLogEntry {
   targetId?: string;
 }
 
+export interface SimulationFluidSettings {
+  id: string;
+  kind: 'water' | 'oil' | 'glycol' | 'custom';
+  name: string;
+  densityKgPerM3: number;
+  dynamicViscosityPaS: number;
+  bulkModulusPa?: number;
+}
+
 export interface SimulationSettings {
   status: 'idle' | 'running' | 'paused';
   running: boolean;
@@ -345,6 +358,8 @@ export interface SimulationSettings {
   activeMedium: MediumType | 'mixed' | 'none';
   totalActiveFlow: number;
   lastEvent: string;
+  fluid: SimulationFluidSettings;
+  scenarioRevision: number;
 }
 
 export interface ProjectDocument {
