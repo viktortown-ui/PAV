@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { MiniMap, useReactFlow } from 'reactflow';
 import { useAppStore } from '../../store/useAppStore';
 import {
@@ -16,6 +17,7 @@ import {
 type SimulationPanelProps = {
   focusMode?: boolean;
   rightPanelVisible?: boolean;
+  activeRightTab?: string | null;
 };
 
 const speedOptions = [0.5, 1, 1.5, 2, 3];
@@ -36,7 +38,7 @@ const formatEventTime = (timestamp: string | number) => new Date(timestamp).toLo
   timeZone: 'UTC',
 });
 
-export const SimulationPanel = ({ focusMode = false, rightPanelVisible = false }: SimulationPanelProps) => {
+export const SimulationPanel = ({ focusMode = false, rightPanelVisible = false, activeRightTab = null }: SimulationPanelProps) => {
   const flow = useReactFlow();
   const project = useAppStore((state) => state.project);
   const dockRef = useRef<HTMLElement>(null);
@@ -135,17 +137,26 @@ export const SimulationPanel = ({ focusMode = false, rightPanelVisible = false }
     if (typeof window === 'undefined') return;
     const dockNode = dockRef.current;
     if (!dockNode) return;
+    const rootStyle = document.documentElement.style;
+    if (panelState === 'hidden') {
+      rootStyle.setProperty('--simulation-dock-height', '0px');
+      rootStyle.setProperty('--simulation-dock-visible-height', '0px');
+    }
     const syncDockHeight = () => {
       const rect = dockNode.getBoundingClientRect();
       const isHidden = panelState === 'hidden';
-      document.documentElement.style.setProperty('--simulation-dock-height', `${Math.ceil(rect.height)}px`);
-      document.documentElement.style.setProperty('--simulation-dock-visible-height', isHidden ? '0px' : `${Math.ceil(rect.height)}px`);
+      const resolvedHeight = isHidden ? 0 : Math.ceil(rect.height);
+      rootStyle.setProperty('--simulation-dock-height', `${resolvedHeight}px`);
+      rootStyle.setProperty('--simulation-dock-visible-height', `${resolvedHeight}px`);
     };
-    syncDockHeight();
+    const rafId = window.requestAnimationFrame(syncDockHeight);
     const observer = new ResizeObserver(syncDockHeight);
     observer.observe(dockNode);
-    return () => observer.disconnect();
-  }, [panelState]);
+    return () => {
+      window.cancelAnimationFrame(rafId);
+      observer.disconnect();
+    };
+  }, [activeRightTab, panelState, rightPanelVisible]);
 
   const renderControlZone = () => (
     <section className="dock-zone dock-zone-control" aria-label="Управление симуляцией">
@@ -262,7 +273,7 @@ export const SimulationPanel = ({ focusMode = false, rightPanelVisible = false }
     </section>
   );
 
-  return (
+  const dockContent = (
     <section ref={dockRef} className={`simulation-dock sim-${simulationStatus} ${panelClassName} ${focusMode ? 'is-focus-mode' : ''} ${rightPanelVisible ? 'is-right-panel-open' : 'is-right-panel-collapsed'}`} data-panel-mode={panelState} aria-label="Нижняя панель симуляции и диагностики">
       <div className="simulation-dock-launcher" aria-hidden={panelState !== 'hidden'}>
         <button
@@ -406,4 +417,7 @@ export const SimulationPanel = ({ focusMode = false, rightPanelVisible = false }
       ) : null}
     </section>
   );
+
+  if (typeof document === 'undefined') return dockContent;
+  return createPortal(dockContent, document.body);
 };
