@@ -128,4 +128,17 @@ describe('simulation hardening', () => {
     expect(nextState.project.edges.every((edge) => edge.animated === false)).toBe(true);
     expect(nextState.project.edges.every((edge) => (edge.data?.flowRate ?? 0) === 0)).toBe(true);
   });
+
+  it('hidden UI state does not affect physics result', () => {
+    const visibleProject = buildLinearProject(1);
+    const hiddenProject = buildLinearProject(1);
+    hiddenProject.nodes = hiddenProject.nodes.map((node) => ({ ...node, hidden: true }));
+    hiddenProject.edges = hiddenProject.edges.map((edge) => ({ ...edge, hidden: true }));
+
+    const visibleStep = runSimulationStep(visibleProject, 1);
+    const hiddenStep = runSimulationStep(hiddenProject, 1);
+
+    expect(hiddenStep.totalActiveFlow).toBeCloseTo(visibleStep.totalActiveFlow, 8);
+    expect(hiddenStep.edges[0].data?.flowRate ?? 0).toBeCloseTo(visibleStep.edges[0].data?.flowRate ?? 0, 8);
+  });
 });

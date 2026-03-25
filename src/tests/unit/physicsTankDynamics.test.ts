@@ -37,6 +37,25 @@ describe('tank dt dynamics', () => {
     expect(drained?.drainTimeSeconds).toBeCloseTo(35, 6);
   });
 
+  it('keeps Qin/Qout -> dV/dt consistency', () => {
+    const engine = new PhysicsSimulationEngine(fixture);
+    const dtSeconds = 12;
+    const before = engine.step({ dtSeconds: 0.01 }).nodes.find((node) => node.nodeId === 'tank-1')!;
+    const after = engine.step({ dtSeconds, overrides: { tankBoundaryFlowM3PerSByNodeId: { 'tank-1': 0.015 } } }).nodes.find((node) => node.nodeId === 'tank-1')!;
+    const dV = Number(after.volumeM3) - Number(before.volumeM3);
+    const qNet = Number(after.netFlowLpm) / 1000 / 60;
+    expect(dV / dtSeconds).toBeCloseTo(qNet, 8);
+  });
+
+  it('tank fill time is finite and sane under positive inflow', () => {
+    const engine = new PhysicsSimulationEngine(fixture);
+    const step = engine.step({ dtSeconds: 5, overrides: { tankBoundaryFlowM3PerSByNodeId: { 'tank-1': 0.01 } } });
+    const tank = step.nodes.find((node) => node.nodeId === 'tank-1')!;
+    expect(tank.fillTimeSeconds).not.toBeNull();
+    expect((tank.fillTimeSeconds ?? 0)).toBeGreaterThan(0);
+    expect(tank.drainTimeSeconds).toBeNull();
+  });
+
   it('clamps volume to min/max and emits warnings', () => {
     const engine = new PhysicsSimulationEngine(fixture);
 
@@ -44,10 +63,12 @@ describe('tank dt dynamics', () => {
     const tank = overfill.nodes.find((node) => node.nodeId === 'tank-1');
     expect(tank?.volumeM3).toBe(2);
     expect(overfill.warnings.join(' ')).toContain('max volume limit');
+    expect(overfill.warnings.join(' ')).toContain('impossible fill state');
 
     const overdain = engine.step({ dtSeconds: 1000, overrides: { tankBoundaryFlowM3PerSByNodeId: { 'tank-1': -1 } } });
     const emptied = overdain.nodes.find((node) => node.nodeId === 'tank-1');
     expect(emptied?.volumeM3).toBe(0);
     expect(overdain.warnings.join(' ')).toContain('min volume limit');
+    expect(overdain.warnings.join(' ')).toContain('impossible drain state');
   });
 });
