@@ -38,6 +38,9 @@ button.primary, .toolbox-actions .primary { background: linear-gradient(180deg, 
 .startup-banner-info { background: rgba(38, 76, 126, 0.22); }
 .startup-banner-warning { background: rgba(141, 98, 26, 0.22); }
 .startup-fallback { padding: 32px; }
+.startup-banner { grid-row: 2; }
+.workspace-shell { grid-row: 3; }
+.startup-fallback { grid-row: 2 / -1; }
 
 .toolbox-shell { position: relative; min-height: 0; z-index: 25; }
 .tool-rail-shell { display: grid; grid-template-rows: minmax(0, 1fr) auto; }

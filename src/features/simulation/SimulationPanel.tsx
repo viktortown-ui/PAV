@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { MiniMap, useReactFlow } from 'reactflow';
 import { useAppStore } from '../../store/useAppStore';
 import {
@@ -272,7 +273,7 @@ export const SimulationPanel = ({ focusMode = false, rightPanelVisible = false, 
     </section>
   );
 
-  return (
+  const dockContent = (
     <section ref={dockRef} className={`simulation-dock sim-${simulationStatus} ${panelClassName} ${focusMode ? 'is-focus-mode' : ''} ${rightPanelVisible ? 'is-right-panel-open' : 'is-right-panel-collapsed'}`} data-panel-mode={panelState} aria-label="Нижняя панель симуляции и диагностики">
       <div className="simulation-dock-launcher" aria-hidden={panelState !== 'hidden'}>
         <button
@@ -416,4 +417,7 @@ export const SimulationPanel = ({ focusMode = false, rightPanelVisible = false, 
       ) : null}
     </section>
   );
+
+  if (typeof document === 'undefined') return dockContent;
+  return createPortal(dockContent, document.body);
 };
