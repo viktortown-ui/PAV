@@ -64,6 +64,7 @@ export const SimulationPanel = ({ focusMode = false, rightPanelVisible = false, 
     return getLastOpenDiagnosticsPanelState(window.sessionStorage.getItem(diagnosticsPanelLastOpenStateStorageKey));
   });
   const [isNavigatorVisible, setIsNavigatorVisible] = useState(true);
+  const [isFullJournalVisible, setIsFullJournalVisible] = useState(false);
 
   useEffect(() => {
     console.info(diagnosticsPanelStateMachineDefinition);
@@ -105,6 +106,8 @@ export const SimulationPanel = ({ focusMode = false, rightPanelVisible = false, 
   const warningCount = issues.filter((issue) => issue.severity !== 'info').length;
   const activeWarnings = useMemo(() => project.simulation.warnings.slice(0, 6), [project.simulation.warnings]);
   const recentEvents = useMemo(() => project.eventLog.slice(-10).reverse(), [project.eventLog]);
+  const fullJournalEvents = useMemo(() => project.eventLog.slice(-40).reverse(), [project.eventLog]);
+  const recentSignificantEvents = useMemo(() => project.eventLog.slice(-2).reverse(), [project.eventLog]);
   const latestEvent = recentEvents[0];
   const selectionLabel = selectedNode
     ? `${selectedNode.data.visibleName} • ${selectedNode.data.technicalTag}`
@@ -128,6 +131,43 @@ export const SimulationPanel = ({ focusMode = false, rightPanelVisible = false, 
   const isRunning = simulationStatus === 'running';
   const isPaused = simulationStatus === 'paused';
   const currentFluid = project.simulation.fluid ?? { id: 'water', kind: 'water', name: 'Вода', densityKgPerM3: 998, dynamicViscosityPaS: 0.001002 };
+  const activeRouteEdges = useMemo(() => project.edges.filter((edge) => Boolean(edge.data?.flowActive)), [project.edges]);
+  const blockedRouteEdge = useMemo(() => project.edges.find((edge) => Boolean(edge.data?.blocked) || (edge.data?.blockedBy?.length ?? 0) > 0), [project.edges]);
+  const blockedNode = useMemo(
+    () => project.nodes.find((node) => ['blocked', 'offline'].includes(String(node.data.process.processState ?? '').toLowerCase())),
+    [project.nodes],
+  );
+  const routeLabel = activeRouteEdges.length
+    ? `${activeRouteEdges[0].data?.sourceLabel ?? 'Источник'} → ${activeRouteEdges[0].data?.targetLabel ?? 'Приёмник'}${activeRouteEdges.length > 1 ? ` (+${activeRouteEdges.length - 1})` : ''}`
+    : 'Маршрут не активен';
+  const blockingLabel = blockedNode
+    ? `${blockedNode.data.visibleName} · ${blockedNode.data.technicalTag}`
+    : blockedRouteEdge
+      ? `${blockedRouteEdge.data?.sourceLabel ?? 'Линия'} → ${blockedRouteEdge.data?.targetLabel ?? 'узел'}`
+      : 'Нет активной блокировки';
+  const processReason = warningCount
+    ? activeWarnings[0] ?? project.simulation.lastEvent
+    : blockedNode || blockedRouteEdge
+      ? 'Поток ограничен блокировкой оборудования или линии'
+      : isRunning && project.simulation.totalActiveFlow > 0
+        ? 'Поток идёт по активному маршруту'
+        : isRunning
+          ? 'Система запущена, но поток не сформирован'
+          : isPaused
+            ? 'Симуляция остановлена оператором'
+            : 'Система в ожидании запуска';
+  const temperatureValues = project.nodes
+    .map((node) => Number(node.data.process.temperatureC ?? node.data.process.temperature))
+    .filter((value) => Number.isFinite(value));
+  const pressureValues = project.nodes
+    .map((node) => Number(node.data.process.pressureBar ?? node.data.process.pressure))
+    .filter((value) => Number.isFinite(value));
+  const levelValues = project.nodes
+    .map((node) => Number(node.data.process.levelPercent))
+    .filter((value) => Number.isFinite(value));
+  const avgTemperature = temperatureValues.length ? temperatureValues.reduce((sum, value) => sum + value, 0) / temperatureValues.length : 0;
+  const avgPressure = pressureValues.length ? pressureValues.reduce((sum, value) => sum + value, 0) / pressureValues.length : 0;
+  const avgLevel = levelValues.length ? levelValues.reduce((sum, value) => sum + value, 0) / levelValues.length : 0;
 
   const handleFitToView = useCallback(async () => {
     await flow.fitView({ padding: 0.2, duration: 220 });
@@ -161,6 +201,10 @@ export const SimulationPanel = ({ focusMode = false, rightPanelVisible = false, 
       observer.disconnect();
     };
   }, [activeRightTab, panelState, rightPanelVisible]);
+
+  useEffect(() => {
+    if (!isFull) setIsFullJournalVisible(false);
+  }, [isFull]);
 
   const renderControlZone = () => (
     <section className="dock-zone dock-zone-control" aria-label="Управление симуляцией">
@@ -384,9 +428,8 @@ export const SimulationPanel = ({ focusMode = false, rightPanelVisible = false, 
       {isFull ? (
         <aside className="dock-full-console" aria-label="Панель полной диагностики">
           <header className="dock-full-console-header">
-            <div>
-              <span className="dock-zone-label">Режим полной диагностики</span>
-              <strong>Консоль диагностики</strong>
+            <div className="dock-full-console-header-copy">
+              <strong>Полная диагностика</strong>
               <small>{modeSummary}</small>
             </div>
             <div className="dock-full-console-actions">
@@ -395,23 +438,63 @@ export const SimulationPanel = ({ focusMode = false, rightPanelVisible = false, 
             </div>
           </header>
           <div className="dock-full-console-content">
-            <section className="console-column console-column-main">
+            <section className="console-column console-column-control">
               <div className="console-card">
-                <span className="dock-zone-label">Контекст и сигналы</span>
-                <div className="dock-detail-grid">
-                  <div><span className="metric-label">Режим</span><strong>{modeSummary}</strong></div>
-                  <div><span className="metric-label">Фильтр</span><strong>{filterLabel}</strong></div>
-                  <div><span className="metric-label">Предупреждений</span><strong>{warningCount}</strong></div>
-                  <div><span className="metric-label">Последнее событие</span><strong>{latestEvent?.message ?? project.simulation.lastEvent}</strong></div>
+                <div className="console-card-head">
+                  <strong>Управление</strong>
+                </div>
+                <div className="dock-controls-row">
+                  <button type="button" className="is-primary" onClick={() => setSimulationRunning(true)} disabled={isRunning}>
+                    {isPaused ? '▶ Продолжить' : '▶ Пуск'}
+                  </button>
+                  <button type="button" onClick={() => setSimulationRunning(false)} disabled={!isRunning}>❚❚ Пауза</button>
+                  <button type="button" onClick={resetSimulation}>↺ Сброс</button>
+                </div>
+                <div className="console-inline-row">
+                  <span className="metric-label">Скорость</span>
+                  <div className="dock-speed-options">
+                    {speedOptions.map((speed) => (
+                      <button
+                        type="button"
+                        key={speed}
+                        className={project.simulation.speed === speed ? 'is-selected' : ''}
+                        onClick={() => setSimulationSpeed(speed)}
+                      >
+                        {speed.toFixed(speed % 1 === 0 ? 0 : 1)}×
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="console-inline-row">
+                  <span className="metric-label">Контекст</span>
+                  <strong>{selectionLabel}</strong>
                 </div>
               </div>
-              <div className="console-card console-journal-card">
+            </section>
+            <section className="console-column console-column-process">
+              <div className="console-card console-process-card">
                 <div className="console-card-head">
-                  <strong>Журнал событий</strong>
-                  <span>Буфер: {project.eventLog.length}</span>
+                  <strong>Текущий процесс</strong>
+                  <span className={`simulation-status-chip is-${simulationStatus}`}>{modeChipLabel}</span>
+                </div>
+                <div className="console-process-grid">
+                  <div><span className="metric-label">Режим</span><strong>{modeChipReadableLabel}</strong></div>
+                  <div><span className="metric-label">Маршрут</span><strong>{routeLabel}</strong></div>
+                  <div><span className="metric-label">Поток</span><strong>{Math.round(project.simulation.totalActiveFlow)} л/мин</strong></div>
+                  <div><span className="metric-label">Причина состояния</span><strong>{processReason}</strong></div>
+                  <div><span className="metric-label">Активное ограничение</span><strong>{blockingLabel}</strong></div>
+                  <div><span className="metric-label">Предупреждений</span><strong>{warningCount}</strong></div>
+                </div>
+              </div>
+              <div className="console-card">
+                <div className="console-card-head">
+                  <strong>Последние события</strong>
+                  <button type="button" className="dock-inline-button" onClick={() => setIsFullJournalVisible((current) => !current)}>
+                    {isFullJournalVisible ? 'Скрыть журнал' : 'Показать журнал'}
+                  </button>
                 </div>
                 <div className="sheet-journal-list">
-                  {recentEvents.map((event) => (
+                  {recentSignificantEvents.map((event) => (
                     <article key={event.id} className={`sheet-journal-item severity-${event.severity}`}>
                       <span className="sheet-journal-time">{formatEventTime(event.timestamp)}</span>
                       <strong className="sheet-journal-message">{event.message}</strong>
@@ -419,30 +502,46 @@ export const SimulationPanel = ({ focusMode = false, rightPanelVisible = false, 
                     </article>
                   ))}
                 </div>
+                {isFullJournalVisible ? (
+                  <div className="console-full-journal">
+                    <div className="console-card-head">
+                      <strong>Журнал событий</strong>
+                      <span>Буфер: {project.eventLog.length}</span>
+                    </div>
+                    <div className="sheet-journal-list">
+                      {fullJournalEvents.map((event) => (
+                        <article key={event.id} className={`sheet-journal-item severity-${event.severity}`}>
+                          <span className="sheet-journal-time">{formatEventTime(event.timestamp)}</span>
+                          <strong className="sheet-journal-message">{event.message}</strong>
+                          <small className="sheet-journal-type">{event.type}</small>
+                        </article>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </section>
-            <section className="console-column console-column-side">
+            <section className="console-column console-column-instruments">
               <div className="console-card">
                 <div className="console-card-head">
-                  <strong>Предупреждения</strong>
-                  <span>Приоритет</span>
+                  <strong>Приборы и диагностика</strong>
                 </div>
-                <div className="sheet-warning-list">
-                  {activeWarnings.length
-                    ? activeWarnings.map((warning) => <div key={warning} className="sheet-warning-item">{warning}</div>)
-                    : <div className="sheet-warning-item is-idle">Активных предупреждений нет</div>}
-                </div>
-              </div>
-              <div className="console-card">
-                <span className="dock-zone-label">Последнее событие</span>
-                <div className="sheet-last-event">
-                  <span className="metric-label">Время</span>
-                  <strong>{latestEvent ? formatEventTime(latestEvent.timestamp) : 'Нет записей'}</strong>
-                  <span>{latestEvent?.type ?? 'система'}</span>
+                <div className="console-instrument-grid">
+                  <div className="console-instrument-card"><span className="metric-label">Температура</span><strong>{Math.round(avgTemperature)} °C</strong></div>
+                  <div className="console-instrument-card"><span className="metric-label">Давление</span><strong>{avgPressure.toFixed(2)} бар</strong></div>
+                  <div className="console-instrument-card"><span className="metric-label">Расход</span><strong>{Math.round(project.simulation.totalActiveFlow)} л/мин</strong></div>
+                  <div className="console-instrument-card"><span className="metric-label">Уровень</span><strong>{Math.round(avgLevel)} %</strong></div>
+                  <div className="console-instrument-card"><span className="metric-label">Среда</span><strong>{mediumLabel[project.simulation.activeMedium]}</strong></div>
+                  <div className="console-instrument-card"><span className="metric-label">Вязкость</span><strong>{Number(currentFluid.dynamicViscosityPaS).toFixed(4)} Па·с</strong></div>
                 </div>
               </div>
             </section>
           </div>
+          <footer className="dock-full-console-footer">
+            <span>Полная диагностика · {modeSummary.toLowerCase()}</span>
+            <span>Фильтр: {filterLabel}</span>
+            <span>Последнее изменение: {latestEvent ? formatEventTime(latestEvent.timestamp) : 'нет данных'}</span>
+          </footer>
         </aside>
       ) : null}
     </section>
