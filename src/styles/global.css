@@ -406,13 +406,13 @@ button.primary, .toolbox-actions .primary { background: linear-gradient(180deg, 
   left: 10px;
   right: 10px;
   width: auto;
-  max-height: 72dvh;
+  max-height: 74dvh;
   border-radius: 16px;
   border: 1px solid rgba(132, 171, 218, 0.24);
   background: linear-gradient(180deg, rgba(12, 22, 35, 0.98), rgba(8, 15, 24, 0.98));
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.46);
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
   overflow: hidden;
 }
 .simulation-dock.is-right-panel-open .dock-full-console { right: calc(clamp(320px, 32vw, 360px) + 68px + 10px); }
@@ -424,20 +424,43 @@ button.primary, .toolbox-actions .primary { background: linear-gradient(180deg, 
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  align-items: end;
-  padding: 10px 12px;
+  align-items: center;
+  padding: 8px 12px;
   border-bottom: 1px solid rgba(132, 171, 218, 0.16);
   background: rgba(9, 16, 26, 0.95);
 }
+.dock-full-console-header-copy { display: grid; gap: 2px; }
 .dock-full-console-header strong { display: block; color: #eef5ff; }
 .dock-full-console-header small { color: #8ea4bf; font-size: 11px; }
 .dock-full-console-actions { display: flex; flex-wrap: wrap; gap: 6px; }
-.dock-full-console-content { min-height: 0; overflow: auto; padding: 10px 12px 12px; display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(280px, 0.9fr); gap: 10px; }
+.dock-full-console-content { min-height: 0; overflow: auto; padding: 8px 12px; display: grid; grid-template-columns: minmax(240px, 0.9fr) minmax(340px, 1.4fr) minmax(280px, 1fr); gap: 8px; }
 .console-column, .console-card, .sheet-warning-list, .sheet-journal-list { display: grid; gap: 8px; min-height: 0; }
 .console-card { padding: 8px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05); background: rgba(255,255,255,0.025); }
-.console-journal-card { min-height: 220px; }
 .console-card-head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
 .console-card-head span { color: #8ea4bf; font-size: 11px; }
+.console-inline-row { display: grid; gap: 4px; }
+.console-process-grid, .console-instrument-grid { display: grid; gap: 6px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.console-process-grid > div, .console-instrument-card, .console-full-journal {
+  border: 1px solid rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.03);
+  border-radius: 9px;
+  padding: 6px;
+  display: grid;
+  gap: 3px;
+}
+.console-process-grid > div strong, .console-instrument-card strong { font-size: 12px; line-height: 1.2; color: #edf4ff; margin: 0; overflow-wrap: anywhere; }
+.console-process-grid > div:nth-child(4), .console-process-grid > div:nth-child(5) { grid-column: span 2; }
+.console-full-journal { gap: 6px; }
+.dock-full-console-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 6px 12px 8px;
+  border-top: 1px solid rgba(132, 171, 218, 0.14);
+  background: rgba(9, 16, 26, 0.92);
+  color: #91a8c3;
+  font-size: 11px;
+}
 
 .sheet-journal-list { overflow: auto; padding-right: 2px; align-content: start; }
 .sheet-journal-item { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; align-items: baseline; column-gap: 8px; padding: 7px 8px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.05); background: rgba(255,255,255,0.02); }
@@ -505,6 +528,8 @@ button.primary, .toolbox-actions .primary { background: linear-gradient(180deg, 
   .shell-rail-right { flex-direction: row; border-left: 0; border-top: 1px solid rgba(122, 150, 183, 0.14); }
   .shell-right-drawer { width: 100%; }
   .dock-layout-compact, .dock-layout-standard-top, .dock-layout-standard-bottom, .dock-full-console-content, .wizard-context-grid, .wizard-form-grid { grid-template-columns: 1fr; display: grid; }
+  .console-process-grid, .console-instrument-grid { grid-template-columns: 1fr; }
+  .console-process-grid > div:nth-child(4), .console-process-grid > div:nth-child(5) { grid-column: auto; }
   .dock-summary-grid, .dock-detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dock-controls-row { grid-template-columns: 1fr; }
   .dock-speed-options, .dock-navigator-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); }
