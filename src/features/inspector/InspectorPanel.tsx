@@ -3,7 +3,7 @@ import { EquipmentStatus, EventLogEntry, PropertyField, SoapNode, ValidationIssu
 import { EdgeActionKind, useAppStore } from '../../store/useAppStore';
 import { createEdgeInspectorSchema, edgeInspectorFields } from './schemas';
 import { buildSegmentList, summarizeDiagnostics } from '../editor/lineList';
-import { formatEventTime, formatSmartNumber, presentEvent } from './presentation';
+import { compactEvents, formatEventTime, formatSmartNumber } from './presentation';
 
 const ruMedium: Record<string, string> = { water: 'Вода', product: 'Продукт', cip: 'СИП', waste: 'Сток', composite: 'Смесь' };
 const ruState: Record<string, string> = { idle: 'Ожидание', primed: 'Подготовлен', flowing: 'Поток', blocked: 'Блокировка', starved: 'Нет подпитки', draining: 'Слив', cip: 'СИП', alarm: 'Авария', maintenance: 'Ремонт', offline: 'Отключён' };
@@ -196,22 +196,24 @@ const buildNodeActions = (node: SoapNode) => {
   return [];
 };
 
-const EventList = ({ events }: { events: EventLogEntry[] }) => (
+const EventList = ({ events }: { events: EventLogEntry[] }) => {
+  const normalized = compactEvents(events);
+  return (
   <section className="route-card inspector-card">
     <strong>События</strong>
     <div className="segment-list">
-      {events.map((rawEvent) => {
-        const event = presentEvent(rawEvent);
+      {normalized.map((event) => {
         return <div key={event.id} className={`issue-card severity-${event.severity}`}>
           <strong>{event.uiType}</strong>
           <span>{event.uiMessage}</span>
           <small>{formatEventTime(event.timestamp)}</small>
         </div>;
       })}
-      {!events.length ? <div className="issue-card severity-info"><strong>События</strong><span>Записей пока нет.</span></div> : null}
+      {!normalized.length ? <div className="issue-card severity-info"><strong>События</strong><span>Записей пока нет.</span></div> : null}
     </div>
   </section>
 );
+};
 
 const liveRows = (params: {
   processState: string;
@@ -266,6 +268,16 @@ export const InspectorPanel = ({ compact = false }: { compact?: boolean }) => {
     const mediumName = ruMedium[schema.mediumType] ?? schema.mediumType;
     const lineTag = `ЛИНИЯ ${schema.upstreamRef || source?.data.technicalTag || 'A'} → ${schema.downstreamRef || target?.data.technicalTag || 'B'} · ${schema.nominalDiameter}`;
     const events = project.eventLog.filter((event) => event.targetId === edge.id).slice(-6).reverse();
+    const edgeFlow = Number(edge.data?.flowLpm ?? edge.data?.flowRate ?? 0);
+    const routeStateLabel = ruState[schema.routeState] ?? schema.routeState;
+    const stopReason = edge.data?.blockedBy?.length
+      ? `Поток остановлен: ${edge.data?.blockedBy?.join(', ')}.`
+      : schema.routeState === 'blocked'
+        ? 'Поток остановлен: маршрут сейчас заблокирован.'
+        : edgeFlow <= 0.01
+          ? 'Поток отсутствует: нет перепада или активной подачи.'
+          : 'Поток идёт без блокировок.';
+    const routeRef = `${schema.upstreamRef || source?.data.shortName || source?.data.visibleName} → ${schema.downstreamRef || target?.data.shortName || target?.data.visibleName}`;
 
     return <aside className={`panel inspector-panel ${compact ? 'is-compact' : ''}`}>
       <div className="panel-title">Инспектор линии</div>
@@ -304,6 +316,20 @@ export const InspectorPanel = ({ compact = false }: { compact?: boolean }) => {
       <section className="route-card inspector-card">
         <strong>Диагностика линии</strong>
         <span className="panel-caption">Показывает совместимость сегмента, блокировки маршрута и причины отсутствия потока.</span>
+        <div className="issue-list issue-list-detailed">
+          <div className={`issue-card severity-${relatedIssues.length ? 'warning' : 'info'}`}>
+            <strong>Совместимость сегмента: {relatedIssues.length ? 'риск' : 'норма'}</strong>
+            <span>{relatedIssues.length ? 'Есть замечания по валидации линии или связанного узла.' : 'Диаметр, направление и тип среды согласованы с текущим маршрутом.'}</span>
+          </div>
+          <div className={`issue-card severity-${schema.routeState === 'blocked' ? 'warning' : 'info'}`}>
+            <strong>Состояние маршрута: {routeStateLabel}</strong>
+            <span>{stopReason}</span>
+          </div>
+          <div className={`issue-card severity-${edgeFlow <= 0.01 ? 'warning' : 'info'}`}>
+            <strong>Наличие потока: {edgeFlow <= 0.01 ? 'нет' : 'есть'}</strong>
+            <span>Текущий расход: {formatSmartNumber(edgeFlow, 1)} л/мин. Связанный маршрут: {routeRef}.</span>
+          </div>
+        </div>
         {relatedIssues.length ? relatedIssues.map((issue) => <div key={issue.id} className={`issue-card severity-${issue.severity}`}><strong>{issueTitle(issue)}</strong><span>{issue.message}</span></div>) : <div className="issue-card severity-info"><strong>Маршрут совместим</strong><span>Блокировок потока и физических замечаний для выбранной линии не выявлено.</span></div>}
       </section>
 
@@ -352,6 +378,12 @@ export const InspectorPanel = ({ compact = false }: { compact?: boolean }) => {
   const pressureBand = resolveBand(pressure, pressureBands);
   const flowBand = resolveBand(summaryFlow, flowBands);
   const levelBand = resolveBand(levelPercent, levelBands);
+  const bandSummary = [
+    { label: 'Температура', state: tempBand.state, reason: summaryTemp > 85 ? 'температура выше целевого диапазона' : summaryTemp < 0 ? 'значение ниже физически допустимого диапазона' : 'температура в рабочей зоне' },
+    { label: 'Давление', state: pressureBand.state, reason: pressure > 2.8 ? 'давление близко к аварийному порогу' : pressure < 0.2 ? 'давление низкое, возможна нехватка подпитки' : 'давление стабильно' },
+    { label: 'Расход', state: flowBand.state, reason: summaryFlow < 0.1 ? 'поток практически остановлен' : summaryFlow > 60 ? 'расход выше расчётного диапазона' : 'расход в допустимом коридоре' },
+    { label: 'Уровень', state: levelBand.state, reason: levelPercent > 90 ? 'резервуар близок к переполнению' : levelPercent < 15 ? 'уровень низкий, возможен срыв подачи' : 'уровень в рабочем диапазоне' },
+  ];
 
   return <aside className={`panel inspector-panel ${compact ? 'is-compact' : ''}`}>
     <div className="panel-title">Инспектор оборудования</div>
@@ -391,12 +423,22 @@ export const InspectorPanel = ({ compact = false }: { compact?: boolean }) => {
 
     <section className="route-card inspector-card">
       <strong>Диагностика состояния</strong>
-      <span className="panel-caption">Шкалы показывают рабочие диапазоны: норма, риск и тревога.</span>
+      <span className="panel-caption">Показывает, что проверяется, текущую оценку, причину и уровень: норма, риск или тревога.</span>
       <div className="instrument-grid">
         <div className={`instrument-card band-${bandTone(tempBand.state)}`}><div className="instrument-head"><span>Температура</span><strong>{formatSmartNumber(summaryTemp, 1)} °C</strong></div><div className="instrument-track"><i style={{ width: `${clampPercent(summaryTemp, 0, 100)}%` }} /></div><small>Норма 0–70 • риск 70–85 • тревога &gt;85</small></div>
         <div className={`instrument-card band-${bandTone(pressureBand.state)}`}><div className="instrument-head"><span>Давление</span><strong>{formatSmartNumber(pressure, 2)} бар</strong></div><div className="instrument-track"><i style={{ width: `${clampPercent(pressure, 0, 4)}%` }} /></div><small>Норма 0–1.7 • риск 1.7–2.8 • тревога &gt;2.8</small></div>
         <div className={`instrument-card band-${bandTone(flowBand.state)}`}><div className="instrument-head"><span>Расход</span><strong>{formatSmartNumber(summaryFlow, 1)} л/мин</strong></div><div className="instrument-track"><i style={{ width: `${clampPercent(summaryFlow, 0, 100)}%` }} /></div><small>Норма 0.1–60 • риск низкий &lt;0.1 • тревога &gt;60</small></div>
         <div className={`instrument-card band-${bandTone(levelBand.state)}`}><div className="instrument-head"><span>Уровень</span><strong>{Math.round(levelPercent)} %</strong></div><div className="instrument-track"><i style={{ width: `${levelPercent}%` }} /></div><small>Норма 15–90 • риск низкий &lt;15 • тревога &gt;90</small></div>
+      </div>
+      <div className="issue-list issue-list-detailed">
+        {bandSummary.map((item) => <div key={item.label} className={`issue-card severity-${item.state === 'Тревога' ? 'error' : item.state === 'Риск' ? 'warning' : 'info'}`}>
+          <strong>{item.label}: {item.state}</strong>
+          <span>Проверка: {item.label.toLowerCase()} в рабочем диапазоне. Оценка: {item.state.toLowerCase()}. Причина: {item.reason}.</span>
+        </div>)}
+        <div className="issue-card severity-info">
+          <strong>Физическая проверка</strong>
+          <span>Часть расчётов выполняется в упрощённом режиме. Это явно показывается в событиях и не скрывает ограничение модели.</span>
+        </div>
       </div>
       <div className="aux-grid">
         <div className="aux-card"><span>Вязкость</span><strong>{formatSmartNumber(viscosity, 4)} Па·с</strong></div>
