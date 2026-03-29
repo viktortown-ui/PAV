@@ -108,7 +108,7 @@ button.primary, .toolbox-actions .primary { background: linear-gradient(180deg, 
 .inspector-panel.is-compact { padding: 0; border: 0; background: transparent; }
 .inspector-panel .tabs, .line-actions .action-grid { display: flex; flex-wrap: wrap; gap: 8px; }
 .inspector-stack, .segment-list, .issue-list-detailed, .shell-event-log-list { display: grid; gap: 12px; }
-.inspector-card { border-radius: 12px; padding: 10px; gap: 8px; }
+.inspector-card { border-radius: 12px; padding: 9px; gap: 7px; }
 .inspector-hero { background: linear-gradient(180deg, rgba(31, 51, 73, 0.82), rgba(14, 25, 38, 0.92)); border-color: rgba(121, 159, 204, 0.28); }
 .inspector-hero-title { display: grid; gap: 4px; }
 .status-pill-row { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -121,21 +121,31 @@ button.primary, .toolbox-actions .primary { background: linear-gradient(180deg, 
 .kpi-grid div.is-alert { border-color: rgba(255, 148, 97, 0.46); }
 .kpi-grid span { display: block; color: #90a7c2; font-size: 11px; margin-bottom: 2px; }
 .kpi-grid strong { font-size: 13px; line-height: 1.2; }
-.control-group { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.control-group { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
 .control-button { border: 1px solid rgba(143, 181, 226, 0.2); background: #13283f; color: #ecf4ff; border-radius: 10px; padding: 7px 9px; font-size: 12px; line-height: 1.2; text-align: left; }
 .control-button.is-active { border-color: rgba(109, 223, 182, 0.54); background: linear-gradient(180deg, rgba(42, 112, 89, 0.95), rgba(28, 66, 55, 0.95)); }
 .control-button.is-warning { border-color: rgba(255, 201, 109, 0.45); }
 .control-button.is-danger { border-color: rgba(255, 125, 153, 0.42); background: rgba(72, 29, 41, 0.94); }
 .control-button:disabled { cursor: not-allowed; opacity: 0.48; filter: grayscale(0.2); }
-.live-grid { display: grid; gap: 6px; }
-.live-grid span { color: #a8bdd6; line-height: 1.35; font-size: 12px; }
-.live-grid b { color: #edf4ff; font-weight: 600; }
-.gauge-grid { display: grid; gap: 7px; }
-.gauge { display: grid; gap: 4px; }
-.gauge span { font-size: 11px; color: #91a8c3; }
-.gauge small { color: #c8d8eb; font-size: 11px; }
-.gauge-track { height: 8px; border-radius: 999px; border: 1px solid rgba(143, 181, 226, 0.22); background: rgba(255,255,255,0.04); overflow: hidden; }
-.gauge-track i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #4ca5ff, #66e3b2); }
+.live-summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
+.live-item { display: grid; gap: 2px; border: 1px solid rgba(255,255,255,0.06); background: rgba(255,255,255,0.02); border-radius: 9px; padding: 6px 7px; min-height: 52px; }
+.live-item span { color: #8da5c3; line-height: 1.15; font-size: 11px; }
+.live-item b { color: #edf4ff; font-weight: 600; font-size: 12px; line-height: 1.25; }
+.instrument-grid { display: grid; gap: 6px; }
+.instrument-card { display: grid; gap: 4px; border: 1px solid rgba(143, 181, 226, 0.22); border-radius: 10px; padding: 7px 8px; background: rgba(255,255,255,0.02); }
+.instrument-head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.instrument-head span { color: #97afcb; font-size: 11px; }
+.instrument-head strong { font-size: 13px; color: #edf4ff; }
+.instrument-track { height: 8px; border-radius: 999px; border: 1px solid rgba(143, 181, 226, 0.2); background: linear-gradient(90deg, rgba(95, 183, 124, 0.28) 0 60%, rgba(255, 206, 112, 0.28) 60% 85%, rgba(255, 133, 133, 0.28) 85% 100%); overflow: hidden; }
+.instrument-track i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #53a8ff, #7cf0c1); box-shadow: 0 0 10px rgba(124, 207, 255, 0.35); }
+.instrument-card small { color: #8fa8c5; font-size: 10px; line-height: 1.2; }
+.instrument-card.band-ok { border-color: rgba(109, 223, 182, 0.44); }
+.instrument-card.band-warn { border-color: rgba(255, 201, 109, 0.5); }
+.instrument-card.band-alarm { border-color: rgba(255, 117, 146, 0.58); }
+.aux-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.aux-card { border: 1px solid rgba(255,255,255,0.06); border-radius: 9px; padding: 6px 8px; background: rgba(255,255,255,0.02); display: grid; gap: 2px; }
+.aux-card span { color: #8fa7c4; font-size: 11px; }
+.aux-card strong { font-size: 12px; color: #dbe8f7; }
 .service-details { display: grid; gap: 5px; color: #92a8c3; font-size: 12px; border: 1px dashed rgba(143, 181, 226, 0.24); border-radius: 10px; padding: 7px 8px; }
 .service-details summary { cursor: pointer; color: #cad9eb; font-weight: 600; }
 .diagnostics-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
@@ -148,8 +158,8 @@ button.primary, .toolbox-actions .primary { background: linear-gradient(180deg, 
 .severity-warning { border-color: rgba(255, 200, 98, 0.28); }
 .severity-info { border-color: rgba(120, 166, 255, 0.22); }
 .inspector-head span, .route-card span, .wizard-kicker, .wizard-context-grid span, .event-log-item span, .event-log-item small { color: #8ea4bf; }
-.inspector-content, .route-card, .line-actions, .field { display: grid; gap: 10px; padding: 12px; margin-top: 12px; }
-.field input[type="text"], .field input[type="number"], .field textarea, .field select, .wizard-field input, .wizard-field select { width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(122, 150, 183, 0.16); background: #0b1625; color: #eff6ff; }
+.inspector-content, .route-card, .line-actions, .field { display: grid; gap: 8px; padding: 10px; margin-top: 10px; }
+.field input[type="text"], .field input[type="number"], .field textarea, .field select, .wizard-field input, .wizard-field select { width: 100%; padding: 8px 10px; border-radius: 10px; border: 1px solid rgba(122, 150, 183, 0.16); background: #0b1625; color: #eff6ff; }
 .field input[type="checkbox"], .wizard-field input[type="checkbox"] { justify-self: start; transform: scale(1.1); }
 .datasheet-grid { margin: 0; display: grid; gap: 10px; }
 .datasheet-grid div { padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,0.03); }
