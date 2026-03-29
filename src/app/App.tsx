@@ -12,7 +12,7 @@ import { buildSegmentList, summarizeDiagnostics } from '../features/editor/lineL
 import { EdgeLabelMode, TemplateId } from '../domain/schemas/types';
 import { edgeLabelModes } from '../features/inspector/schemas';
 import { LibraryPicker } from '../features/library/LibraryPicker';
-import { formatEventTime, presentEvent, severityTitle } from '../features/inspector/presentation';
+import { compactEvents, formatEventTime, severityTitle } from '../features/inspector/presentation';
 
 class EditorErrorBoundary extends Component<{ children: ReactNode }, { error?: Error }> {
   public state: { error?: Error } = {};
@@ -29,6 +29,19 @@ const shellStateKey = 'pav-shell-state';
 const commandPaletteKey = 'k';
 const datasheetMediumLabel: Record<string, string> = { water: 'Вода', product: 'Продукт', cip: 'СИП', waste: 'Сток', none: 'Нет', mixed: 'Смешанная' };
 const datasheetRouteLabel: Record<string, string> = { idle: 'Ожидание', primed: 'Подготовлен', flowing: 'Поток', blocked: 'Блокировка', starved: 'Нет подпитки', draining: 'Слив', cip: 'СИП', alarm: 'Авария', maintenance: 'Ремонт', offline: 'Отключён' };
+const datasheetStatusLabel: Record<string, string> = {
+  off: 'Выключен',
+  idle: 'Ожидание',
+  standby: 'Готовность',
+  running: 'Работает',
+  blocked: 'Блокирован',
+  alarm: 'Авария',
+  maintenance: 'Ремонт',
+  normal: 'Норма',
+  active: 'Активен',
+  warning: 'Предупреждение',
+  disabled: 'Отключён',
+};
 const inlineInsertActions = [
   { id: 'inline-shutoff', title: 'Вставить запорный клапан', subtitle: 'На линию • запорная арматура', keywords: 'insert inline valve shutoff клапан арматура on line', kind: 'shutoffValve' },
   { id: 'inline-flowmeter', title: 'Вставить расходомер', subtitle: 'На линию • контроль расхода', keywords: 'insert inline flow meter расходомер кип line', kind: 'flowMeter' },
@@ -60,11 +73,10 @@ const LineListPanel = () => {
 
 const EventLogPanel = () => {
   const project = useAppStore((state) => state.project);
-  const events = [...project.eventLog].slice(-18).reverse();
-  return <div className="shell-side-panel"><div className="panel-title">События</div><div className="shell-panel-section"><strong>Последние события</strong><div className="event-log-list shell-event-log-list">{events.map((rawEvent) => {
-    const event = presentEvent(rawEvent);
-    return <div key={event.id} className={`event-log-item severity-${event.severity}`}><span>{formatEventTime(event.timestamp)}</span><strong>{event.uiMessage}</strong><small>{event.uiType}</small></div>;
-  })}</div></div></div>;
+  const events = compactEvents([...project.eventLog].slice(-24).reverse());
+  return <div className="shell-side-panel"><div className="panel-title">События</div><div className="shell-panel-section"><strong>Последние события</strong><div className="event-log-list shell-event-log-list">{events.length ? events.map((event) =>
+    <div key={event.id} className={`event-log-item severity-${event.severity}`}><span>{formatEventTime(event.timestamp)}</span><strong>{event.uiMessage}</strong><small>{event.uiType}</small></div>,
+  ) : <div className="issue-card severity-info"><strong>События</strong><span>Записей пока нет.</span></div>}</div></div></div>;
 };
 
 const DatasheetPanel = () => {
@@ -78,9 +90,9 @@ const DatasheetPanel = () => {
     ['Тег', node.data.technicalTag],
     ['Категория', node.data.category],
     ['Среда', datasheetMediumLabel[node.data.mediumType] ?? node.data.mediumType],
-    ['Статус', node.data.status],
+    ['Статус', datasheetStatusLabel[node.data.status] ?? node.data.status],
   ] : edge ? [
-    ['ID сегмента', edge.data?.segmentId ?? edge.id],
+    ['Сегмент', edge.data?.segmentId ?? `${edge.data?.sourceLabel ?? edge.source} → ${edge.data?.targetLabel ?? edge.target}`],
     ['Среда', datasheetMediumLabel[edge.data?.medium ?? 'water'] ?? edge.data?.medium ?? 'Вода'],
     ['DN', edge.data?.nominalDiameter ?? 'DN50'],
     ['Маршрут', datasheetRouteLabel[edge.data?.routeState ?? 'idle'] ?? edge.data?.routeState ?? 'Ожидание'],

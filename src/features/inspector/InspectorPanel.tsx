@@ -19,7 +19,6 @@ const edgeActionButtons: Array<{ label: string; action: EdgeActionKind; tone?: '
   { label: 'Вставить насос', action: 'insert:pump' },
   { label: 'Вставить фильтр', action: 'insert:inlineFilter' },
   { label: 'Сделать ответвление', action: 'branch:tee' },
-  { label: 'Разорвать сегмент', action: 'break', tone: 'danger' },
   { label: 'Удалить сегмент', action: 'delete', tone: 'danger' },
 ];
 
