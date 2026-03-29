@@ -45,6 +45,45 @@ const statusTone = (status: string) => {
   return 'idle';
 };
 
+type DiagnosticBand = {
+  min: number;
+  max: number;
+  state: 'Норма' | 'Риск' | 'Тревога';
+};
+
+const clampPercent = (value: number, min: number, max: number) => {
+  if (max <= min) return 0;
+  return Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100));
+};
+
+const resolveBand = (value: number, bands: DiagnosticBand[]) => bands.find((band) => value >= band.min && value <= band.max) ?? bands[bands.length - 1];
+const bandTone = (band: DiagnosticBand['state']) => band === 'Норма' ? 'ok' : band === 'Риск' ? 'warn' : 'alarm';
+
+const pressureBands: DiagnosticBand[] = [
+  { min: 0, max: 1.7, state: 'Норма' },
+  { min: 1.7, max: 2.8, state: 'Риск' },
+  { min: 2.8, max: 4, state: 'Тревога' },
+];
+
+const temperatureBands: DiagnosticBand[] = [
+  { min: 0, max: 70, state: 'Норма' },
+  { min: 70, max: 85, state: 'Риск' },
+  { min: 85, max: 100, state: 'Тревога' },
+];
+
+const flowBands: DiagnosticBand[] = [
+  { min: 0, max: 0.1, state: 'Риск' },
+  { min: 0.1, max: 60, state: 'Норма' },
+  { min: 60, max: 100, state: 'Тревога' },
+];
+
+const levelBands: DiagnosticBand[] = [
+  { min: 0, max: 15, state: 'Риск' },
+  { min: 15, max: 90, state: 'Норма' },
+  { min: 90, max: 100, state: 'Тревога' },
+];
+
+const readableState = (state: string) => ruProcessState[state] ?? state;
 
 const DiagnosticsSection = () => {
   const project = useAppStore((state) => state.project);
@@ -174,6 +213,37 @@ const EventList = ({ events }: { events: EventLogEntry[] }) => (
   </section>
 );
 
+const liveRows = (params: {
+  processState: string;
+  commandIntake: boolean;
+  commandDischarge: boolean;
+  commandRunning: boolean;
+  commandBlocked: boolean;
+  summaryFlow: number;
+  statusReason: string;
+  mediumType: string;
+  routeDirection?: string;
+  routeState?: string;
+}) => {
+  const commandSummary = [
+    `приём ${params.commandIntake ? 'разрешён' : 'закрыт'}`,
+    `выдача ${params.commandDischarge ? 'разрешена' : 'закрыта'}`,
+    `привод ${params.commandRunning ? 'включён' : 'остановлен'}`,
+  ].join(' • ');
+
+  return [
+    { label: 'Режим', value: readableState(params.processState) },
+    { label: 'Командный статус', value: commandSummary },
+    { label: 'Фактический статус', value: params.summaryFlow > 0.001 ? 'Поток есть' : 'Потока нет' },
+    { label: 'Поток', value: `${formatSmartNumber(params.summaryFlow, 1)} л/мин` },
+    { label: 'Причина', value: params.statusReason || (params.commandBlocked ? 'Узел заблокирован командой' : 'Ограничений не обнаружено') },
+    { label: 'Активное ограничение', value: params.commandBlocked ? 'Блокировка включена' : 'Нет активных блокировок' },
+    { label: 'Среда', value: ruMedium[params.mediumType] ?? params.mediumType },
+    ...(params.routeDirection ? [{ label: 'Маршрут', value: params.routeDirection }] : []),
+    ...(params.routeState ? [{ label: 'Состояние маршрута', value: params.routeState }] : []),
+  ];
+};
+
 export const InspectorPanel = ({ compact = false }: { compact?: boolean }) => {
   const selectedNodeId = useAppStore((state) => state.selectedNodeId);
   const selectedEdgeId = useAppStore((state) => state.selectedEdgeId);
@@ -257,8 +327,31 @@ export const InspectorPanel = ({ compact = false }: { compact?: boolean }) => {
   const commandBlocked = Boolean(process.isBlocked ?? false);
   const processState = String(process.processState ?? 'idle');
   const statusReason = String(node!.data.runtime.alarmText ?? node!.data.runtime.lastEvent ?? '').trim();
+  const routeState = String(node!.data.runtime.routeState ?? node!.data.simulation.routeState ?? '');
+  const routeDirection = String(process.direction ?? process.directionMode ?? '');
+  const levelPercent = Math.max(0, Math.min(100, Number(process.levelPercent ?? ((summaryLevel / Math.max(1, Number(process.capacity ?? 0))) * 100))));
   const actions = buildNodeActions(node!);
   const events = project.eventLog.filter((event) => event.targetId === node!.id).slice(-8).reverse();
+  const nodeIssues = issues.filter((issue) => issue.nodeIds?.includes(node!.id));
+  const liveSummary = liveRows({
+    processState,
+    commandIntake,
+    commandDischarge,
+    commandRunning,
+    commandBlocked,
+    summaryFlow,
+    statusReason,
+    mediumType: node!.data.mediumType,
+    routeDirection: routeDirection === 'forward' ? 'Прямое' : routeDirection === 'reverse' ? 'Обратное' : routeDirection === 'bidirectional' ? 'Двунаправленное' : undefined,
+    routeState: routeState ? (ruState[routeState] ?? routeState) : undefined,
+  });
+  const passportMainKeys = new Set(['visibleName', 'shortName', 'technicalTag', 'notes']);
+  const passportBaseKeys = new Set(['capacity', 'flowRate', 'temperature', 'pressure', 'diameterNominal', 'activityLabel']);
+  const passportFields = fields.filter((field) => passportMainKeys.has(field.key) || passportBaseKeys.has(field.key));
+  const tempBand = resolveBand(summaryTemp, temperatureBands);
+  const pressureBand = resolveBand(pressure, pressureBands);
+  const flowBand = resolveBand(summaryFlow, flowBands);
+  const levelBand = resolveBand(levelPercent, levelBands);
 
   return <aside className={`panel inspector-panel ${compact ? 'is-compact' : ''}`}>
     <div className="panel-title">Инспектор оборудования</div>
@@ -272,6 +365,7 @@ export const InspectorPanel = ({ compact = false }: { compact?: boolean }) => {
         <span className={`status-pill tone-${statusTone(node!.data.status)}`}>{ruStatus[node!.data.status]}</span>
         <span className="status-pill">{node!.data.mode === 'auto' ? 'Автомат' : 'Ручной'}</span>
         <span className="status-pill">{ruMedium[node!.data.mediumType]}</span>
+        <span className={`status-pill tone-${statusTone(processState)}`}>Режим: {readableState(processState)}</span>
       </div>
       <div className="kpi-grid">
         <div><span>Поток</span><strong>{formatSmartNumber(summaryFlow, 1)} л/мин</strong></div>
@@ -290,32 +384,32 @@ export const InspectorPanel = ({ compact = false }: { compact?: boolean }) => {
 
     <section className="route-card inspector-card">
       <strong>Живые параметры</strong>
-      <div className="live-grid">
-        <span>Режим процесса: <b>{ruProcessState[processState] ?? processState}</b></span>
-        <span>Командный статус: <b>приём {commandIntake ? 'разрешён' : 'закрыт'} • выдача {commandDischarge ? 'разрешена' : 'закрыта'} • привод {commandRunning ? 'включён' : 'остановлен'} • блок {commandBlocked ? 'да' : 'нет'}</b></span>
-        <span>Статус потока: <b>{summaryFlow > 0.001 ? 'Поток есть' : 'Поток отсутствует'}</b></span>
-        <span>Причина текущего состояния: <b>{statusReason || 'Ограничений и блокировок не обнаружено'}</b></span>
+      <div className="live-summary-grid">
+        {liveSummary.map((item) => <div key={item.label} className="live-item"><span>{item.label}</span><b>{item.value}</b></div>)}
       </div>
     </section>
 
     <section className="route-card inspector-card">
       <strong>Диагностика состояния</strong>
-      <div className="gauge-grid">
-        <div className="gauge"><span>Термометр</span><div className="gauge-track"><i style={{ width: `${Math.max(0, Math.min(100, summaryTemp))}%` }} /></div><small>{formatSmartNumber(summaryTemp, 1)} °C</small></div>
-        <div className="gauge"><span>Манометр</span><div className="gauge-track"><i style={{ width: `${Math.max(0, Math.min(100, pressure * 10))}%` }} /></div><small>{formatSmartNumber(pressure, 2)} бар</small></div>
-        <div className="gauge"><span>Расходомер</span><div className="gauge-track"><i style={{ width: `${Math.max(0, Math.min(100, summaryFlow))}%` }} /></div><small>{formatSmartNumber(summaryFlow, 1)} л/мин</small></div>
-        <div className="gauge"><span>Вязкость</span><div className="gauge-track"><i style={{ width: `${Math.max(0, Math.min(100, viscosity * 10000))}%` }} /></div><small>{formatSmartNumber(viscosity, 5)} Па·с</small></div>
-        <div className="gauge"><span>Плотность</span><div className="gauge-track"><i style={{ width: `${Math.max(0, Math.min(100, density / 15))}%` }} /></div><small>{Math.round(density)} кг/м³</small></div>
-        <div className="gauge"><span>Уровень</span><div className="gauge-track"><i style={{ width: `${Math.max(0, Math.min(100, Number(process.levelPercent ?? 0)))}%` }} /></div><small>{Math.round(Number(process.levelPercent ?? 0))} %</small></div>
+      <span className="panel-caption">Шкалы показывают рабочие диапазоны: норма, риск и тревога.</span>
+      <div className="instrument-grid">
+        <div className={`instrument-card band-${bandTone(tempBand.state)}`}><div className="instrument-head"><span>Температура</span><strong>{formatSmartNumber(summaryTemp, 1)} °C</strong></div><div className="instrument-track"><i style={{ width: `${clampPercent(summaryTemp, 0, 100)}%` }} /></div><small>Норма 0–70 • риск 70–85 • тревога &gt;85</small></div>
+        <div className={`instrument-card band-${bandTone(pressureBand.state)}`}><div className="instrument-head"><span>Давление</span><strong>{formatSmartNumber(pressure, 2)} бар</strong></div><div className="instrument-track"><i style={{ width: `${clampPercent(pressure, 0, 4)}%` }} /></div><small>Норма 0–1.7 • риск 1.7–2.8 • тревога &gt;2.8</small></div>
+        <div className={`instrument-card band-${bandTone(flowBand.state)}`}><div className="instrument-head"><span>Расход</span><strong>{formatSmartNumber(summaryFlow, 1)} л/мин</strong></div><div className="instrument-track"><i style={{ width: `${clampPercent(summaryFlow, 0, 100)}%` }} /></div><small>Норма 0.1–60 • риск низкий &lt;0.1 • тревога &gt;60</small></div>
+        <div className={`instrument-card band-${bandTone(levelBand.state)}`}><div className="instrument-head"><span>Уровень</span><strong>{Math.round(levelPercent)} %</strong></div><div className="instrument-track"><i style={{ width: `${levelPercent}%` }} /></div><small>Норма 15–90 • риск низкий &lt;15 • тревога &gt;90</small></div>
       </div>
-      {!!issues.filter((issue) => issue.nodeIds?.includes(node!.id)).length && <div className="issue-list issue-list-detailed">
-        {issues.filter((issue) => issue.nodeIds?.includes(node!.id)).slice(0, 4).map((issue) => <div key={issue.id} className={`issue-card severity-${issue.severity}`}><strong>{issueTitle(issue)}</strong><span>{issue.message}</span></div>)}
+      <div className="aux-grid">
+        <div className="aux-card"><span>Вязкость</span><strong>{formatSmartNumber(viscosity, 4)} Па·с</strong></div>
+        <div className="aux-card"><span>Плотность</span><strong>{Math.round(density)} кг/м³</strong></div>
+      </div>
+      {!!nodeIssues.length && <div className="issue-list issue-list-detailed">
+        {nodeIssues.slice(0, 4).map((issue) => <div key={issue.id} className={`issue-card severity-${issue.severity}`}><strong>{issueTitle(issue)}</strong><span>{issue.message}</span></div>)}
       </div>}
     </section>
 
     <section className="route-card inspector-card">
       <strong>Паспорт оборудования</strong>
-      {fields.map((field) => {
+      {passportFields.map((field) => {
         const value = getValue(node!, field);
         return <label key={field.key} className="field">
           <span>{field.label}</span>
