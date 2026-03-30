@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { addEdge, applyEdgeChanges, applyNodeChanges, Connection, EdgeChange, NodeChange, Viewport } from 'reactflow';
 import { APP_SCHEMA_VERSION, PROJECT_SCHEMA_VERSION, demoProject, templates } from '../domain/templates/templates';
 import { EdgeLabelMode, InspectorTab, ProjectDocument, SimulationSettings, SoapEdge, SoapNode, SoapNodeKind, TemplateId, ValidationIssue } from '../domain/schemas/types';
-import { clearPersistedState, clearUserData, loadStoredProject, resetCurrentProjectState, saveStoredProject } from '../features/persistence/db';
+import { clearPersistedState, clearUserData, loadStoredProject, saveStoredProject } from '../features/persistence/db';
 import { mediumPalette } from '../ui/tokens/tokens';
 import { runSimulationStep } from '../domain/simulation/engine';
 import { restoreProjectDocument, validateProject } from '../domain/validation/validateProject';
@@ -21,28 +21,74 @@ export type LibraryPickerContext = { edgeId?: string };
 
 const limitedLog = (project: ProjectDocument) => ({ ...project, eventLog: project.eventLog.slice(-80) });
 
-const INSPECTOR_PERSIST_DELAY_MS = 180;
+type PersistenceStatus = 'saved' | 'dirty' | 'saving' | 'error';
+const AUTOSAVE_DELAY_MS = 900;
 let persistTimer: number | undefined;
 let persistInFlight: Promise<void> = Promise.resolve();
+let queuedSnapshot: ProjectDocument | undefined;
+let queuedRevision: number | undefined;
+
+const serializeProjectForStorage = (project: ProjectDocument): ProjectDocument => {
+  const snapshot = cloneProject(project);
+  snapshot.eventLog = snapshot.eventLog.slice(-120);
+  snapshot.simulation = { ...snapshot.simulation, running: false };
+  return snapshot;
+};
+
+const persistRevisionNow = (project: ProjectDocument, revision: number, reason: 'autosave' | 'manual' | 'flush') => {
+  const snapshot = serializeProjectForStorage(project);
+  persistInFlight = persistInFlight
+    .catch(() => undefined)
+    .then(async () => {
+      useAppStore.setState({ persistenceStatus: 'saving' });
+      await saveStoredProject({
+        ...snapshot,
+        updatedAt: new Date().toISOString(),
+        appSchemaVersion: APP_SCHEMA_VERSION,
+        projectSchemaVersion: PROJECT_SCHEMA_VERSION,
+      });
+      const current = useAppStore.getState();
+      if (current.projectRevision === revision || reason !== 'autosave') {
+        useAppStore.setState({ persistedRevision: revision, persistenceStatus: 'saved', lastSavedAt: new Date().toISOString(), persistenceError: undefined });
+      }
+    })
+    .catch((error) => {
+      console.error('[persistence] failed to save project snapshot', { reason, revision, error });
+      useAppStore.setState({ persistenceStatus: 'error', persistenceError: 'Не удалось сохранить проект локально.' });
+    });
+  return persistInFlight;
+};
 
 const scheduleSafePersist = (project: ProjectDocument, revision: number) => {
   if (typeof window === 'undefined') return;
+  queuedSnapshot = cloneProject(project);
+  queuedRevision = revision;
+  useAppStore.setState({ persistenceStatus: 'dirty' });
   if (persistTimer) window.clearTimeout(persistTimer);
-  const snapshot = cloneProject(project);
   persistTimer = window.setTimeout(() => {
-    persistInFlight = persistInFlight
-      .catch(() => undefined)
-      .then(async () => {
-        await saveStoredProject({
-          ...snapshot,
-          updatedAt: new Date().toISOString(),
-          appSchemaVersion: APP_SCHEMA_VERSION,
-          projectSchemaVersion: PROJECT_SCHEMA_VERSION,
-        });
-        const current = useAppStore.getState();
-        if (current.projectRevision === revision) useAppStore.setState({ persistedRevision: revision });
-      });
-  }, INSPECTOR_PERSIST_DELAY_MS);
+    if (!queuedSnapshot || queuedRevision === undefined) return;
+    const nextSnapshot = queuedSnapshot;
+    const nextRevision = queuedRevision;
+    queuedSnapshot = undefined;
+    queuedRevision = undefined;
+    void persistRevisionNow(nextSnapshot, nextRevision, 'autosave');
+  }, AUTOSAVE_DELAY_MS);
+};
+
+const flushPendingPersistence = async () => {
+  if (typeof window !== 'undefined' && persistTimer) {
+    window.clearTimeout(persistTimer);
+    persistTimer = undefined;
+  }
+  if (queuedSnapshot && queuedRevision !== undefined) {
+    const snapshot = queuedSnapshot;
+    const revision = queuedRevision;
+    queuedSnapshot = undefined;
+    queuedRevision = undefined;
+    await persistRevisionNow(snapshot, revision, 'flush');
+    return;
+  }
+  await persistInFlight;
 };
 
 const syncNodePresentation = (node: SoapNode) => {
@@ -230,7 +276,7 @@ const logEvent = (project: ProjectDocument, message: string, targetId?: string, 
 const toSimulationStatus = (running: boolean): SimulationSettings['status'] => (running ? 'running' : 'paused');
 
 interface AppState {
-  project: ProjectDocument; projectRevision: number; persistedRevision: number; viewportNonce: number; selectedNodeId?: string; selectedEdgeId?: string; search: string; inspectorTab: InspectorTab; showProblematicOnly: boolean; hoveredEdgeId?: string; edgeLabelMode: EdgeLabelMode; edgeEditorMode?: EdgeEditorMode; issues: ValidationIssue[]; pathSelection: { upstream: string[]; downstream: string[]; edges: string[] }; startupState: StartupState; startupNotice?: StartupNotice; startupError?: string; lastCommand?: string; wizard: { open: boolean; groupId?: EquipmentWizardGroupId; kind?: SoapNodeKind; values: Record<string, string | number | boolean>; namingRule: string; }; libraryPicker: { open: boolean; mode: LibraryPickerMode; context?: LibraryPickerContext };
+  project: ProjectDocument; projectRevision: number; persistedRevision: number; viewportNonce: number; selectedNodeId?: string; selectedEdgeId?: string; search: string; inspectorTab: InspectorTab; showProblematicOnly: boolean; hoveredEdgeId?: string; edgeLabelMode: EdgeLabelMode; edgeEditorMode?: EdgeEditorMode; issues: ValidationIssue[]; pathSelection: { upstream: string[]; downstream: string[]; edges: string[] }; startupState: StartupState; startupNotice?: StartupNotice; startupError?: string; persistenceStatus: PersistenceStatus; lastSavedAt?: string; persistenceError?: string; lastCommand?: string; wizard: { open: boolean; groupId?: EquipmentWizardGroupId; kind?: SoapNodeKind; values: Record<string, string | number | boolean>; namingRule: string; }; libraryPicker: { open: boolean; mode: LibraryPickerMode; context?: LibraryPickerContext };
   onNodesChange: (changes: NodeChange[]) => void; onEdgesChange: (changes: EdgeChange[]) => void; onConnect: (connection: Connection) => void; setViewport: (viewport: Viewport, options?: { manual?: boolean }) => void; addNode: (type: SoapNodeKind, position?: { x: number; y: number }) => void; selectNode: (nodeId?: string) => void; selectEdge: (edgeId?: string) => void; updateNodeField: (nodeId: string, path: string, value: string | number | boolean) => void; setSearch: (search: string) => void; setInspectorTab: (tab: InspectorTab) => void; setSimulationRunning: (running: boolean) => void; setSimulationSpeed: (speed: number) => void; setSimulationFluid: (fluid: SimulationSettings['fluid']) => void; runFluidScenario: () => void; resetSimulation: () => void; tickSimulation: (dt: number) => void;
   resetProject: () => Promise<void>; resetUserData: () => Promise<void>; clearLocalDataAndLoadDemo: () => Promise<void>; newProject: () => void; loadTemplate: (templateId: TemplateId) => Promise<void>; saveProject: (reason?: 'autosave' | 'manual') => Promise<void>; loadProject: (id?: string) => Promise<void>; exportProject: () => string; importProject: (json: string) => void; runValidation: () => void; toggleProblematicOnly: () => void; hoverEdge: (edgeId?: string) => void; setEdgeLabelMode: (mode: EdgeLabelMode) => void; loadSafeDemo: () => Promise<void>; dismissStartupNotice: () => void; setStartupError: (message?: string) => void; openEquipmentWizard: (options?: { groupId?: EquipmentWizardGroupId; kind?: SoapNodeKind }) => void; closeEquipmentWizard: () => void; setWizardGroup: (groupId: EquipmentWizardGroupId) => void; setWizardKind: (kind: SoapNodeKind) => void; updateWizardValue: (key: string, value: string | number | boolean) => void; regenerateWizardTag: () => void; createEquipmentFromWizard: () => void;
   updateEdgeField: (edgeId: string, field: string, value: string | number | boolean) => void; executeNodeAction: (nodeId: string, action: string) => void;
@@ -241,7 +287,7 @@ interface AppState {
 export type { AppState };
 
 export const useAppStore = create<AppState>((set, get) => ({
-  project: makeProject(), projectRevision: 0, persistedRevision: 0, viewportNonce: 0, selectedNodeId: undefined, selectedEdgeId: undefined, search: '', inspectorTab: 'main', showProblematicOnly: false, hoveredEdgeId: undefined, edgeLabelMode: 'selected', edgeEditorMode: undefined, issues: validateProject(makeProject()), pathSelection: { upstream: [], downstream: [], edges: [] }, startupState: 'booting', startupNotice: undefined, startupError: undefined, lastCommand: undefined, wizard: { open: false, groupId: undefined, kind: undefined, values: {}, namingRule: '{prefix}-{seq}' }, libraryPicker: { open: false, mode: 'global' },
+  project: makeProject(), projectRevision: 0, persistedRevision: 0, viewportNonce: 0, selectedNodeId: undefined, selectedEdgeId: undefined, search: '', inspectorTab: 'main', showProblematicOnly: false, hoveredEdgeId: undefined, edgeLabelMode: 'selected', edgeEditorMode: undefined, issues: validateProject(makeProject()), pathSelection: { upstream: [], downstream: [], edges: [] }, startupState: 'booting', startupNotice: undefined, startupError: undefined, persistenceStatus: 'saved', lastSavedAt: undefined, persistenceError: undefined, lastCommand: undefined, wizard: { open: false, groupId: undefined, kind: undefined, values: {}, namingRule: '{prefix}-{seq}' }, libraryPicker: { open: false, mode: 'global' },
   onNodesChange: (changes) => set((state) => { const project = normalizeProjectEdgeHandles({ ...state.project, nodes: applyNodeChanges(changes, state.project.nodes) }); return { project, issues: validateProject(project), projectRevision: state.projectRevision + 1 }; }),
   onEdgesChange: (changes) => set((state) => { const project = normalizeProjectEdgeHandles({ ...state.project, edges: applyEdgeChanges(changes, state.project.edges) }); return { project, issues: validateProject(project), projectRevision: state.projectRevision + 1 }; }),
   onConnect: (connection) => set((state) => { const source = state.project.nodes.find((node) => node.id === connection.source); const target = state.project.nodes.find((node) => node.id === connection.target); if (!source || !target) return state; const sourceHandle = getPreferredFreeHandleId(source, 'source', state.project.edges, connection.sourceHandle) ?? normalizeHandleForNode(source, 'source', connection.sourceHandle); const targetHandle = getPreferredFreeHandleId(target, 'target', state.project.edges, connection.targetHandle) ?? normalizeHandleForNode(target, 'target', connection.targetHandle); if (!sourceHandle || !targetHandle) return state; const edgeContext = { selectedNode: source }; const project = { ...state.project, edges: addEdge(buildEdge(source.id, target.id, target.data.medium || source.data.medium, (source.data.process as any).diameterNominal ?? 'DN50', { sourceHandle, targetHandle }, state.project, edgeContext), state.project.edges) }; const loggedProject = logEvent(project, `Создан новый сегмент между «${source.data.visibleName}» и «${target.data.visibleName}».`, source.id); return { project: loggedProject, issues: validateProject(loggedProject), projectRevision: state.projectRevision + 1 }; }),
@@ -249,7 +295,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   addNode: (type, position = { x: 200, y: 200 }) => set((state) => { const context = inferWizardContext(state.project, state.selectedNodeId, state.selectedEdgeId); const node = buildNode(type, position, state.project, { selectedNode: context.selectedNode, selectedEdge: context.selectedEdge, groupId: wizardSubtypeMap.get(type) }); const project = { ...state.project, nodes: [...state.project.nodes, node] }; return { project: logEvent(project, `Добавлен элемент «${node.data.visibleName}».`, node.id), selectedNodeId: node.id, issues: validateProject(project), projectRevision: state.projectRevision + 1 }; }),
   selectNode: (selectedNodeId) => set((state) => ({ selectedNodeId, selectedEdgeId: undefined, hoveredEdgeId: undefined, edgeEditorMode: undefined, pathSelection: computePathSelection(state.project, selectedNodeId, undefined) })),
   selectEdge: (selectedEdgeId) => set((state) => ({ selectedEdgeId, selectedNodeId: undefined, hoveredEdgeId: selectedEdgeId ?? state.hoveredEdgeId, edgeEditorMode: selectedEdgeId ? 'actions' : undefined, pathSelection: computePathSelection(state.project, undefined, selectedEdgeId) })),
-  updateNodeField: (nodeId, path, value) => set((state) => { const updatedRevision = state.projectRevision + 1; const project = reapplyDerivedState(normalizeProjectEdgeHandles({ ...state.project, nodes: state.project.nodes.map((node) => node.id !== nodeId ? node : (() => { const copy = structuredClone(node); setByPath(copy, path, value); syncNodePresentation(copy); return copy; })()) })); scheduleSafePersist(project, updatedRevision); return { project, issues: validateProject(project), projectRevision: updatedRevision }; }),
+  updateNodeField: (nodeId, path, value) => set((state) => { const updatedRevision = state.projectRevision + 1; const project = reapplyDerivedState(normalizeProjectEdgeHandles({ ...state.project, nodes: state.project.nodes.map((node) => node.id !== nodeId ? node : (() => { const copy = structuredClone(node); setByPath(copy, path, value); syncNodePresentation(copy); return copy; })()) })); return { project, issues: validateProject(project), projectRevision: updatedRevision }; }),
   setSearch: (search) => set({ search }), setInspectorTab: (inspectorTab) => set({ inspectorTab }),
   setSimulationRunning: (running) => set((state) => {
     const currentStatus = state.project.simulation.status ?? (state.project.simulation.running ? 'running' : 'idle');
@@ -299,17 +345,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     const project = limitedLog({ ...state.project, nodes: result.nodes, edges: result.edges, simulation, eventLog: [...state.project.eventLog, ...result.events] });
     return { project, issues: validateProject(project), projectRevision: state.projectRevision + 1 };
   }),
-  resetProject: async () => { const state = get(); const project = { ...cloneProject(demoProject), id: state.project.id, name: `${state.project.name} — чистый проект`, appSchemaVersion: APP_SCHEMA_VERSION, projectSchemaVersion: PROJECT_SCHEMA_VERSION }; const revision = state.projectRevision + 1; set(sanitizeProjectState(project, revision, state.persistedRevision, state.viewportNonce + 1)); await resetCurrentProjectState(); },
-  resetUserData: async () => { await clearUserData(); const project = cloneProject(demoProject); const revision = get().projectRevision + 1; set({ ...sanitizeProjectState(project, revision, revision, get().viewportNonce + 1), startupNotice: { type: 'info', message: 'Локальные проекты и восстановление вида удалены. Оболочка приложения сохранена.' } }); await saveStoredProject(project); },
-  clearLocalDataAndLoadDemo: async () => { await clearPersistedState(); const project = cloneProject(demoProject); const revision = get().projectRevision + 1; set({ ...sanitizeProjectState(project, revision, revision, get().viewportNonce + 1), startupState: 'ready', startupError: undefined, startupNotice: { type: 'warning', message: 'Обнаружены данные старой версии. Выполнен безопасный сброс.' } }); await saveStoredProject(project); },
+  resetProject: async () => { const state = get(); const project = { ...cloneProject(demoProject), id: state.project.id, name: `${state.project.name} — чистый проект`, appSchemaVersion: APP_SCHEMA_VERSION, projectSchemaVersion: PROJECT_SCHEMA_VERSION }; const revision = state.projectRevision + 1; set(sanitizeProjectState(project, revision, state.persistedRevision, state.viewportNonce + 1)); await persistRevisionNow(project, revision, 'manual'); },
+  resetUserData: async () => { await clearUserData(); const project = cloneProject(demoProject); const revision = get().projectRevision + 1; set({ ...sanitizeProjectState(project, revision, revision, get().viewportNonce + 1), startupNotice: { type: 'info', message: 'Локальные проекты и восстановление вида удалены. Оболочка приложения сохранена.' } }); await persistRevisionNow(project, revision, 'manual'); },
+  clearLocalDataAndLoadDemo: async () => { await clearPersistedState(); const project = cloneProject(demoProject); const revision = get().projectRevision + 1; set({ ...sanitizeProjectState(project, revision, revision, get().viewportNonce + 1), startupState: 'ready', startupError: undefined, startupNotice: { type: 'warning', message: 'Обнаружены данные старой версии. Выполнен безопасный сброс.' } }); await persistRevisionNow(project, revision, 'manual'); },
   newProject: () => { const revision = get().projectRevision + 1; set(sanitizeProjectState(cloneProject(templates['water-prep']), revision, get().persistedRevision, get().viewportNonce + 1)); },
-  loadTemplate: async (templateId) => { const project = cloneProject(templates[templateId]); const revision = get().projectRevision + 1; set({ ...sanitizeProjectState(project, revision, revision, get().viewportNonce + 1), startupNotice: { type: 'info', message: `Загружен шаблон «${project.name}».` }, startupError: undefined }); await saveStoredProject(project); set({ persistedRevision: revision }); },
-  saveProject: async () => { const state = get(); await saveStoredProject({ ...state.project, updatedAt: new Date().toISOString(), appSchemaVersion: APP_SCHEMA_VERSION, projectSchemaVersion: PROJECT_SCHEMA_VERSION }); set({ persistedRevision: state.projectRevision }); },
-  loadProject: async (id) => { const stored = await loadStoredProject(id); if (stored.project) { const revision = get().projectRevision + 1; set({ ...sanitizeProjectState(stored.project, revision, revision, get().viewportNonce + 1), startupState: 'ready', startupError: undefined, startupNotice: stored.recovered ? { type: 'warning', message: 'Данные частично восстановлены.' } : undefined }); return; } if (stored.recovered) { await get().clearLocalDataAndLoadDemo(); return; } const project = cloneProject(demoProject); const revision = get().projectRevision + 1; set({ ...sanitizeProjectState(project, revision, revision, get().viewportNonce + 1), startupState: 'ready', startupError: undefined }); await saveStoredProject(project); },
+  loadTemplate: async (templateId) => { const project = cloneProject(templates[templateId]); const revision = get().projectRevision + 1; set({ ...sanitizeProjectState(project, revision, revision, get().viewportNonce + 1), startupNotice: { type: 'info', message: `Загружен шаблон «${project.name}».` }, startupError: undefined }); await persistRevisionNow(project, revision, 'manual'); },
+  saveProject: async () => { await flushPendingPersistence(); const state = get(); await persistRevisionNow(state.project, state.projectRevision, 'manual'); },
+  loadProject: async (id) => { const stored = await loadStoredProject(id); if (stored.project) { const revision = get().projectRevision + 1; set({ ...sanitizeProjectState(stored.project, revision, revision, get().viewportNonce + 1), startupState: 'ready', startupError: undefined, startupNotice: stored.recovered ? { type: 'warning', message: 'Данные частично восстановлены.' } : undefined, persistenceStatus: 'saved', lastSavedAt: stored.project.updatedAt, persistenceError: undefined }); return; } if (stored.recovered) { await get().clearLocalDataAndLoadDemo(); return; } const project = cloneProject(demoProject); const revision = get().projectRevision + 1; set({ ...sanitizeProjectState(project, revision, revision, get().viewportNonce + 1), startupState: 'ready', startupError: undefined, persistenceStatus: 'saved', persistenceError: undefined }); await persistRevisionNow(project, revision, 'manual'); },
   exportProject: () => JSON.stringify(get().project, null, 2),
   importProject: (json) => { const project = restoreProjectDocument(JSON.parse(json)); set((state) => ({ ...sanitizeProjectState(project, state.projectRevision + 1, state.persistedRevision, state.viewportNonce + 1), startupState: 'ready', startupNotice: { type: 'info', message: 'Проект импортирован.' } })); },
   runValidation: () => set((state) => ({ issues: validateProject(state.project) })), toggleProblematicOnly: () => set((state) => ({ showProblematicOnly: !state.showProblematicOnly })), hoverEdge: (hoveredEdgeId) => set({ hoveredEdgeId }), setEdgeLabelMode: (edgeLabelMode) => set({ edgeLabelMode }),
-  loadSafeDemo: async () => { const project = cloneProject(demoProject); const revision = get().projectRevision + 1; set({ ...sanitizeProjectState(project, revision, revision, get().viewportNonce + 1), startupState: 'ready', startupError: undefined }); await saveStoredProject(project); },
+  loadSafeDemo: async () => { const project = cloneProject(demoProject); const revision = get().projectRevision + 1; set({ ...sanitizeProjectState(project, revision, revision, get().viewportNonce + 1), startupState: 'ready', startupError: undefined }); await persistRevisionNow(project, revision, 'manual'); },
   dismissStartupNotice: () => set({ startupNotice: undefined }), setStartupError: (startupError) => set({ startupError }),
   openEquipmentWizard: (options) => set((state) => {
     const groupId = options?.groupId ?? (options?.kind ? wizardSubtypeMap.get(options.kind) : undefined) ?? state.wizard.groupId ?? 'pumps';
@@ -348,17 +394,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     node = applyWizardValuesToNode(node, values);
     const updatedRevision = state.projectRevision + 1;
     const project = reapplyDerivedState({ ...state.project, nodes: [...state.project.nodes, node] });
-    scheduleSafePersist(project, updatedRevision);
     return { project: logEvent(project, `Добавлен элемент «${node.data.visibleName}» через мастер.`, node.id), selectedNodeId: node.id, selectedEdgeId: undefined, wizard: { ...state.wizard, open: false }, issues: validateProject(project), projectRevision: updatedRevision, inspectorTab: 'main' };
   }),
 
-  updateEdgeField: (edgeId, field, value) => set((state) => { const updatedRevision = state.projectRevision + 1; const project = reapplyDerivedState({ ...state.project, edges: state.project.edges.map((edge) => { if (edge.id !== edgeId) return edge; const data: any = { ...(edge.data ?? {}) }; data[field] = value; if (field === 'mediumType') { data.medium = value as any; data.composition = { [value as string]: 1 }; data.mixedFlow = false; } if (field === 'flowLpm') data.flowRate = Number(value); if (field === 'directionMode' && value !== 'derived') data.direction = value; return { ...edge, data } as SoapEdge; }) }); scheduleSafePersist(project, updatedRevision); return { project, issues: validateProject(project), projectRevision: updatedRevision }; }),
+  updateEdgeField: (edgeId, field, value) => set((state) => { const updatedRevision = state.projectRevision + 1; const project = reapplyDerivedState({ ...state.project, edges: state.project.edges.map((edge) => { if (edge.id !== edgeId) return edge; const data: any = { ...(edge.data ?? {}) }; data[field] = value; if (field === 'mediumType') { data.medium = value as any; data.composition = { [value as string]: 1 }; data.mixedFlow = false; } if (field === 'flowLpm') data.flowRate = Number(value); if (field === 'directionMode' && value !== 'derived') data.direction = value; return { ...edge, data } as SoapEdge; }) }); return { project, issues: validateProject(project), projectRevision: updatedRevision }; }),
   executeNodeAction: (nodeId, action) => set((state) => {
     const result = executeNodeCommand(state.project, nodeId, action);
     if (!result.changed) return state;
     const updatedRevision = state.projectRevision + 1;
     const project = reapplyDerivedState(result.project);
-    scheduleSafePersist(project, updatedRevision);
     return { project, issues: validateProject(project), projectRevision: updatedRevision, lastCommand: result.lastCommand };
   }),
   setEdgeEditorMode: (edgeEditorMode) => set({ edgeEditorMode }),
@@ -375,7 +419,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!result) return state;
     const updatedRevision = state.projectRevision + 1;
     const project = reapplyDerivedState(result.project);
-    scheduleSafePersist(project, updatedRevision);
     return { project, selectedNodeId: result.nodeId, selectedEdgeId: undefined, edgeEditorMode: undefined, pathSelection: computePathSelection(project, result.nodeId, undefined), issues: validateProject(project), projectRevision: updatedRevision, lastCommand: `insert:${kind}` };
   }),
   createBranchFromEdge: (kind = 'tee', edgeId) => set((state) => {
@@ -385,12 +428,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!result) return state;
     const updatedRevision = state.projectRevision + 1;
     const project = reapplyDerivedState(result.project);
-    scheduleSafePersist(project, updatedRevision);
     return { project, selectedNodeId: result.nodeId, selectedEdgeId: undefined, edgeEditorMode: undefined, pathSelection: computePathSelection(project, result.nodeId, undefined), issues: validateProject(project), projectRevision: updatedRevision, lastCommand: `branch:${kind}` };
   }),
   removeSelectedSegment: (edgeId) => set((state) => {
     const activeEdgeId = edgeId ?? state.selectedEdgeId;
-    if (!activeEdgeId) return state; const updatedRevision = state.projectRevision + 1; const project = reapplyDerivedState(removeSegment(state.project, activeEdgeId)); scheduleSafePersist(project, updatedRevision); return { project, selectedEdgeId: state.selectedEdgeId === activeEdgeId ? undefined : state.selectedEdgeId, edgeEditorMode: state.selectedEdgeId === activeEdgeId ? undefined : state.edgeEditorMode, issues: validateProject(project), projectRevision: updatedRevision, lastCommand: 'edge:delete' };
+    if (!activeEdgeId) return state; const updatedRevision = state.projectRevision + 1; const project = reapplyDerivedState(removeSegment(state.project, activeEdgeId)); return { project, selectedEdgeId: state.selectedEdgeId === activeEdgeId ? undefined : state.selectedEdgeId, edgeEditorMode: state.selectedEdgeId === activeEdgeId ? undefined : state.edgeEditorMode, issues: validateProject(project), projectRevision: updatedRevision, lastCommand: 'edge:delete' };
   }),
   reconnectSelectedEdge: (edgeId) => set((state) => {
     const activeEdgeId = edgeId ?? state.selectedEdgeId;
@@ -399,7 +441,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!project) return state;
     const updatedRevision = state.projectRevision + 1;
     const liveProject = reapplyDerivedState(project);
-    scheduleSafePersist(liveProject, updatedRevision);
     return { project: liveProject, issues: validateProject(liveProject), projectRevision: updatedRevision, lastCommand: 'edge:reconnect' };
   }),
   openLibraryPicker: (mode, context) => set({ libraryPicker: { open: true, mode, context } }),
@@ -412,3 +453,18 @@ export const useAppStore = create<AppState>((set, get) => ({
     get().closeLibraryPicker();
   },
 }));
+
+useAppStore.subscribe((state, previous) => {
+  if (state.startupState !== 'ready') return;
+  if (state.projectRevision === previous.projectRevision) return;
+  if (state.projectRevision === state.persistedRevision) return;
+  scheduleSafePersist(state.project, state.projectRevision);
+});
+
+if (typeof window !== 'undefined') {
+  const flushOnBackground = () => { void flushPendingPersistence(); };
+  window.addEventListener('pagehide', flushOnBackground);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flushOnBackground();
+  });
+}
