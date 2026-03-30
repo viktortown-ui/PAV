@@ -387,27 +387,69 @@ button.primary, .toolbox-actions .primary { background: linear-gradient(180deg, 
 .warning-state strong { color: #ffd27f; }
 .dock-help-line { font-size: 11px; color: #8ea4bf; }
 
+.dock-navigator-subtitle { display: block; margin-top: 2px; font-size: 10px; color: #91a9c3; line-height: 1.2; }
 .dock-navigator-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
 .dock-navigator-action { width: 100%; text-align: center; }
 .dock-navigator-preview-shell {
   width: 100%;
-  max-width: 244px;
-  aspect-ratio: 16 / 9;
-  min-height: clamp(92px, 11dvh, 126px);
-  max-height: 126px;
+  max-width: 100%;
+  aspect-ratio: 16 / 10;
+  min-height: clamp(106px, 12dvh, 152px);
+  max-height: 152px;
   justify-self: center;
   overflow: hidden;
   border-radius: 10px;
   isolation: isolate;
 }
 .dock-navigator-preview-shell.is-compact {
-  max-width: 220px;
-  min-height: clamp(82px, 10dvh, 110px);
-  max-height: 110px;
+  min-height: clamp(94px, 11dvh, 130px);
+  max-height: 130px;
 }
-.dock-navigator-viewport { position: relative; width: 100%; height: 100%; overflow: hidden; border-radius: inherit; border: 1px solid rgba(132, 171, 218, 0.22); background: rgba(6, 11, 18, 0.98); }
+.dock-navigator-viewport {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: inherit;
+  border: 1px solid rgba(132, 171, 218, 0.3);
+  background: radial-gradient(circle at 30% 20%, rgba(31, 56, 88, 0.58), rgba(9, 16, 25, 0.98));
+}
 .dock-navigator-map.react-flow__minimap { position: absolute !important; inset: 0 !important; width: 100% !important; height: 100% !important; transform: none !important; border: 0 !important; border-radius: inherit !important; background: transparent !important; box-shadow: none !important; }
+.dock-navigator-empty-state {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 8px 10px;
+  font-size: 11px;
+  color: #b4cbe6;
+}
 .dock-navigator-collapsed { border: 1px dashed rgba(132, 171, 218, 0.2); border-radius: 10px; padding: 8px; font-size: 11px; color: #9ab0ca; }
+.dock-navigator-route {
+  display: grid;
+  gap: 5px;
+  border: 1px solid rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.03);
+  border-radius: 10px;
+  padding: 6px;
+}
+.dock-navigator-route-chain { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.dock-route-item-wrap { display: inline-flex; gap: 4px; align-items: center; min-width: 0; }
+.dock-route-item {
+  border: 1px solid rgba(143, 181, 226, 0.24);
+  background: rgba(19, 35, 56, 0.92);
+  color: #edf4ff;
+  border-radius: 999px;
+  padding: 3px 7px;
+  font-size: 10px;
+  line-height: 1.1;
+  max-width: 170px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dock-route-separator { color: #9cb7d6; font-size: 11px; }
+.dock-navigator-route-empty { font-size: 11px; color: #9ab0ca; }
 .dock-mode-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
 
 .dock-full-console {
