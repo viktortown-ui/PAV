@@ -42,6 +42,7 @@ const formatEventTime = (timestamp: string | number) => new Date(timestamp).toLo
 export const SimulationPanel = ({ focusMode = false, rightPanelVisible = false, activeRightTab = null }: SimulationPanelProps) => {
   const flow = useReactFlow();
   const project = useAppStore((state) => state.project);
+  const presentationMode = useAppStore((state) => state.project.view.presentationMode);
   const dockRef = useRef<HTMLElement>(null);
   const selectedNodeId = useAppStore((state) => state.selectedNodeId);
   const selectedEdgeId = useAppStore((state) => state.selectedEdgeId);
@@ -69,6 +70,13 @@ export const SimulationPanel = ({ focusMode = false, rightPanelVisible = false, 
   useEffect(() => {
     console.info(diagnosticsPanelStateMachineDefinition);
   }, []);
+
+  useEffect(() => {
+    if (presentationMode !== 'schematic') return;
+    const rootStyle = document.documentElement.style;
+    rootStyle.setProperty('--simulation-dock-height', '0px');
+    rootStyle.setProperty('--simulation-dock-visible-height', '0px');
+  }, [presentationMode]);
 
   useEffect(() => {
     if (!rightPanelVisible) {
@@ -461,6 +469,8 @@ export const SimulationPanel = ({ focusMode = false, rightPanelVisible = false, 
       </div>
     </section>
   );
+
+  if (presentationMode === 'schematic') return null;
 
   const dockContent = (
     <section ref={dockRef} className={`simulation-dock sim-${simulationStatus} ${panelClassName} ${focusMode ? 'is-focus-mode' : ''} ${rightPanelVisible ? 'is-right-panel-open' : 'is-right-panel-collapsed'}`} data-panel-mode={panelState} aria-label="Нижняя панель симуляции и диагностики">

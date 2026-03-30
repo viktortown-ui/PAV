@@ -24,6 +24,9 @@ button { cursor: pointer; }
 .toolbar-clusters-compact { gap: 10px; }
 .toolbar-group { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 6px; border-radius: 16px; background: rgba(255,255,255,0.03); border: 1px solid rgba(122, 150, 183, 0.12); }
 .toolbar-group-quick { background: rgba(19, 36, 58, 0.72); }
+.toolbar-group-mode-switch { gap: 4px; padding: 4px; background: rgba(14, 28, 44, 0.78); }
+.toolbar-group-mode-switch button { min-width: 110px; padding: 8px 12px; border-radius: 10px; background: rgba(12, 24, 38, 0.92); }
+.toolbar-group-mode-switch button.is-active { background: linear-gradient(180deg, rgba(54, 104, 176, 0.94), rgba(29, 57, 98, 0.96)); border-color: rgba(131, 181, 255, 0.58); }
 .toolbar-group-compact-actions { background: transparent; }
 .toolbar-group-secondary { background: transparent; border-style: dashed; }
 .toolbar-group button, .toolbar-menu summary, .import-button, .wizard-footer-actions button, .toolbox-actions button, .shell-rail button, .library-chip, .command-palette-item { border: 1px solid rgba(143, 181, 226, 0.16); background: #102033; color: #edf4ff; border-radius: 12px; padding: 10px 12px; list-style: none; }
@@ -230,6 +233,18 @@ button.primary, .toolbox-actions .primary { background: linear-gradient(180deg, 
 .pipe-fluid.pipe-fluid-secondary.is-active { opacity: 0.6; animation-duration: calc(var(--flow-speed, 2.2s) * 1.25); }
 .pipe-fluid.is-paused, .pipe-fluid.sim-paused { animation-play-state: paused; opacity: 0.28; filter: saturate(0.55); }
 .pipe-fluid.sim-idle { animation: none; opacity: 0; }
+.mode-schematic .pipe-glow,
+.mode-schematic .pipe-fluid,
+.mode-schematic .pipe-fluid.pipe-fluid-secondary { opacity: 0 !important; animation: none !important; filter: none !important; }
+.mode-schematic .process-node .equipment-spinner,
+.mode-schematic .process-node .thermal-ring,
+.mode-schematic .process-node .vessel-wave { animation: none !important; opacity: 0.25; }
+.mode-schematic .process-node { filter: saturate(0.56) brightness(0.92); }
+.mode-schematic .process-node .node-metrics,
+.mode-schematic .process-node .node-summary,
+.mode-schematic .edge-badge,
+.mode-schematic .edge-editor-popover { display: none !important; }
+.mode-schematic .canvas-shell .react-flow { background: radial-gradient(circle at 50% 20%, rgba(83, 103, 122, 0.1), transparent 30%), #0a131f; }
 .edge-hitbox { position: absolute; width: 26px; height: 26px; border-radius: 999px; border: 1px solid transparent; background: transparent; transform-origin: center; }
 .edge-hitbox.is-selected { border-color: rgba(143, 181, 226, 0.44); background: rgba(24, 45, 68, 0.4); }
 .edge-badge { position: absolute; display: grid; gap: 2px; min-width: 178px; max-width: 290px; padding: 7px 9px; border-radius: 10px; border: 1px solid rgba(143, 181, 226, 0.22); background: rgba(8, 16, 28, 0.9); backdrop-filter: blur(8px); box-shadow: 0 10px 22px rgba(0,0,0,0.3); }

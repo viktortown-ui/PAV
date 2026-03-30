@@ -52,7 +52,14 @@ const sanitizeTemplateViewMetadata = (value: unknown, fallback: TemplateViewMeta
   };
 };
 
-const sanitizeView = (value: unknown, fallback: ProjectViewState): ProjectViewState => ({ viewport: sanitizeViewport(isObject(value) ? value.viewport : undefined), metadata: sanitizeTemplateViewMetadata(isObject(value) ? value.metadata : undefined, fallback.metadata), hasManualViewport: asBoolean(isObject(value) ? value.hasManualViewport : undefined, fallback.hasManualViewport) });
+const sanitizeView = (value: unknown, fallback: ProjectViewState): ProjectViewState => ({
+  viewport: sanitizeViewport(isObject(value) ? value.viewport : undefined),
+  metadata: sanitizeTemplateViewMetadata(isObject(value) ? value.metadata : undefined, fallback.metadata),
+  hasManualViewport: asBoolean(isObject(value) ? value.hasManualViewport : undefined, fallback.hasManualViewport),
+  presentationMode: isObject(value) && (value.presentationMode === 'schematic' || value.presentationMode === 'simulation')
+    ? value.presentationMode
+    : fallback.presentationMode,
+});
 const sanitizeSimulation = (value: unknown, fallback: SimulationSettings): SimulationSettings => {
   const running = asBoolean(isObject(value) ? value.running : undefined, false);
   const status = isObject(value) && (value.status === 'idle' || value.status === 'running' || value.status === 'paused')

@@ -59,6 +59,7 @@ export type PropertyFieldType = 'text' | 'number' | 'toggle' | 'select' | 'texta
 export type Severity = 'info' | 'warning' | 'error';
 export type TemplateId = 'water-prep' | 'soap-line' | 'cip-fragment';
 export type EdgeLabelMode = 'hidden' | 'selected' | 'active' | 'all';
+export type PresentationMode = 'schematic' | 'simulation';
 export type EquipmentClass = 'major' | 'line' | 'valve' | 'instrument' | 'topology' | 'terminal';
 export type SymbolFamily = 'vessel' | 'machinery' | 'valve' | 'instrument' | 'topology' | 'terminal';
 export type FailPosition = 'open' | 'closed' | 'hold';
@@ -127,6 +128,7 @@ export interface ProjectViewState {
   viewport: Viewport;
   metadata: TemplateViewMetadata;
   hasManualViewport: boolean;
+  presentationMode: PresentationMode;
 }
 
 export interface BaseEquipmentProcess {

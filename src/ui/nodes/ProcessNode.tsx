@@ -13,6 +13,7 @@ const stateClassMap: Record<RouteState, string> = { flowing: 'is-flowing', block
 export const ProcessNode = memo(({ id, data, selected }: NodeProps<SoapNodeData>) => {
   const zoom = useStore((state) => state.transform[2]);
   const simulationStatus = useAppStore((state) => state.project.simulation.status ?? (state.project.simulation.running ? 'running' : 'idle'));
+  const presentationMode = useAppStore((state) => state.project.view.presentationMode);
   const updateNodeInternals = useUpdateNodeInternals();
   const far = zoom < 0.72;
   const near = zoom > 1.12 || selected;
@@ -28,11 +29,11 @@ export const ProcessNode = memo(({ id, data, selected }: NodeProps<SoapNodeData>
   const handles = getHandleSpecs(data);
   const compactInline = microInline || topologyNode;
   const terminalNode = data.className === 'terminal';
-  const showInlineInspectorMeta = selected && (lineEquipment || microInline || terminalNode);
+  const showInlineInspectorMeta = presentationMode === 'simulation' && selected && (lineEquipment || microInline || terminalNode);
   const lowLevel = vesselLike && level <= 12;
   const isAlarmed = data.status === 'alarm' || routeState === 'alarm' || data.alarms.length > 0;
   const isRunning = data.status === 'running' || routeState === 'flowing' || routeState === 'cip' || routeState === 'draining';
-  const isRunningVisual = isRunning && simulationStatus === 'running';
+  const isRunningVisual = presentationMode === 'simulation' && isRunning && simulationStatus === 'running';
   const blockedState = data.status === 'blocked' || routeState === 'blocked';
   const stateBadge = data.visual.stateBadge ?? (isAlarmed ? 'АВР' : blockedState ? 'БЛК' : isRunning ? 'РАБ' : lowLevel ? 'НИЗК' : routeLabel[routeState]);
   const process = data.process as any;
@@ -83,8 +84,8 @@ export const ProcessNode = memo(({ id, data, selected }: NodeProps<SoapNodeData>
           {lineEquipment && !far && !selected && <span className="inline-flow">{flow} л/м</span>}
         </div>
       </div>
-      {vesselLike && !far && <div className="node-metrics compact"><div><span>Уровень</span><strong>{level}%</strong></div><div><span>Поток</span><strong>{flow} л/мин</strong></div><div><span>Т°</span><strong>{Math.round(Number(process.temperatureC ?? process.temperature ?? 0))}°C</strong></div></div>}
-      {near && vesselLike && <div className="node-summary slim"><span>{data.category}</span><span>{routeLabel[routeState]}</span><span>{lowLevel ? 'Низкий уровень' : `${Math.round(Math.max(level, 0))}% объёма`}</span><span>{heatingOn ? 'Нагрев вкл' : agitatorOn ? 'Перемешивание' : String(process.activityLabel ?? 'Контур готов')}</span></div>}
+      {presentationMode === 'simulation' && vesselLike && !far && <div className="node-metrics compact"><div><span>Уровень</span><strong>{level}%</strong></div><div><span>Поток</span><strong>{flow} л/мин</strong></div><div><span>Т°</span><strong>{Math.round(Number(process.temperatureC ?? process.temperature ?? 0))}°C</strong></div></div>}
+      {presentationMode === 'simulation' && near && vesselLike && <div className="node-summary slim"><span>{data.category}</span><span>{routeLabel[routeState]}</span><span>{lowLevel ? 'Низкий уровень' : `${Math.round(Math.max(level, 0))}% объёма`}</span><span>{heatingOn ? 'Нагрев вкл' : agitatorOn ? 'Перемешивание' : String(process.activityLabel ?? 'Контур готов')}</span></div>}
       {showInlineInspectorMeta && <div className="node-summary inline-summary"><span>{data.category}</span><span>{routeLabel[routeState]}</span><span>{data.className === 'valve' ? (valveOpen ? 'Открыт' : 'Закрыт') : data.className === 'instrument' ? data.technicalTag : terminalNode ? 'Конечная точка' : `${flow} л/мин`}</span><span>{isAlarmed ? 'Тревога' : blockedState ? 'Блокировка' : 'Норма'}</span></div>}
       {handles.filter((handle) => handle.type === 'source').map((handle) => <Handle key={handle.id} id={handle.id} type={handle.type} position={handle.position} className={handle.className} />)}
     </div>
