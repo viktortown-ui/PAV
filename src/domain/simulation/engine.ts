@@ -162,6 +162,59 @@ type RouteCandidate = {
   edgeIds: string[];
 };
 
+type PhysicalNodeRole = 'source' | 'accumulator' | 'transfer' | 'sink' | 'blocker';
+type PhysicalEdgeRole = 'pumpingElement' | 'valveElement' | 'passiveResistance';
+
+type ExecutableNode = {
+  node: SoapNode;
+  role: PhysicalNodeRole;
+};
+
+type ExecutableEdge = {
+  edge: SoapEdge;
+  role: PhysicalEdgeRole;
+};
+
+type ExecutableRoute = {
+  candidate: RouteCandidate;
+  nodes: ExecutableNode[];
+  edges: ExecutableEdge[];
+};
+
+type RouteEvaluation = {
+  route: ExecutableRoute;
+  requestedFlowLpm: number;
+  actualFlowLpm: number;
+  blockers: string[];
+  active: boolean;
+};
+
+const resolveNodeRole = (node: SoapNode): PhysicalNodeRole => {
+  if (tankKinds.has(node.data.kind) && node.data.kind === 'source') return 'source';
+  if (tankKinds.has(node.data.kind)) return 'accumulator';
+  if (node.data.kind === 'consumer' || node.data.kind === 'utilityDrain' || node.data.kind === 'fillingStation') return 'sink';
+  if (pumpKinds.has(node.data.kind) || valveKinds.has(node.data.kind)) return 'transfer';
+  return 'transfer';
+};
+
+const resolveEdgeRole = (edge: SoapEdge, nodeById: Map<string, SoapNode>): PhysicalEdgeRole => {
+  const source = nodeById.get(edge.source);
+  const target = nodeById.get(edge.target);
+  if ((source && pumpKinds.has(source.data.kind)) || (target && pumpKinds.has(target.data.kind))) return 'pumpingElement';
+  if ((source && valveKinds.has(source.data.kind)) || (target && valveKinds.has(target.data.kind))) return 'valveElement';
+  return 'passiveResistance';
+};
+
+const buildExecutableRoutes = (nodes: SoapNode[], edges: SoapEdge[]): ExecutableRoute[] => {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const edgeById = new Map(edges.map((edge) => [edge.id, edge]));
+  return enumerateRoutes(nodes, edges).map((candidate) => ({
+    candidate,
+    nodes: candidate.nodeIds.map((nodeId) => ({ node: nodeById.get(nodeId)!, role: resolveNodeRole(nodeById.get(nodeId)!) })),
+    edges: candidate.edgeIds.map((edgeId) => ({ edge: edgeById.get(edgeId)!, role: resolveEdgeRole(edgeById.get(edgeId)!, nodeById) })),
+  }));
+};
+
 const nodeAcceptsFlow = (node: SoapNode) => {
   const process = node.data.process as any;
   syncProcessCommandState(node);
@@ -269,7 +322,7 @@ export const runSimulationStep = (project: ProjectDocument, dt: number): Simulat
   const activeMediums = new Set<string>();
 
   const dtSeconds = Math.max(0.01, dt * project.simulation.speed);
-  const routeCandidates = enumerateRoutes(nextNodes, nextEdges);
+  const executableRoutes = buildExecutableRoutes(nextNodes, nextEdges);
   const availableLitersByNodeId = new Map<string, number>();
   const receivableLitersByNodeId = new Map<string, number>();
   nextNodes.forEach((node) => {
@@ -281,10 +334,10 @@ export const runSimulationStep = (project: ProjectDocument, dt: number): Simulat
     receivableLitersByNodeId.set(node.id, Math.max(0, capacity - current));
   });
 
-  const routeFlows = routeCandidates.map((route) => {
-    const sourceNode = nodeById.get(route.nodeIds[0]);
-    const targetNode = nodeById.get(route.nodeIds[route.nodeIds.length - 1]);
-    const edgeFlows = route.edgeIds.map((edgeId) => Math.max(0, toFiniteNumber(edgeResultById.get(edgeId)?.flowLpm, 0)));
+  const routeFlows: RouteEvaluation[] = executableRoutes.map((route) => {
+    const sourceNode = route.nodes[0]?.node;
+    const targetNode = route.nodes[route.nodes.length - 1]?.node;
+    const edgeFlows = route.edges.map((segment) => Math.max(0, toFiniteNumber(edgeResultById.get(segment.edge.id)?.flowLpm, 0)));
     const hydraulicFlowLpm = edgeFlows.length > 0 ? Math.min(...edgeFlows) : 0;
     const blockers: string[] = [];
 
@@ -296,17 +349,14 @@ export const runSimulationStep = (project: ProjectDocument, dt: number): Simulat
       if (!canDischarge) blockers.push(`${sourceNode.data.visibleName}: выдача запрещена`);
       if (sourceLevel <= 0) blockers.push(`${sourceNode.data.visibleName}: пустая ёмкость`);
     }
-    route.nodeIds.forEach((nodeId) => {
-      const node = nodeById.get(nodeId);
-      if (!node) return;
+    route.nodes.forEach(({ node }) => {
       const gate = nodeCanPassFlow(node);
       if (!gate.pass) blockers.push(gate.reason);
     });
     if (targetNode && !nodeAcceptsFlow(targetNode)) blockers.push(`${targetNode.data.visibleName}: приём далее по линии запрещён`);
-    const hasPumpOnRoute = route.nodeIds.some((nodeId) => pumpKinds.has(nodeById.get(nodeId)?.data.kind ?? 'source'));
-    const pumpCommandedFlowLpm = route.nodeIds.reduce((maxFlow, nodeId) => {
-      const node = nodeById.get(nodeId);
-      if (!node || !pumpKinds.has(node.data.kind)) return maxFlow;
+    const hasPumpOnRoute = route.nodes.some(({ node }) => pumpKinds.has(node.data.kind));
+    const pumpCommandedFlowLpm = route.nodes.reduce((maxFlow, { node }) => {
+      if (!pumpKinds.has(node.data.kind)) return maxFlow;
       const process = node.data.process as any;
       return Math.max(maxFlow, Math.max(0, toFiniteNumber(process.nominalFlowLpm ?? process.flowRate ?? process.actualFlowLpm, 0)));
     }, 0) * project.simulation.speed;
@@ -342,20 +392,48 @@ export const runSimulationStep = (project: ProjectDocument, dt: number): Simulat
 
     return {
       route,
-      flowLpm,
-      blocked: blockers.length > 0 || flowLpm <= 0,
+      requestedFlowLpm,
+      actualFlowLpm: flowLpm,
       blockers: Array.from(new Set(blockers)),
+      active: flowLpm > 0 && blockers.length === 0,
     };
   });
 
   const edgeFlowById = new Map<string, number>();
   const edgeBlockedBy = new Map<string, string[]>();
   routeFlows.forEach((entry) => {
-    entry.route.edgeIds.forEach((edgeId) => {
-      edgeFlowById.set(edgeId, (edgeFlowById.get(edgeId) ?? 0) + entry.flowLpm);
-      if (entry.blocked && entry.blockers.length > 0) {
-        edgeBlockedBy.set(edgeId, [...(edgeBlockedBy.get(edgeId) ?? []), ...entry.blockers]);
+    entry.route.edges.forEach(({ edge }) => {
+      edgeFlowById.set(edge.id, (edgeFlowById.get(edge.id) ?? 0) + entry.actualFlowLpm);
+      if (!entry.active && entry.blockers.length > 0) {
+        edgeBlockedBy.set(edge.id, [...(edgeBlockedBy.get(edge.id) ?? []), ...entry.blockers]);
       }
+      if (!entry.active && entry.requestedFlowLpm > 0.001 && entry.actualFlowLpm <= 0.001 && entry.blockers.length === 0) {
+        edgeBlockedBy.set(edge.id, [...(edgeBlockedBy.get(edge.id) ?? []), 'баланс: недостаточно объёма или свободной ёмкости']);
+      }
+      if (entry.requestedFlowLpm <= 0.001) {
+        edgeBlockedBy.set(edge.id, [...(edgeBlockedBy.get(edge.id) ?? []), 'гидравлика: Q = 0']);
+      }
+      if (!entry.active && entry.blockers.length > 0) {
+        edgeBlockedBy.set(edge.id, [...(edgeBlockedBy.get(edge.id) ?? []), ...entry.blockers]);
+      }
+      if (!entry.active && entry.requestedFlowLpm > 0.001 && entry.actualFlowLpm <= 0.001) {
+        edgeBlockedBy.set(edge.id, [...(edgeBlockedBy.get(edge.id) ?? []), 'фактический расход отсутствует']);
+      }
+      if (entry.actualFlowLpm <= 0.001 && entry.blockers.length > 0) {
+        edgeBlockedBy.set(edge.id, [...(edgeBlockedBy.get(edge.id) ?? []), ...entry.blockers]);
+      }
+    });
+  });
+
+  const qInByNodeId = new Map<string, number>();
+  const qOutByNodeId = new Map<string, number>();
+  routeFlows.forEach((entry) => {
+    if (entry.actualFlowLpm <= 0.001) return;
+    entry.route.candidate.edgeIds.forEach((edgeId) => {
+      const edge = nextEdges.find((candidate) => candidate.id === edgeId);
+      if (!edge) return;
+      qOutByNodeId.set(edge.source, (qOutByNodeId.get(edge.source) ?? 0) + entry.actualFlowLpm);
+      qInByNodeId.set(edge.target, (qInByNodeId.get(edge.target) ?? 0) + entry.actualFlowLpm);
     });
   });
 
@@ -394,18 +472,8 @@ export const runSimulationStep = (project: ProjectDocument, dt: number): Simulat
       blockedBy: blockedReasons,
     } as any;
 
-    source.data.simulation.flowLpm += flowLpm;
-    target.data.simulation.flowLpm += flowLpm;
     totalActiveFlow += flowLpm;
     activeMediums.add(String(edge.data?.mediumType ?? source.data.mediumType));
-  });
-
-  const qInByNodeId = new Map<string, number>();
-  const qOutByNodeId = new Map<string, number>();
-  nextEdges.forEach((edge) => {
-    const flowLpm = Math.max(0, toFiniteNumber(edge.data?.flowLpm, 0));
-    qOutByNodeId.set(edge.source, (qOutByNodeId.get(edge.source) ?? 0) + flowLpm);
-    qInByNodeId.set(edge.target, (qInByNodeId.get(edge.target) ?? 0) + flowLpm);
   });
 
   const nodeBlockedReasons = new Map<string, string[]>();
@@ -423,14 +491,19 @@ export const runSimulationStep = (project: ProjectDocument, dt: number): Simulat
     const qOutLpm = qOutByNodeId.get(node.id) ?? 0;
     const netFlowLpm = qInLpm - qOutLpm;
     const localGate = nodeCanPassFlow(node);
+    const reason = Array.from(new Set(nodeBlockedReasons.get(node.id) ?? []))[0] ?? '';
 
     process.pressureBar = Number(result?.pressureBar ?? process.pressureBar ?? 0);
     process.pressure = process.pressureBar;
-    node.data.simulation.flowLpm = Math.max(0, node.data.simulation.flowLpm);
+    node.data.simulation.flowLpm = Math.max(0, qInLpm + qOutLpm);
     node.data.simulation.flow = node.data.simulation.flowLpm;
-    node.data.simulation.active = node.data.simulation.flowLpm > 0.001;
-    node.data.simulation.blocked = !localGate.pass || (!node.data.simulation.active && (qInLpm > 0 || qOutLpm > 0));
+    node.data.simulation.active = qInLpm > 0.001 || qOutLpm > 0.001;
+    node.data.simulation.blocked = !localGate.pass || (!node.data.simulation.active && reason.length > 0);
     node.data.simulation.routeState = node.data.simulation.active ? 'flowing' : node.data.simulation.blocked ? 'blocked' : 'idle';
+
+    process.commandState = Boolean(process.isRunning) ? 'команда-вкл' : 'команда-выкл';
+    process.actualState = node.data.simulation.active ? 'факт-поток' : node.data.simulation.blocked ? 'факт-блок' : 'факт-ожидание';
+    process.stateReason = reason || (node.data.simulation.active ? 'маршрут активен' : 'ожидание подачи');
 
     if (tankKinds.has(node.data.kind)) {
       const currentVolumeLiters = Math.max(0, toFiniteNumber(process.currentLevelLiters ?? process.level, 0));
@@ -457,7 +530,6 @@ export const runSimulationStep = (project: ProjectDocument, dt: number): Simulat
       process.signalValue = Number(process.currentValue ?? 0);
     }
 
-    const reason = Array.from(new Set(nodeBlockedReasons.get(node.id) ?? []))[0] ?? '';
     process.isBlocked = node.data.simulation.blocked;
     if (!Boolean(node.data.simulationEnabled ?? true)) process.processState = 'offline';
     else if (node.data.simulation.blocked) process.processState = 'blocked';
