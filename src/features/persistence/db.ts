@@ -61,6 +61,7 @@ export const clearPersistedState = async () => {
 export const loadStoredProject = async (id?: string): Promise<LoadStoredProjectResult> => {
   const expectedVersion = getPersistenceSchemaVersion();
   if (getStoredVersion() > 0 && getStoredVersion() !== expectedVersion) {
+    console.warn('[persistence] schema version mismatch detected, resetting local storage', { storedVersion: getStoredVersion(), expectedVersion });
     await clearPersistedState();
     return { recovered: true, resetReason: 'version-mismatch' };
   }
@@ -72,6 +73,7 @@ export const loadStoredProject = async (id?: string): Promise<LoadStoredProjectR
   }
 
   if (!isStoredProjectCompatible(stored, expectedVersion)) {
+    console.warn('[persistence] incompatible stored project, resetting local storage', { projectId: stored.id, expectedVersion, storedVersion: stored.persistenceVersion });
     await clearPersistedState();
     return { recovered: true, resetReason: 'version-mismatch' };
   }
@@ -80,7 +82,8 @@ export const loadStoredProject = async (id?: string): Promise<LoadStoredProjectR
     const project = restoreProjectDocument(stored);
     setStoredVersion(expectedVersion);
     return { project, recovered: false };
-  } catch {
+  } catch (error) {
+    console.warn('[persistence] corrupted stored project payload, resetting local storage', { projectId: stored.id, error });
     await clearPersistedState();
     return { recovered: true, resetReason: 'corrupted' };
   }

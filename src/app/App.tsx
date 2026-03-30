@@ -157,7 +157,7 @@ const CommandPalette = ({ open, onClose, actions }: { open: boolean; onClose: ()
 
 export const App = () => {
   const rf = useReactFlow();
-  const loadProject = useAppStore((state) => state.loadProject); const saveProject = useAppStore((state) => state.saveProject); const projectRevision = useAppStore((state) => state.projectRevision); const persistedRevision = useAppStore((state) => state.persistedRevision); const startupState = useAppStore((state) => state.startupState); const startupNotice = useAppStore((state) => state.startupNotice); const dismissStartupNotice = useAppStore((state) => state.dismissStartupNotice);
+  const loadProject = useAppStore((state) => state.loadProject); const startupState = useAppStore((state) => state.startupState); const startupNotice = useAppStore((state) => state.startupNotice); const dismissStartupNotice = useAppStore((state) => state.dismissStartupNotice);
   const openEquipmentWizard = useAppStore((state) => state.openEquipmentWizard);
   const openLibraryPicker = useAppStore((state) => state.openLibraryPicker);
   const setInspectorTab = useAppStore((state) => state.setInspectorTab);
@@ -172,7 +172,6 @@ export const App = () => {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
 
   useEffect(() => { void loadProject(); }, [loadProject]);
-  useEffect(() => { if (startupState !== 'ready' || projectRevision === persistedRevision) return; const handle = window.setTimeout(() => { void saveProject('autosave'); }, 1200); return () => window.clearTimeout(handle); }, [persistedRevision, projectRevision, saveProject, startupState]);
 
   useEffect(() => {
     const raw = window.sessionStorage.getItem(shellStateKey);
