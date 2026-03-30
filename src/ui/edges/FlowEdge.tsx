@@ -18,7 +18,7 @@ const stopCanvasGesture = (event: React.MouseEvent<HTMLElement>) => {
 const FlowEdgeComponent = ({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data, selected }: EdgeProps) => {
   const [path, labelX, labelY] = getSmoothStepPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, borderRadius: 18, offset: 18 });
   const zoom = useStore((state) => state.transform[2]);
-  const { selectedEdgeId, edgeEditorMode, selectEdge, setEdgeEditorMode, executeEdgeAction, openLibraryPicker, simulationStatus, simulationSpeed } = useAppStore((state) => ({
+  const { selectedEdgeId, edgeEditorMode, selectEdge, setEdgeEditorMode, executeEdgeAction, openLibraryPicker, simulationStatus, simulationSpeed, presentationMode } = useAppStore((state) => ({
     selectedEdgeId: state.selectedEdgeId,
     edgeEditorMode: state.edgeEditorMode,
     selectEdge: state.selectEdge,
@@ -27,6 +27,7 @@ const FlowEdgeComponent = ({ id, sourceX, sourceY, targetX, targetY, sourcePosit
     openLibraryPicker: state.openLibraryPicker,
     simulationStatus: state.project.simulation.status ?? (state.project.simulation.running ? 'running' : 'idle'),
     simulationSpeed: state.project.simulation.speed,
+    presentationMode: state.project.view.presentationMode,
   }));
   const mediumKey = (data?.medium ?? 'water') as MediumType | 'composite';
   const routeKey = (data?.routeState ?? 'idle') as RouteState;
@@ -40,14 +41,14 @@ const FlowEdgeComponent = ({ id, sourceX, sourceY, targetX, targetY, sourcePosit
   const emphasis = Boolean(data?.selectedPath || selected);
   const hovered = Boolean(data?.hovered);
   const visibleMode = data?.labelMode ?? 'selected';
-  const shouldShowBadge = zoom >= 0.72 && (visibleMode === 'all' || (visibleMode === 'active' && (active || blocked)) || (visibleMode === 'selected' && (selected || hovered || emphasis)));
+  const shouldShowBadge = presentationMode === 'simulation' && zoom >= 0.72 && (visibleMode === 'all' || (visibleMode === 'active' && (active || blocked)) || (visibleMode === 'selected' && (selected || hovered || emphasis)));
   const isSelected = selectedEdgeId === id;
   const showToolbar = isSelected && zoom >= 0.58;
   const direction = data?.direction ?? 'forward';
   const warnings = (data?.routeWarnings ?? []).slice(0, 2);
   const isRunningSimulation = simulationStatus === 'running';
   const isPausedSimulation = simulationStatus === 'paused';
-  const shouldAnimateFlow = (isRunningSimulation || isPausedSimulation) && active;
+  const shouldAnimateFlow = presentationMode === 'simulation' && (isRunningSimulation || isPausedSimulation) && active;
   const effectiveSpeed = Math.max(0.5, simulationSpeed || 1);
   const velocity = Number(data?.velocityMPerS ?? 0);
   const primaryBase = Math.max(0.45, 2.8 - velocity * 0.9);
@@ -57,7 +58,7 @@ const FlowEdgeComponent = ({ id, sourceX, sourceY, targetX, targetY, sourcePosit
 
   return <>
     <BaseEdge id={id} path={path} style={{ stroke: '#122131', strokeWidth: 14, opacity: emphasis ? 1 : 0.55 }} />
-    <BaseEdge id={`${id}-pipe`} path={path} style={{ stroke: routeColor, strokeWidth: active ? 8 : 6, opacity: emphasis ? 1 : simulationStatus === 'idle' ? 0.48 : 0.8, strokeDasharray: mixedFlow ? '10 6' : undefined }} />
+    <BaseEdge id={`${id}-pipe`} path={path} style={{ stroke: routeColor, strokeWidth: active && presentationMode === 'simulation' ? 8 : 6, opacity: emphasis ? 1 : presentationMode === 'schematic' ? 0.64 : simulationStatus === 'idle' ? 0.48 : 0.8, strokeDasharray: mixedFlow && presentationMode === 'simulation' ? '10 6' : undefined }} />
     <path d={path} className={`pipe-shell route-${routeKey} sim-${simulationStatus} ${hovered ? 'is-hovered' : ''}`} style={{ stroke: routeColor }} />
     <path d={path} className={`pipe-glow sim-${simulationStatus} ${shouldAnimateFlow ? 'is-active' : ''} ${blocked ? 'is-blocked' : ''} ${isAlarm ? 'is-alarm' : ''}`} style={{ stroke: mixedFlow ? '#f3b6ff' : medium.glow }} />
     <path d={path} className={`pipe-fluid sim-${simulationStatus} mode-${routeParticleMode[routeKey]} ${shouldAnimateFlow ? 'is-active' : ''} ${blocked ? 'is-blocked' : ''} ${isStarved ? 'is-starved' : ''} ${isAlarm ? 'is-alarm' : ''} ${isPausedSimulation ? 'is-paused' : ''}`} style={{ stroke: mixedFlow ? '#f0b7ff' : medium.base, ['--flow-speed' as string]: `${primaryBase / effectiveSpeed}s` }} />
@@ -66,7 +67,7 @@ const FlowEdgeComponent = ({ id, sourceX, sourceY, targetX, targetY, sourcePosit
       <button type="button" className={`edge-hitbox nodrag nopan ${isSelected ? 'is-selected' : ''}`} style={{ left: labelX, top: labelY, transform: 'translate(-50%, -50%)' }} onMouseDown={stopCanvasGesture} onClick={(event) => { stopCanvasGesture(event); selectEdge(id); }} />
     </EdgeLabelRenderer>
     {shouldShowBadge ? <EdgeLabelRenderer><div style={{ left: labelX, top: labelY - (showToolbar ? 74 : 0), transform: 'translate(-50%, -50%)' }} className={`edge-badge sim-${simulationStatus} ${emphasis ? 'is-focus' : ''} ${active ? 'is-active' : ''} ${blocked ? 'is-warning' : ''} ${mixedFlow ? 'is-focus' : ''}`}><strong>{directionGlyph[direction]} {Math.round(Number(data?.flowRate ?? 0))} л/мин • {Number(data?.velocityMPerS ?? 0).toFixed(2)} м/с • {data?.nominalDiameter ?? 'DN50'}</strong><span>{routeStateLabel[routeKey]} • {mediumLabel[mediumKey]}</span>{data?.lineRole ? <span>{lineRole} • {directionMode}</span> : null}{warnings.length ? <span>{warnings.join(' · ')}</span> : null}</div></EdgeLabelRenderer> : null}
-    {showToolbar ? (
+    {showToolbar && presentationMode === 'simulation' ? (
       <EdgeLabelRenderer>
         <div className="edge-editor-popover nodrag nopan" style={{ left: labelX, top: labelY + 12, transform: 'translate(-50%, 0)' }} onPointerDown={stopCanvasGesture} onMouseDown={stopCanvasGesture} onClick={stopCanvasGesture}>
           {edgeEditorMode === 'insert' ? (

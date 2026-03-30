@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { addEdge, applyEdgeChanges, applyNodeChanges, Connection, EdgeChange, NodeChange, Viewport } from 'reactflow';
 import { APP_SCHEMA_VERSION, PROJECT_SCHEMA_VERSION, demoProject, templates } from '../domain/templates/templates';
-import { EdgeLabelMode, InspectorTab, ProjectDocument, SimulationSettings, SoapEdge, SoapNode, SoapNodeKind, TemplateId, ValidationIssue } from '../domain/schemas/types';
+import { EdgeLabelMode, InspectorTab, PresentationMode, ProjectDocument, SimulationSettings, SoapEdge, SoapNode, SoapNodeKind, TemplateId, ValidationIssue } from '../domain/schemas/types';
 import { clearPersistedState, clearUserData, loadStoredProject, saveStoredProject } from '../features/persistence/db';
 import { mediumPalette } from '../ui/tokens/tokens';
 import { runSimulationStep } from '../domain/simulation/engine';
@@ -187,6 +187,7 @@ const reapplyDerivedState = (project: ProjectDocument) => {
 
 const sanitizeProjectState = (project: ProjectDocument, revision = 0, persistedRevision = revision, viewportNonce = 0) => {
   const normalizedProject = normalizeProjectEdgeHandles(project);
+  normalizedProject.view = { ...normalizedProject.view, presentationMode: normalizedProject.view.presentationMode ?? 'schematic' };
   normalizedProject.simulation = {
     ...normalizedProject.simulation,
     status: normalizedProject.simulation.status ?? (normalizedProject.simulation.running ? 'running' : 'idle'),
@@ -278,7 +279,7 @@ const toSimulationStatus = (running: boolean): SimulationSettings['status'] => (
 interface AppState {
   project: ProjectDocument; projectRevision: number; persistedRevision: number; viewportNonce: number; selectedNodeId?: string; selectedEdgeId?: string; search: string; inspectorTab: InspectorTab; showProblematicOnly: boolean; hoveredEdgeId?: string; edgeLabelMode: EdgeLabelMode; edgeEditorMode?: EdgeEditorMode; issues: ValidationIssue[]; pathSelection: { upstream: string[]; downstream: string[]; edges: string[] }; startupState: StartupState; startupNotice?: StartupNotice; startupError?: string; persistenceStatus: PersistenceStatus; lastSavedAt?: string; persistenceError?: string; lastCommand?: string; wizard: { open: boolean; groupId?: EquipmentWizardGroupId; kind?: SoapNodeKind; values: Record<string, string | number | boolean>; namingRule: string; }; libraryPicker: { open: boolean; mode: LibraryPickerMode; context?: LibraryPickerContext };
   onNodesChange: (changes: NodeChange[]) => void; onEdgesChange: (changes: EdgeChange[]) => void; onConnect: (connection: Connection) => void; setViewport: (viewport: Viewport, options?: { manual?: boolean }) => void; addNode: (type: SoapNodeKind, position?: { x: number; y: number }) => void; selectNode: (nodeId?: string) => void; selectEdge: (edgeId?: string) => void; updateNodeField: (nodeId: string, path: string, value: string | number | boolean) => void; setSearch: (search: string) => void; setInspectorTab: (tab: InspectorTab) => void; setSimulationRunning: (running: boolean) => void; setSimulationSpeed: (speed: number) => void; setSimulationFluid: (fluid: SimulationSettings['fluid']) => void; runFluidScenario: () => void; resetSimulation: () => void; tickSimulation: (dt: number) => void;
-  resetProject: () => Promise<void>; resetUserData: () => Promise<void>; clearLocalDataAndLoadDemo: () => Promise<void>; newProject: () => void; loadTemplate: (templateId: TemplateId) => Promise<void>; saveProject: (reason?: 'autosave' | 'manual') => Promise<void>; loadProject: (id?: string) => Promise<void>; exportProject: () => string; importProject: (json: string) => void; runValidation: () => void; toggleProblematicOnly: () => void; hoverEdge: (edgeId?: string) => void; setEdgeLabelMode: (mode: EdgeLabelMode) => void; loadSafeDemo: () => Promise<void>; dismissStartupNotice: () => void; setStartupError: (message?: string) => void; openEquipmentWizard: (options?: { groupId?: EquipmentWizardGroupId; kind?: SoapNodeKind }) => void; closeEquipmentWizard: () => void; setWizardGroup: (groupId: EquipmentWizardGroupId) => void; setWizardKind: (kind: SoapNodeKind) => void; updateWizardValue: (key: string, value: string | number | boolean) => void; regenerateWizardTag: () => void; createEquipmentFromWizard: () => void;
+  resetProject: () => Promise<void>; resetUserData: () => Promise<void>; clearLocalDataAndLoadDemo: () => Promise<void>; newProject: () => void; loadTemplate: (templateId: TemplateId) => Promise<void>; saveProject: (reason?: 'autosave' | 'manual') => Promise<void>; loadProject: (id?: string) => Promise<void>; exportProject: () => string; importProject: (json: string) => void; runValidation: () => void; toggleProblematicOnly: () => void; hoverEdge: (edgeId?: string) => void; setEdgeLabelMode: (mode: EdgeLabelMode) => void; setPresentationMode: (mode: PresentationMode) => void; loadSafeDemo: () => Promise<void>; dismissStartupNotice: () => void; setStartupError: (message?: string) => void; openEquipmentWizard: (options?: { groupId?: EquipmentWizardGroupId; kind?: SoapNodeKind }) => void; closeEquipmentWizard: () => void; setWizardGroup: (groupId: EquipmentWizardGroupId) => void; setWizardKind: (kind: SoapNodeKind) => void; updateWizardValue: (key: string, value: string | number | boolean) => void; regenerateWizardTag: () => void; createEquipmentFromWizard: () => void;
   updateEdgeField: (edgeId: string, field: string, value: string | number | boolean) => void; executeNodeAction: (nodeId: string, action: string) => void;
   setEdgeEditorMode: (mode?: EdgeEditorMode) => void; executeEdgeAction: (action: EdgeActionKind, edgeId?: string) => void; insertNodeIntoEdge: (kind: SoapNodeKind, edgeId?: string) => void; createBranchFromEdge: (kind?: SoapNodeKind, edgeId?: string) => void; removeSelectedSegment: (edgeId?: string) => void; reconnectSelectedEdge: (edgeId?: string) => void;
   openLibraryPicker: (mode: LibraryPickerMode, context?: LibraryPickerContext) => void; closeLibraryPicker: () => void; insertFromLibrary: (kind: SoapNodeKind) => void;
@@ -355,6 +356,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   exportProject: () => JSON.stringify(get().project, null, 2),
   importProject: (json) => { const project = restoreProjectDocument(JSON.parse(json)); set((state) => ({ ...sanitizeProjectState(project, state.projectRevision + 1, state.persistedRevision, state.viewportNonce + 1), startupState: 'ready', startupNotice: { type: 'info', message: 'Проект импортирован.' } })); },
   runValidation: () => set((state) => ({ issues: validateProject(state.project) })), toggleProblematicOnly: () => set((state) => ({ showProblematicOnly: !state.showProblematicOnly })), hoverEdge: (hoveredEdgeId) => set({ hoveredEdgeId }), setEdgeLabelMode: (edgeLabelMode) => set({ edgeLabelMode }),
+  setPresentationMode: (presentationMode) => set((state) => {
+    if (state.project.view.presentationMode === presentationMode) return state;
+    return {
+      project: { ...state.project, view: { ...state.project.view, presentationMode } },
+      projectRevision: state.projectRevision + 1,
+    };
+  }),
   loadSafeDemo: async () => { const project = cloneProject(demoProject); const revision = get().projectRevision + 1; set({ ...sanitizeProjectState(project, revision, revision, get().viewportNonce + 1), startupState: 'ready', startupError: undefined }); await persistRevisionNow(project, revision, 'manual'); },
   dismissStartupNotice: () => set({ startupNotice: undefined }), setStartupError: (startupError) => set({ startupError }),
   openEquipmentWizard: (options) => set((state) => {
