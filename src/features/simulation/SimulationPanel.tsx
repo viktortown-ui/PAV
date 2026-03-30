@@ -45,10 +45,10 @@ export const SimulationPanel = ({ focusMode = false, rightPanelVisible = false, 
   const dockRef = useRef<HTMLElement>(null);
   const selectedNodeId = useAppStore((state) => state.selectedNodeId);
   const selectedEdgeId = useAppStore((state) => state.selectedEdgeId);
+  const pathSelection = useAppStore((state) => state.pathSelection);
+  const selectNode = useAppStore((state) => state.selectNode);
   const setSimulationRunning = useAppStore((state) => state.setSimulationRunning);
   const setSimulationSpeed = useAppStore((state) => state.setSimulationSpeed);
-  const edgeLabelMode = useAppStore((state) => state.edgeLabelMode);
-  const setEdgeLabelMode = useAppStore((state) => state.setEdgeLabelMode);
   const resetSimulation = useAppStore((state) => state.resetSimulation);
   const setSimulationFluid = useAppStore((state) => state.setSimulationFluid);
   const runFluidScenario = useAppStore((state) => state.runFluidScenario);
@@ -132,6 +132,14 @@ export const SimulationPanel = ({ focusMode = false, rightPanelVisible = false, 
   const isPaused = simulationStatus === 'paused';
   const currentFluid = project.simulation.fluid ?? { id: 'water', kind: 'water', name: 'Вода', densityKgPerM3: 998, dynamicViscosityPaS: 0.001002 };
   const activeRouteEdges = useMemo(() => project.edges.filter((edge) => Boolean(edge.data?.flowActive)), [project.edges]);
+  const activeRouteNodeIds = useMemo(() => {
+    const nodeIds = new Set<string>();
+    activeRouteEdges.forEach((edge) => {
+      nodeIds.add(edge.source);
+      nodeIds.add(edge.target);
+    });
+    return nodeIds;
+  }, [activeRouteEdges]);
   const blockedRouteEdge = useMemo(() => project.edges.find((edge) => Boolean(edge.data?.blocked) || (edge.data?.blockedBy?.length ?? 0) > 0), [project.edges]);
   const blockedNode = useMemo(
     () => project.nodes.find((node) => ['blocked', 'offline'].includes(String(node.data.process.processState ?? '').toLowerCase())),
@@ -169,6 +177,59 @@ export const SimulationPanel = ({ focusMode = false, rightPanelVisible = false, 
   const avgPressure = pressureValues.length ? pressureValues.reduce((sum, value) => sum + value, 0) / pressureValues.length : 0;
   const avgLevel = levelValues.length ? levelValues.reduce((sum, value) => sum + value, 0) / levelValues.length : 0;
 
+  const incomingByNode = useMemo(() => {
+    const map = new Map<string, number>();
+    project.nodes.forEach((node) => map.set(node.id, 0));
+    project.edges.forEach((edge) => map.set(edge.target, (map.get(edge.target) ?? 0) + 1));
+    return map;
+  }, [project.edges, project.nodes]);
+
+  const outgoingByNode = useMemo(() => {
+    const map = new Map<string, number>();
+    project.nodes.forEach((node) => map.set(node.id, 0));
+    project.edges.forEach((edge) => map.set(edge.source, (map.get(edge.source) ?? 0) + 1));
+    return map;
+  }, [project.edges, project.nodes]);
+
+  const sourceNode = useMemo(
+    () => project.nodes.find((node) => node.data.kind === 'source')
+      ?? project.nodes.find((node) => (incomingByNode.get(node.id) ?? 0) === 0),
+    [incomingByNode, project.nodes],
+  );
+  const pumpNode = useMemo(
+    () => project.nodes.find((node) => node.data.kind === 'pump' || node.data.kind === 'dosingPump'),
+    [project.nodes],
+  );
+  const receiverNode = useMemo(
+    () => project.nodes.find((node) => ['consumer', 'fillingStation', 'utilityDrain'].includes(node.data.kind))
+      ?? project.nodes.find((node) => (outgoingByNode.get(node.id) ?? 0) === 0),
+    [outgoingByNode, project.nodes],
+  );
+
+  const findNode = useCallback((nodeId?: string) => project.nodes.find((node) => node.id === nodeId), [project.nodes]);
+
+  const routeChain = useMemo(() => {
+    const ids: string[] = [];
+    const pushId = (id?: string) => {
+      if (!id || ids.includes(id)) return;
+      ids.push(id);
+    };
+    pushId(sourceNode?.id);
+    pushId(pumpNode?.id);
+    const selectedRouteNodeId = selectedNodeId
+      ?? (selectedEdge ? selectedEdge.source : undefined)
+      ?? [...activeRouteNodeIds][0]
+      ?? pathSelection.downstream[0]
+      ?? pathSelection.upstream[0];
+    pushId(selectedRouteNodeId);
+    pushId(receiverNode?.id);
+    return ids.map((id) => findNode(id)).filter(Boolean);
+  }, [activeRouteNodeIds, findNode, pathSelection.downstream, pathSelection.upstream, pumpNode?.id, receiverNode?.id, selectedEdge, selectedNodeId, sourceNode?.id]);
+
+  const routeHint = routeChain.length
+    ? routeChain.map((node) => node!.data.visibleName).join(' → ')
+    : 'Маршрут не определён';
+
   const handleFitToView = useCallback(async () => {
     await flow.fitView({ padding: 0.2, duration: 220 });
   }, [flow]);
@@ -176,6 +237,28 @@ export const SimulationPanel = ({ focusMode = false, rightPanelVisible = false, 
   const handleReturnToDiagram = useCallback(async () => {
     await flow.fitView({ padding: 0.17, duration: 180 });
   }, [flow]);
+
+  const focusNodeById = useCallback(async (nodeId?: string) => {
+    if (!nodeId) return;
+    const target = findNode(nodeId);
+    if (!target) return;
+    selectNode(nodeId);
+    const width = target.width ?? 190;
+    const height = target.height ?? 120;
+    const centerX = target.position.x + width / 2;
+    const centerY = target.position.y + height / 2;
+    await flow.setCenter(centerX, centerY, { duration: 220, zoom: Math.max(flow.getZoom(), 0.9) });
+  }, [findNode, flow, selectNode]);
+
+  const handleResetScale = useCallback(async () => {
+    const viewport = flow.getViewport();
+    await flow.setViewport({ ...viewport, zoom: 1 }, { duration: 180 });
+  }, [flow]);
+
+  const hasRoute = routeChain.length > 1;
+  const canJumpToSelection = Boolean(selectedNodeId || selectedEdge?.source);
+  const canJumpToSource = Boolean(sourceNode);
+  const canJumpToReceiver = Boolean(receiverNode);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -294,7 +377,10 @@ export const SimulationPanel = ({ focusMode = false, rightPanelVisible = false, 
   const renderNavigatorZone = (compactView = false) => (
     <section className="dock-zone dock-zone-navigator" aria-label="Навигатор">
       <header className="dock-zone-head dock-zone-head--between">
-        <span className="dock-zone-label">Навигатор</span>
+        <div>
+          <span className="dock-zone-label">Навигатор</span>
+          <small className="dock-navigator-subtitle">Фокус, маршрут и быстрые переходы</small>
+        </div>
         <button
           type="button"
           className="dock-inline-button"
@@ -305,29 +391,58 @@ export const SimulationPanel = ({ focusMode = false, rightPanelVisible = false, 
         </button>
       </header>
       <div className="dock-navigator-actions" role="group" aria-label="Быстрые действия навигатора">
+        <button type="button" className="dock-navigator-action" onClick={() => void focusNodeById(selectedNodeId ?? selectedEdge?.source)} disabled={!canJumpToSelection}>К выбранному</button>
+        <button type="button" className="dock-navigator-action" onClick={() => void focusNodeById(sourceNode?.id)} disabled={!canJumpToSource}>К источнику</button>
+        <button type="button" className="dock-navigator-action" onClick={() => void focusNodeById(receiverNode?.id)} disabled={!canJumpToReceiver}>К приёмнику</button>
+        <button type="button" className="dock-navigator-action" onClick={() => void handleFitToView()}>Вписать всё</button>
+        <button type="button" className="dock-navigator-action" onClick={() => void handleResetScale()}>Сбросить масштаб</button>
         <button type="button" className="dock-navigator-action" onClick={() => void handleReturnToDiagram()}>К схеме</button>
-        <button type="button" className="dock-navigator-action" onClick={() => void handleFitToView()}>Вписать</button>
-        <button type="button" className="dock-navigator-action" onClick={() => setEdgeLabelMode(edgeLabelMode === 'hidden' ? 'selected' : 'hidden')}>
-          {edgeLabelMode === 'hidden' ? 'Показать подписи' : 'Скрыть подписи'}
-        </button>
       </div>
       {isNavigatorVisible ? (
         <div className={`dock-navigator-preview-shell ${compactView ? 'is-compact' : ''}`}>
           <div className="dock-navigator-viewport" aria-label="Миникарта схемы">
-            <MiniMap
-              pannable
-              zoomable
-              className="dock-navigator-map"
-              maskColor="rgba(5,10,16,0.74)"
-              style={{ backgroundColor: 'transparent' }}
-              nodeColor="#7fb3ff"
-              nodeStrokeColor="#d9e8ff"
-            />
+            {project.nodes.length ? (
+              <MiniMap
+                pannable
+                zoomable
+                className="dock-navigator-map"
+                maskColor="rgba(18, 38, 62, 0.35)"
+                style={{ backgroundColor: 'transparent' }}
+                nodeColor={(node) => {
+                  if (node.id === selectedNodeId) return '#f6c55f';
+                  if (activeRouteNodeIds.has(node.id)) return '#69d0a7';
+                  if (node.id === sourceNode?.id) return '#66b7ff';
+                  if (node.id === receiverNode?.id) return '#c99bff';
+                  return '#4f83c0';
+                }}
+                nodeStrokeColor={(node) => (pathSelection.edges.length && (pathSelection.upstream.includes(node.id) || pathSelection.downstream.includes(node.id)) ? '#b7ddff' : '#d6e8ff')}
+                nodeBorderRadius={2}
+                onNodeClick={(_, node) => { void focusNodeById(node.id); }}
+              />
+            ) : (
+              <div className="dock-navigator-empty-state">Схема пуста. Добавьте узлы для навигации.</div>
+            )}
           </div>
         </div>
       ) : (
         <div className="dock-navigator-collapsed">Навигатор скрыт</div>
       )}
+      <div className="dock-navigator-route" aria-label="Цепочка маршрута">
+        <span className="metric-label">Цепочка маршрута</span>
+        {hasRoute ? (
+          <div className="dock-navigator-route-chain">
+            {routeChain.map((node, index) => (
+              <div key={node!.id} className="dock-route-item-wrap">
+                <button type="button" className="dock-route-item" onClick={() => void focusNodeById(node!.id)}>{node!.data.visibleName}</button>
+                {index < routeChain.length - 1 ? <span className="dock-route-separator" aria-hidden>→</span> : null}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="dock-navigator-route-empty">Маршрут не определён для текущего выбора.</div>
+        )}
+        <small className="dock-help-line">Текущий путь: {routeHint}</small>
+      </div>
       <div className="dock-mode-actions">
         <button
           type="button"
