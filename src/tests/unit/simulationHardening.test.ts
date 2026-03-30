@@ -32,6 +32,48 @@ const buildLinearProject = (speed: number) => {
 };
 
 describe('simulation hardening', () => {
+  it('массовый баланс сохраняется для цепочки из двух ёмкостей', () => {
+    const project = makeProject();
+    const source = buildNode('tank', { x: 0, y: 0 }, project);
+    const pump = buildNode('pump', { x: 150, y: 0 }, project);
+    const sink = buildNode('tank', { x: 300, y: 0 }, project);
+
+    const sourceProcess = source.data.process as any;
+    sourceProcess.currentLevelLiters = 260;
+    sourceProcess.capacityLiters = 400;
+    sourceProcess.allowDischarge = true;
+    sourceProcess.allowIntake = true;
+
+    const pumpProcess = pump.data.process as any;
+    pumpProcess.pumpOn = true;
+    pumpProcess.isRunning = true;
+    pumpProcess.nominalFlowLpm = 40;
+
+    const sinkProcess = sink.data.process as any;
+    sinkProcess.currentLevelLiters = 40;
+    sinkProcess.capacityLiters = 400;
+    sinkProcess.allowIntake = true;
+    sinkProcess.allowDischarge = true;
+
+    project.nodes = [source, pump, sink];
+    project.edges = [
+      buildEdge(source.id, pump.id, 'water', 'DN50', undefined, project),
+      buildEdge(pump.id, sink.id, 'water', 'DN50', undefined, project),
+    ];
+    project.simulation = { ...project.simulation, running: true, status: 'running', speed: 1 };
+
+    const step = runSimulationStep(project, 1);
+    const sourceAfter = step.nodes.find((node) => node.id === source.id)!;
+    const sinkAfter = step.nodes.find((node) => node.id === sink.id)!;
+    const movedFromSource = 260 - Number((sourceAfter.data.process as any).currentLevelLiters);
+    const movedToSink = Number((sinkAfter.data.process as any).currentLevelLiters) - 40;
+
+    expect(step.edges.every((edge) => (edge.data?.flowLpm ?? 0) > 0)).toBe(true);
+    expect(step.edges.every((edge) => edge.animated === true)).toBe(true);
+    expect(movedFromSource).toBeGreaterThan(0);
+    expect(movedFromSource).toBeCloseTo(movedToSink, 6);
+  });
+
   it('applies speed multiplier to hydraulic model output', () => {
     const baseline = runSimulationStep(buildLinearProject(1), 1);
     const accelerated = runSimulationStep(buildLinearProject(2), 1);
@@ -203,6 +245,47 @@ describe('simulation hardening', () => {
     expect(step.totalActiveFlow).toBe(0);
     expect(step.edges.every((edge) => (edge.data?.flowRate ?? 0) === 0)).toBe(true);
     expect(step.edges.some((edge) => (edge.data?.routeState ?? 'idle') === 'blocked')).toBe(true);
+  });
+
+  it('насос выключен: Q=0, уровни стабильны, причина отражена в статусе', () => {
+    const project = makeProject();
+    const source = buildNode('tank', { x: 0, y: 0 }, project);
+    const pump = buildNode('pump', { x: 150, y: 0 }, project);
+    const sink = buildNode('tank', { x: 300, y: 0 }, project);
+
+    const sourceProcess = source.data.process as any;
+    sourceProcess.currentLevelLiters = 220;
+    sourceProcess.capacityLiters = 400;
+    sourceProcess.allowDischarge = true;
+
+    const pumpProcess = pump.data.process as any;
+    pumpProcess.pumpOn = false;
+    pumpProcess.isRunning = false;
+    pumpProcess.nominalFlowLpm = 55;
+
+    const sinkProcess = sink.data.process as any;
+    sinkProcess.currentLevelLiters = 80;
+    sinkProcess.capacityLiters = 400;
+    sinkProcess.allowIntake = true;
+
+    project.nodes = [source, pump, sink];
+    project.edges = [
+      buildEdge(source.id, pump.id, 'water', 'DN50', undefined, project),
+      buildEdge(pump.id, sink.id, 'water', 'DN50', undefined, project),
+    ];
+    project.simulation = { ...project.simulation, running: true, status: 'running', speed: 1 };
+
+    const step = runSimulationStep(project, 1);
+    const nextPump = step.nodes.find((node) => node.id === pump.id)!;
+    const reason = String((nextPump.data.process as any).stateReason ?? '');
+
+    expect(step.totalActiveFlow).toBe(0);
+    expect(step.edges.every((edge) => (edge.data?.flowLpm ?? 0) === 0)).toBe(true);
+    expect(step.edges.every((edge) => edge.animated === false)).toBe(true);
+    expect((step.nodes.find((node) => node.id === source.id)!.data.process as any).currentLevelLiters).toBe(220);
+    expect((step.nodes.find((node) => node.id === sink.id)!.data.process as any).currentLevelLiters).toBe(80);
+    expect(reason).toContain('насос выключен');
+    expect(nextPump.data.status).toBe('off');
   });
 
   it('fluid viscosity and density influence hydraulic transfer', () => {
