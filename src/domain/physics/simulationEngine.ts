@@ -94,17 +94,16 @@ export class PhysicsSimulationEngine {
   private solveSteadyStateFlow(network: HydraulicNetworkInput): SolverSnapshot {
     const { densityKgPerM3, dynamicViscosityPaS } = network.fluid;
     const seriesCapable = this.isSeriesNetwork(network);
-    const solveResult = seriesCapable ? this.solveSeriesNetworkFlow(network) : {
-      flowM3PerS: 0,
-      status: 'unsupported' as const,
-      commandedFlowM3PerS: 0,
-      availablePumpHeadM: 0,
-      requiredHeadM: 0,
-    };
-    const flowM3PerS = solveResult.flowM3PerS;
-    const edgeResults = network.edges.map((edge) => this.solveEdge(edge, densityKgPerM3, dynamicViscosityPaS, flowM3PerS));
+    const solveResult = seriesCapable ? this.solveSeriesNetworkFlow(network) : null;
+    const branchFlowByEdgeId = seriesCapable ? null : this.solveBranchNetworkFlow(network);
+    const edgeResults = network.edges.map((edge) => this.solveEdge(
+      edge,
+      densityKgPerM3,
+      dynamicViscosityPaS,
+      seriesCapable ? (solveResult?.flowM3PerS ?? 0) : (branchFlowByEdgeId?.get(edge.id) ?? 0),
+    ));
     const totalPositiveHeadLoss = edgeResults.reduce((sum, edge) => sum + Math.max(0, edge.headLossM ?? 0), 0);
-    if (seriesCapable && solveResult.status !== 'normal' && totalPositiveHeadLoss > 0) {
+    if (seriesCapable && solveResult && solveResult.status !== 'normal' && totalPositiveHeadLoss > 0) {
       edgeResults.forEach((edgeResult) => {
         const share = Math.max(0, edgeResult.headLossM ?? 0) / totalPositiveHeadLoss;
         if (share >= 0.35) {
@@ -115,23 +114,132 @@ export class PhysicsSimulationEngine {
     const nodeResults = this.buildNodeResults(network, edgeResults, seriesCapable);
 
     const warnings = this.collectSolverWarnings(network, edgeResults);
-    if (seriesCapable && solveResult.status === 'insufficientPump') {
+    if (seriesCapable && solveResult && solveResult.status === 'insufficientPump') {
       warnings.push(`Маршрут ограничен: насосный напор ${solveResult.availablePumpHeadM.toFixed(2)} м меньше требуемого ${solveResult.requiredHeadM.toFixed(2)} м.`);
     }
-    if (seriesCapable && solveResult.status === 'constrained') {
+    if (seriesCapable && solveResult && solveResult.status === 'constrained') {
+      const flowM3PerS = solveResult.flowM3PerS;
       warnings.push(`Маршрут ограничен гидросопротивлением: расчётный расход ${convertM3PerSToLpm(flowM3PerS).toFixed(2)} л/мин ниже уставки насоса ${convertM3PerSToLpm(solveResult.commandedFlowM3PerS).toFixed(2)} л/мин.`);
     }
 
     return {
       nodeResults,
       edgeResults,
-      warnings: [
-        ...warnings,
-        ...(seriesCapable
-          ? []
-          : ['Проверка потока пока поддерживает только последовательные цепочки без разветвлений: для разветвлённых графов расход равен нулю.']),
-      ],
+      warnings,
     };
+  }
+
+  private solveBranchNetworkFlow(network: HydraulicNetworkInput): Map<string, number> {
+    const incomingByNode = new Map<string, HydraulicEdge[]>();
+    const outgoingByNode = new Map<string, HydraulicEdge[]>();
+    network.nodes.forEach((node) => {
+      incomingByNode.set(node.id, []);
+      outgoingByNode.set(node.id, []);
+    });
+    network.edges.forEach((edge) => {
+      incomingByNode.get(edge.toNodeId)?.push(edge);
+      outgoingByNode.get(edge.fromNodeId)?.push(edge);
+    });
+
+    const sourceNodes = network.nodes.filter((node) => (incomingByNode.get(node.id)?.length ?? 0) === 0);
+    const sinkNodes = new Set(
+      network.nodes
+        .filter((node) => (outgoingByNode.get(node.id)?.length ?? 0) === 0)
+        .filter((node) => this.nodeCanReceive(node.id))
+        .map((node) => node.id),
+    );
+    const activeEdgeIds = new Set(network.edges.filter((edge) => this.isEdgeOpen(edge)).map((edge) => edge.id));
+    const flows = new Map<string, number>(network.edges.map((edge) => [edge.id, 0]));
+    if (sourceNodes.length === 0 || sinkNodes.size === 0 || activeEdgeIds.size === 0) return flows;
+
+    const canReachSink = new Set<string>();
+    const reverseQueue = [...sinkNodes];
+    while (reverseQueue.length) {
+      const nodeId = reverseQueue.pop()!;
+      if (canReachSink.has(nodeId)) continue;
+      canReachSink.add(nodeId);
+      const incoming = incomingByNode.get(nodeId) ?? [];
+      incoming.forEach((edge) => {
+        if (!activeEdgeIds.has(edge.id)) return;
+        reverseQueue.push(edge.fromNodeId);
+      });
+    }
+
+    const sourceInjection = new Map<string, number>();
+    sourceNodes.forEach((node) => {
+      if (!canReachSink.has(node.id)) return;
+      sourceInjection.set(node.id, this.estimateSourceSupply(node.id, outgoingByNode.get(node.id) ?? []));
+    });
+
+    for (let iteration = 0; iteration < 24; iteration += 1) {
+      const nodeIn = new Map<string, number>();
+      network.nodes.forEach((node) => {
+        nodeIn.set(node.id, sourceInjection.get(node.id) ?? 0);
+      });
+      network.edges.forEach((edge) => {
+        nodeIn.set(edge.toNodeId, (nodeIn.get(edge.toNodeId) ?? 0) + (flows.get(edge.id) ?? 0));
+      });
+
+      network.nodes.forEach((node) => {
+        const inflow = nodeIn.get(node.id) ?? 0;
+        const outgoing = (outgoingByNode.get(node.id) ?? []).filter((edge) => activeEdgeIds.has(edge.id) && canReachSink.has(edge.toNodeId));
+        if (outgoing.length === 0 || inflow <= PHYSICS_CONSTANTS.minimumPositiveFlowM3PerS) {
+          outgoing.forEach((edge) => flows.set(edge.id, 0));
+          return;
+        }
+        const weights = outgoing.map((edge) => this.branchConductance(edge));
+        const weightSum = weights.reduce((sum, value) => sum + value, 0);
+        if (weightSum <= 1e-12) {
+          outgoing.forEach((edge) => flows.set(edge.id, 0));
+          return;
+        }
+        outgoing.forEach((edge, index) => {
+          const target = inflow * (weights[index] / weightSum);
+          const previous = flows.get(edge.id) ?? 0;
+          flows.set(edge.id, previous * 0.4 + target * 0.6);
+        });
+      });
+    }
+
+    return flows;
+  }
+
+  private isEdgeOpen(edge: HydraulicEdge): boolean {
+    if (edge.kind === 'valve') return clamp(edge.openingRatio, 0, 1) > 0;
+    if (edge.kind === 'pump') return Math.max(edge.speedRatio ?? 1, 0) > 0;
+    return true;
+  }
+
+  private estimateSourceSupply(nodeId: string, outgoingEdges: HydraulicEdge[]): number {
+    const tankState = this.state.tankStates[nodeId];
+    const hasInventory = !tankState || tankState.volumeM3 > Math.max(PHYSICS_CONSTANTS.minimumPositiveFlowM3PerS, tankState.minVolumeM3 + 1e-6);
+    if (!hasInventory) return 0;
+    const pumpDriven = outgoingEdges
+      .filter((edge): edge is Extract<HydraulicEdge, { kind: 'pump' }> => edge.kind === 'pump')
+      .reduce((sum, edge) => sum + Math.max(0, edge.ratedFlowM3PerS * Math.max(edge.speedRatio ?? 1, 0)), 0);
+    if (pumpDriven > 0) return pumpDriven;
+    return 0.003;
+  }
+
+  private nodeCanReceive(nodeId: string): boolean {
+    const tankState = this.state.tankStates[nodeId];
+    if (!tankState) return true;
+    return tankState.volumeM3 < tankState.maxVolumeM3 - 1e-6;
+  }
+
+  private branchConductance(edge: HydraulicEdge): number {
+    if (edge.kind === 'pump') {
+      return Math.max(edge.ratedFlowM3PerS * Math.max(edge.speedRatio ?? 1, 0), 1e-6);
+    }
+    if (edge.kind === 'valve') {
+      const opening = clamp(edge.openingRatio, 0, 1);
+      if (opening <= 0) return 0;
+      const kv = Math.max(edge.kvM3PerHour, 1e-6);
+      return (kv * opening) / 100;
+    }
+    const diameterFactor = Math.max(edge.innerDiameterM, 1e-4) ** 4;
+    const resistance = Math.max(edge.lengthM, 0.1) * (1 + Math.max(edge.minorLossCoefficient ?? 0, 0));
+    return diameterFactor / Math.max(resistance, 1e-6);
   }
 
   private collectSolverWarnings(network: HydraulicNetworkInput, edgeResults: SolverSnapshot['edgeResults']): string[] {
@@ -381,13 +489,7 @@ export class PhysicsSimulationEngine {
     edgeResults: SolverSnapshot['edgeResults'],
     seriesCapable: boolean,
   ): NodeHydraulicResult[] {
-    if (!seriesCapable) {
-      return network.nodes.map((node) => ({
-        nodeId: node.id,
-        pressurePa: PHYSICS_CONSTANTS.atmosphericPressurePa,
-        headM: node.elevationM,
-      }));
-    }
+    if (!seriesCapable) return this.buildBranchNodeResults(network, edgeResults);
     const orderedEdges = this.orderSeriesEdges(network);
     const edgeResultById = new Map(edgeResults.map((item) => [item.edgeId, item]));
     const byNode = new Map<string, NodeHydraulicResult>();
@@ -417,6 +519,45 @@ export class PhysicsSimulationEngine {
       pressurePa: PHYSICS_CONSTANTS.atmosphericPressurePa,
       headM: node.elevationM,
     }));
+  }
+
+  private buildBranchNodeResults(network: HydraulicNetworkInput, edgeResults: SolverSnapshot['edgeResults']): NodeHydraulicResult[] {
+    const incomingByNode = new Map<string, HydraulicEdge[]>();
+    const outgoingByNode = new Map<string, HydraulicEdge[]>();
+    network.nodes.forEach((node) => {
+      incomingByNode.set(node.id, []);
+      outgoingByNode.set(node.id, []);
+    });
+    network.edges.forEach((edge) => {
+      incomingByNode.get(edge.toNodeId)?.push(edge);
+      outgoingByNode.get(edge.fromNodeId)?.push(edge);
+    });
+    const edgeResultById = new Map(edgeResults.map((result) => [result.edgeId, result]));
+    const pressureByNode = new Map<string, number>();
+    network.nodes
+      .filter((node) => (incomingByNode.get(node.id)?.length ?? 0) === 0)
+      .forEach((node) => pressureByNode.set(node.id, PHYSICS_CONSTANTS.atmosphericPressurePa));
+
+    for (let i = 0; i < Math.max(network.nodes.length * 2, 8); i += 1) {
+      network.edges.forEach((edge) => {
+        const fromPressure = pressureByNode.get(edge.fromNodeId);
+        if (fromPressure === undefined) return;
+        const edgeResult = edgeResultById.get(edge.id);
+        if (!edgeResult) return;
+        const candidate = fromPressure - edgeResult.pressureDropPa;
+        const current = pressureByNode.get(edge.toNodeId);
+        pressureByNode.set(edge.toNodeId, current === undefined ? candidate : current * 0.5 + candidate * 0.5);
+      });
+    }
+
+    return network.nodes.map((node) => {
+      const pressurePa = pressureByNode.get(node.id) ?? PHYSICS_CONSTANTS.atmosphericPressurePa;
+      return {
+        nodeId: node.id,
+        pressurePa,
+        headM: this.pressureToHeadM(pressurePa, network.fluid.densityKgPerM3),
+      };
+    });
   }
 
   private pressureToHeadM(pressurePa: number, densityKgPerM3: number): number {
