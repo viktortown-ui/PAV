@@ -1,7 +1,7 @@
 import { componentMap } from '../registry/componentRegistry';
 import { getHandleIds, normalizeProjectEdgeHandles } from '../flow/handles';
 import { demoProject } from '../templates/templates';
-import { CompositeMediumType, DefaultValueMap, EventLogEntry, FlowDirection, FlowDirectionMode, LineRole, MediumMode, MediumType, ProjectDefaults, ProjectDocument, ProjectViewState, RouteState, Severity, SimulationSettings, SoapEdge, SoapNode, SoapNodeData, SoapNodeKind, TemplateId, TemplateViewMetadata, ValidationIssue } from '../schemas/types';
+import { CompositeMediumType, DefaultValueMap, EventLogEntry, FlowDirection, FlowDirectionMode, LineRole, MeasurementPoint, MediumMode, MediumType, ProjectDefaults, ProjectDocument, ProjectViewState, RouteState, Severity, SimulationSettings, SoapEdge, SoapNode, SoapNodeData, SoapNodeKind, TemplateId, TemplateViewMetadata, ValidationIssue } from '../schemas/types';
 
 const TEMPLATE_IDS = new Set(['water-prep', 'soap-line', 'cip-fragment'] as const);
 const MEDIUM_TYPES = new Set<MediumType>(['water', 'product', 'cip', 'waste']);
@@ -217,6 +217,39 @@ const sanitizeEdge = (value: unknown, nodeIds: Set<string>): SoapEdge | null => 
   };
 };
 
+const sanitizeMeasurementPoint = (value: unknown, nodeIds: Set<string>, edgeIds: Set<string>): MeasurementPoint | null => {
+  if (!isObject(value) || typeof value.id !== 'string') return null;
+  const type = value.type === 'pressure' || value.type === 'temperature' || value.type === 'flow' || value.type === 'probe'
+    ? value.type
+    : 'probe';
+  const anchorRaw = isObject(value.anchor) ? value.anchor : {};
+  const kind = anchorRaw.kind === 'node' || anchorRaw.kind === 'edge' || anchorRaw.kind === 'canvas' ? anchorRaw.kind : 'canvas';
+  const nodeId = typeof anchorRaw.nodeId === 'string' && nodeIds.has(anchorRaw.nodeId) ? anchorRaw.nodeId : undefined;
+  const edgeId = typeof anchorRaw.edgeId === 'string' && edgeIds.has(anchorRaw.edgeId) ? anchorRaw.edgeId : undefined;
+  const anchor: MeasurementPoint['anchor'] = {
+    kind: (kind === 'node' && nodeId) || (kind === 'edge' && edgeId) ? kind : 'canvas' as const,
+    nodeId,
+    edgeId,
+    ratio: Math.max(0, Math.min(1, asNumber(anchorRaw.ratio, 0.5))),
+    x: asNumber(anchorRaw.x, 0),
+    y: asNumber(anchorRaw.y, 0),
+    offsetX: asNumber(anchorRaw.offsetX, 14),
+    offsetY: asNumber(anchorRaw.offsetY, -14),
+  };
+  return {
+    id: value.id,
+    type,
+    shortTag: asString(value.shortTag, 'КТ'),
+    label: typeof value.label === 'string' ? value.label : undefined,
+    anchor,
+    visible: asBoolean(value.visible, true),
+    enabled: asBoolean(value.enabled, true),
+    notes: typeof value.notes === 'string' ? value.notes : undefined,
+    createdAt: asString(value.createdAt, new Date().toISOString()),
+    updatedAt: asString(value.updatedAt, new Date().toISOString()),
+  };
+};
+
 export const restoreProjectDocument = (value: unknown): ProjectDocument => {
   if (!isObject(value)) throw new Error('Сохранённый проект не является объектом.');
   const fallback = structuredClone(demoProject);
@@ -224,8 +257,12 @@ export const restoreProjectDocument = (value: unknown): ProjectDocument => {
   if (!nodes.length) throw new Error('Сохранённый проект не содержит корректных узлов.');
   const nodeIds = new Set(nodes.map((node) => node.id));
   const edges = Array.isArray(value.edges) ? value.edges.map((edge) => sanitizeEdge(edge, nodeIds)).filter((e): e is SoapEdge => e !== null) : [];
+  const edgeIds = new Set(edges.map((edge) => edge.id));
+  const measurementPoints = Array.isArray(value.measurementPoints)
+    ? value.measurementPoints.map((item) => sanitizeMeasurementPoint(item, nodeIds, edgeIds)).filter((item): item is MeasurementPoint => item !== null)
+    : [];
   const templateId: TemplateId = typeof value.templateId === 'string' && TEMPLATE_IDS.has(value.templateId as TemplateId) ? value.templateId as TemplateId : fallback.templateId;
-  return normalizeProjectEdgeHandles({ id: asString(value.id, fallback.id), name: asString(value.name, fallback.name), templateId, updatedAt: asString(value.updatedAt, new Date().toISOString()), appSchemaVersion: asNumber(value.appSchemaVersion, fallback.appSchemaVersion), projectSchemaVersion: asNumber(value.projectSchemaVersion, fallback.projectSchemaVersion), nodes, edges, view: sanitizeView(value.view, fallback.view), simulation: sanitizeSimulation(value.simulation, fallback.simulation), eventLog: sanitizeEventLog(value.eventLog, fallback.eventLog), defaults: sanitizeProjectDefaults(value.defaults, fallback.defaults) });
+  return normalizeProjectEdgeHandles({ id: asString(value.id, fallback.id), name: asString(value.name, fallback.name), templateId, updatedAt: asString(value.updatedAt, new Date().toISOString()), appSchemaVersion: asNumber(value.appSchemaVersion, fallback.appSchemaVersion), projectSchemaVersion: asNumber(value.projectSchemaVersion, fallback.projectSchemaVersion), nodes, edges, view: sanitizeView(value.view, fallback.view), simulation: sanitizeSimulation(value.simulation, fallback.simulation), eventLog: sanitizeEventLog(value.eventLog, fallback.eventLog), measurementPoints, defaults: sanitizeProjectDefaults(value.defaults, fallback.defaults) });
 };
 
 export const validateProject = (project: ProjectDocument): ValidationIssue[] => {

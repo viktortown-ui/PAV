@@ -708,6 +708,28 @@ button.primary, .toolbox-actions .primary { background: linear-gradient(180deg, 
 .local-action-btn.is-warning { border-color: rgba(255, 201, 109, 0.45); }
 .local-action-btn.is-danger { border-color: rgba(255, 125, 153, 0.42); background: rgba(72, 29, 41, 0.94); }
 .local-action-btn:disabled { cursor: not-allowed; opacity: 0.5; filter: grayscale(0.2); }
+.measurement-layer { position: absolute; inset: 0; z-index: 6; pointer-events: none; }
+.measurement-marker {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 1px solid rgba(152, 179, 209, 0.44);
+  background: rgba(13, 31, 47, 0.92);
+  color: #deecff;
+  font-size: 11px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  pointer-events: auto;
+}
+.measurement-marker.type-pressure { border-color: rgba(95, 151, 255, 0.66); }
+.measurement-marker.type-temperature { border-color: rgba(255, 165, 98, 0.72); }
+.measurement-marker.type-flow { border-color: rgba(98, 223, 176, 0.7); }
+.measurement-marker.type-probe { border-color: rgba(188, 161, 255, 0.72); }
+.measurement-marker.is-selected { box-shadow: 0 0 0 2px rgba(166, 205, 255, 0.36); }
+.measurement-marker.is-live { background: rgba(19, 42, 62, 0.97); }
 .is-focus-mode .shell-rail-right { border-left-color: rgba(122, 150, 183, 0.08); }
 .is-focus-mode .shell-rail-right button { width: 42px; min-height: 42px; }
 

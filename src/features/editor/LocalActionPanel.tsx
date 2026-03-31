@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { EquipmentStatus, PresentationMode, RouteState, SoapEdge, SoapNode } from '../../domain/schemas/types';
+import { EquipmentStatus, MeasurementPoint, PresentationMode, RouteState, SoapEdge, SoapNode } from '../../domain/schemas/types';
 import { useAppStore } from '../../store/useAppStore';
 
 type PanelAnchor = {
@@ -123,11 +123,13 @@ const formatPanelPosition = (anchor: PanelAnchor) => {
 export const LocalActionPanel = ({
   selectedNode,
   selectedEdge,
+  selectedMeasurementPoint,
   anchor,
   presentationMode,
 }: {
   selectedNode?: SoapNode;
   selectedEdge?: SoapEdge;
+  selectedMeasurementPoint?: MeasurementPoint;
   anchor?: PanelAnchor;
   presentationMode: PresentationMode;
 }) => {
@@ -135,11 +137,35 @@ export const LocalActionPanel = ({
   const executeEdgeAction = useAppStore((state) => state.executeEdgeAction);
   const selectNode = useAppStore((state) => state.selectNode);
   const setInspectorTab = useAppStore((state) => state.setInspectorTab);
+  const deleteMeasurementPoint = useAppStore((state) => state.deleteMeasurementPoint);
   const project = useAppStore((state) => state.project);
 
   const panelPosition = useMemo(() => (anchor ? formatPanelPosition(anchor) : undefined), [anchor]);
 
-  if (!anchor || (!selectedNode && !selectedEdge) || !panelPosition) return null;
+  if (!anchor || (!selectedNode && !selectedEdge && !selectedMeasurementPoint) || !panelPosition) return null;
+
+  if (selectedMeasurementPoint) {
+    const sourceEdge = selectedMeasurementPoint.anchor.edgeId ? project.edges.find((edge) => edge.id === selectedMeasurementPoint.anchor.edgeId) : undefined;
+    const sourceNode = selectedMeasurementPoint.anchor.nodeId ? project.nodes.find((node) => node.id === selectedMeasurementPoint.anchor.nodeId) : undefined;
+    const pressure = sourceEdge?.data?.pressure ?? (sourceNode?.data.process as any)?.pressureBar;
+    const temperature = (sourceNode?.data.process as any)?.temperatureC;
+    const flow = sourceEdge?.data?.flowLpm ?? sourceEdge?.data?.flowRate ?? sourceNode?.data.runtime.flowLpm;
+    return <aside className={`local-action-panel ${panelPosition.placeLeft ? 'is-flipped' : ''}`} style={{ left: panelPosition.left, top: panelPosition.top }}>
+      <header className="local-action-panel__head">
+        <strong>{selectedMeasurementPoint.shortTag}</strong>
+        <span>{selectedMeasurementPoint.type === 'pressure' ? 'Манометр' : selectedMeasurementPoint.type === 'temperature' ? 'Термометр' : selectedMeasurementPoint.type === 'flow' ? 'Расходомер' : 'Контрольная точка'}</span>
+      </header>
+      <div className="local-action-panel__status-row">
+        <span className="local-status">{pressure != null ? `${pressure.toFixed(2)} бар` : 'давление: нет данных'}</span>
+        <span className="local-status">{temperature != null ? `${temperature.toFixed(1)} °C` : 'температура: нет данных'}</span>
+        <span className="local-status">{flow != null ? `${flow.toFixed(1)} л/мин` : 'расход: нет данных'}</span>
+      </div>
+      <div className="local-action-grid">
+        <button type="button" className="local-action-btn" onClick={() => setInspectorTab('main')}>В инспектор</button>
+        <button type="button" className="local-action-btn is-danger" onClick={() => deleteMeasurementPoint(selectedMeasurementPoint.id)}>Удалить</button>
+      </div>
+    </aside>;
+  }
 
   if (selectedNode) {
     const actions = buildNodeActions(selectedNode);

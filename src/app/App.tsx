@@ -1,6 +1,7 @@
 import { Component, ErrorInfo, ReactNode, useEffect, useMemo, useState } from 'react';
 import { useReactFlow } from 'reactflow';
 import { CanvasEditor } from '../features/editor/CanvasEditor';
+import type { CanvasTool } from '../features/editor/CanvasEditor';
 import { TopToolbar } from '../features/editor/TopToolbar';
 import { InspectorPanel } from '../features/inspector/InspectorPanel';
 import { ToolboxPanel } from '../features/toolbox/ToolboxPanel';
@@ -169,7 +170,7 @@ export const App = () => {
   const addNode = useAppStore((state) => state.addNode);
   const [leftShell, setLeftShell] = useState<LeftShellState>(() => defaultLeftShellState());
   const [rightPanel, setRightPanel] = useState<RightPanelKey>('inspector');
-  const [activeCanvasTool, setActiveCanvasTool] = useState<'select' | 'connect'>('select');
+  const [activeCanvasTool, setActiveCanvasTool] = useState<CanvasTool>('select');
   const [gridEnabled, setGridEnabled] = useState(true);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
 

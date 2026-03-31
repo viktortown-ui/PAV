@@ -248,16 +248,59 @@ const liveRows = (params: {
 export const InspectorPanel = ({ compact = false }: { compact?: boolean }) => {
   const selectedNodeId = useAppStore((state) => state.selectedNodeId);
   const selectedEdgeId = useAppStore((state) => state.selectedEdgeId);
+  const selectedMeasurementPointId = useAppStore((state) => state.selectedMeasurementPointId);
   const project = useAppStore((state) => state.project);
   const updateNodeField = useAppStore((state) => state.updateNodeField);
   const updateEdgeField = useAppStore((state) => state.updateEdgeField);
+  const updateMeasurementPoint = useAppStore((state) => state.updateMeasurementPoint);
+  const deleteMeasurementPoint = useAppStore((state) => state.deleteMeasurementPoint);
   const executeNodeAction = useAppStore((state) => state.executeNodeAction);
   const issues = useAppStore((state) => state.issues);
   const executeEdgeAction = useAppStore((state) => state.executeEdgeAction);
   const node = project.nodes.find((item) => item.id === selectedNodeId);
   const edge = project.edges.find((item) => item.id === selectedEdgeId);
+  const measurementPoint = project.measurementPoints.find((item) => item.id === selectedMeasurementPointId);
 
-  if (!node && !edge) return <aside className={`panel inspector-panel ${compact ? 'is-compact' : ''}`}><div className="panel-title">Инспектор</div><p className="empty-state">Выберите оборудование или линию, чтобы увидеть управление, параметры и диагностику.</p><DiagnosticsSection /></aside>;
+  if (!node && !edge && !measurementPoint) return <aside className={`panel inspector-panel ${compact ? 'is-compact' : ''}`}><div className="panel-title">Инспектор</div><p className="empty-state">Выберите оборудование, линию или точку измерения.</p><DiagnosticsSection /></aside>;
+
+  if (measurementPoint) {
+    const edgeRef = measurementPoint.anchor.edgeId ? project.edges.find((item) => item.id === measurementPoint.anchor.edgeId) : undefined;
+    const nodeRef = measurementPoint.anchor.nodeId ? project.nodes.find((item) => item.id === measurementPoint.anchor.nodeId) : undefined;
+    const process = nodeRef?.data.process as Record<string, number | string | boolean> | undefined;
+    const pressure = edgeRef?.data?.pressure ?? (typeof process?.pressureBar === 'number' ? process.pressureBar : undefined);
+    const temperature = typeof process?.temperatureC === 'number' ? process.temperatureC : undefined;
+    const flow = edgeRef?.data?.flowLpm ?? edgeRef?.data?.flowRate ?? nodeRef?.data.runtime.flowLpm;
+    const velocity = edgeRef?.data?.velocityMPerS;
+    const medium = edgeRef?.data?.medium ?? nodeRef?.data.medium;
+    const anchorText = nodeRef ? `Узел: ${nodeRef.data.visibleName}` : edgeRef ? `Линия: ${edgeRef.data?.sourceLabel ?? edgeRef.source} → ${edgeRef.data?.targetLabel ?? edgeRef.target}` : 'Свободная точка';
+    return <aside className={`panel inspector-panel ${compact ? 'is-compact' : ''}`}>
+      <div className="panel-title">Измерительная точка</div>
+      <section className="route-card inspector-card">
+        <strong>{measurementPoint.type === 'pressure' ? 'Манометр' : measurementPoint.type === 'temperature' ? 'Термометр' : measurementPoint.type === 'flow' ? 'Расходомер' : 'Универсальная контрольная точка'}</strong>
+        <span>{anchorText}</span>
+      </section>
+      <section className="route-card inspector-card">
+        <strong>Паспорт точки</strong>
+        <label className="field"><span>Короткий тег</span><input type="text" value={measurementPoint.shortTag} onChange={(e) => updateMeasurementPoint(measurementPoint.id, { shortTag: e.target.value })} /></label>
+        <label className="field"><span>Название</span><input type="text" value={measurementPoint.label ?? ''} onChange={(e) => updateMeasurementPoint(measurementPoint.id, { label: e.target.value })} /></label>
+        <label className="field"><span>Включена</span><input type="checkbox" checked={measurementPoint.enabled} onChange={(e) => updateMeasurementPoint(measurementPoint.id, { enabled: e.target.checked })} /></label>
+        <label className="field"><span>Видимая</span><input type="checkbox" checked={measurementPoint.visible} onChange={(e) => updateMeasurementPoint(measurementPoint.id, { visible: e.target.checked })} /></label>
+        <button className="control-button is-danger" onClick={() => deleteMeasurementPoint(measurementPoint.id)}>Удалить точку</button>
+      </section>
+      <section className="route-card inspector-card">
+        <strong>Текущие показания</strong>
+        <div className="issue-list issue-list-detailed">
+          <div className="issue-card severity-info"><strong>Давление</strong><span>{pressure != null ? `${formatSmartNumber(Number(pressure), 2)} бар` : 'Нет расчёта'}</span></div>
+          <div className="issue-card severity-info"><strong>Температура</strong><span>{temperature != null ? `${formatSmartNumber(Number(temperature), 1)} °C` : 'Нет расчёта'}</span></div>
+          <div className="issue-card severity-info"><strong>Расход</strong><span>{flow != null ? `${formatSmartNumber(Number(flow), 1)} л/мин` : 'Нет расчёта'}</span></div>
+          {measurementPoint.type === 'probe' ? <>
+            <div className="issue-card severity-info"><strong>Скорость</strong><span>{velocity != null ? `${formatSmartNumber(Number(velocity), 2)} м/с` : 'Пока не рассчитывается'}</span></div>
+            <div className="issue-card severity-info"><strong>Среда</strong><span>{medium ? (ruMedium[medium] ?? medium) : 'Нет данных'}</span></div>
+          </> : null}
+        </div>
+      </section>
+    </aside>;
+  }
 
   if (edge) {
     const source = project.nodes.find((item) => item.id === edge.source);

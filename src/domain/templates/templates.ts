@@ -2,8 +2,8 @@ import { MarkerType, Viewport } from 'reactflow';
 import { componentMap } from '../registry/componentRegistry';
 import { ProjectDefaults, ProjectDocument, SoapEdge, SoapNode, SoapNodeKind, TemplateId, TemplateViewMetadata } from '../schemas/types';
 
-export const APP_SCHEMA_VERSION = 2;
-export const PROJECT_SCHEMA_VERSION = 2;
+export const APP_SCHEMA_VERSION = 3;
+export const PROJECT_SCHEMA_VERSION = 3;
 
 const node = (id: string, type: SoapNodeKind, x: number, y: number, visibleName?: string, technicalTag?: string): SoapNode => {
   const def = componentMap.get(type)!;
@@ -98,6 +98,7 @@ const makeProject = (id: TemplateId, name: string, nodes: SoapNode[], edges: Soa
   view: { metadata, viewport: createInitialViewport(metadata), hasManualViewport: false, presentationMode: 'schematic' },
   simulation: { status: 'idle', running: false, speed: 1, tick: 0, warnings: [], activeMedium: 'none', totalActiveFlow: 0, lastEvent: 'Проект загружен', fluid: { id: 'water', kind: 'water', name: 'Вода', densityKgPerM3: 998, dynamicViscosityPaS: 0.001002 }, scenarioRevision: 0 },
   eventLog: [{ id: crypto.randomUUID(), timestamp: new Date().toISOString(), type: 'template', message: `Загружен шаблон: ${name}`, severity: 'info' }],
+  measurementPoints: [],
   nodes, edges,
   defaults: { project: structuredClone(projectDefaults.project), template: structuredClone(templateDefaultsById[id]) },
 });
