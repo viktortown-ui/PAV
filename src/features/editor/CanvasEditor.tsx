@@ -6,6 +6,7 @@ import { ProcessNode } from '../../ui/nodes/ProcessNode';
 import { useAppStore } from '../../store/useAppStore';
 import { instrumentCallsite } from '../../utils/instrumentation';
 import { LocalActionPanel } from './LocalActionPanel';
+import { SoapEdge, SoapNode } from '../../domain/schemas/types';
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const VIEWPORT_POSITION_EPSILON = 0.5;
@@ -17,6 +18,9 @@ const edgeTypes = { flowEdge: FlowEdge };
 const EDGE_ANCHOR_OFFSET = 26;
 export type CanvasTool = 'select' | 'connect' | 'measure-pressure' | 'measure-temperature' | 'measure-flow' | 'measure-probe';
 type MarkerAnchor = { worldX: number; worldY: number; anchorText: string };
+type ContextTarget = { kind: 'node'; nodeId: string } | { kind: 'edge'; edgeId: string } | { kind: 'canvas' };
+type ContextMenuState = { x: number; y: number; target: ContextTarget };
+type ContextMenuItem = { id: string; label: string; onClick: () => void; disabled?: boolean; tone?: 'danger'; note?: string };
 
 const sameViewport = (a: Viewport, b: Viewport) => (
   Math.abs(a.x - b.x) < VIEWPORT_POSITION_EPSILON
@@ -51,6 +55,12 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
     selectEdge,
     selectMeasurementPoint,
     addMeasurementPoint,
+    executeNodeAction,
+    executeEdgeAction,
+    updateNodeField,
+    updateEdgeField,
+    openLibraryPicker,
+    setInspectorTab,
     setViewportState,
     measurementPoints,
     selectedMeasurementPointId,
@@ -76,6 +86,12 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
     selectEdge: state.selectEdge,
     selectMeasurementPoint: state.selectMeasurementPoint,
     addMeasurementPoint: state.addMeasurementPoint,
+    executeNodeAction: state.executeNodeAction,
+    executeEdgeAction: state.executeEdgeAction,
+    updateNodeField: state.updateNodeField,
+    updateEdgeField: state.updateEdgeField,
+    openLibraryPicker: state.openLibraryPicker,
+    setInspectorTab: state.setInspectorTab,
     setViewportState: state.setViewport,
     measurementPoints: state.project.measurementPoints,
     selectedMeasurementPointId: state.selectedMeasurementPointId,
@@ -85,12 +101,15 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
   const frameRef = useRef<number>();
   const lastTimeRef = useRef<number>();
   const shellRef = useRef<HTMLDivElement>(null);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
   const suppressMoveEndRef = useRef(false);
   const appliedViewportNonceRef = useRef<number | null>(null);
   const latestViewRef = useRef(view);
   const [flow, setFlow] = useState<ReactFlowInstance | null>(null);
   const [isViewportLocked, setIsViewportLocked] = useState(false);
   const [liveViewport, setLiveViewport] = useState<Viewport>(view.viewport);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState>();
+  const [menuPosition, setMenuPosition] = useState<{ left: number; top: number }>();
 
   useEffect(() => {
     latestViewRef.current = view;
@@ -325,6 +344,168 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
     await flow.fitView({ padding: 0.2, duration: 220 });
   }, [flow]);
 
+  const handleResetZoom = useCallback(async () => {
+    if (!flow) return;
+    const metadata = view.metadata;
+    await flow.setViewport({ x: liveViewport.x, y: liveViewport.y, zoom: metadata.defaultZoom }, { duration: 180 });
+  }, [flow, liveViewport.x, liveViewport.y, view.metadata]);
+
+  const closeContextMenu = useCallback(() => {
+    setContextMenu(undefined);
+    setMenuPosition(undefined);
+  }, []);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (contextMenuRef.current?.contains(target)) return;
+      closeContextMenu();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeContextMenu();
+    };
+    window.addEventListener('mousedown', onPointerDown);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('mousedown', onPointerDown);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [closeContextMenu, contextMenu]);
+
+  useEffect(() => {
+    if (!contextMenu || !contextMenuRef.current || !shellRef.current) return;
+    const menuRect = contextMenuRef.current.getBoundingClientRect();
+    const shellRect = shellRef.current.getBoundingClientRect();
+    const gap = 8;
+    const left = Math.max(gap, Math.min(shellRect.width - menuRect.width - gap, contextMenu.x));
+    const top = Math.max(gap, Math.min(shellRect.height - menuRect.height - gap, contextMenu.y));
+    setMenuPosition({ left, top });
+  }, [contextMenu]);
+
+  const nodeById = useMemo(() => new Map(projectNodes.map((node) => [node.id, node])), [projectNodes]);
+  const edgeById = useMemo(() => new Map(projectEdges.map((edge) => [edge.id, edge])), [projectEdges]);
+
+  const withNodeSelection = useCallback((nodeId: string, callback: () => void) => {
+    selectNode(nodeId);
+    callback();
+    closeContextMenu();
+  }, [closeContextMenu, selectNode]);
+
+  const withEdgeSelection = useCallback((edgeId: string, callback: () => void) => {
+    selectEdge(edgeId);
+    callback();
+    closeContextMenu();
+  }, [closeContextMenu, selectEdge]);
+
+  const nodeMenuItems = useCallback((node: SoapNode): ContextMenuItem[] => {
+    const process = node.data.process as any;
+    const running = Boolean(process.isRunning ?? process.pumpOn ?? node.data.status === 'running');
+    const intakeAllowed = Boolean(process.allowIntake ?? process.canReceive ?? true);
+    const dischargeAllowed = Boolean(process.allowDischarge ?? process.canDischarge ?? true);
+    const valveOpen = Boolean(process.isOpen ?? process.valveOpen ?? process.valveState !== 'closed');
+    const isAuto = (process.valveMode ?? process.mode ?? node.data.mode) === 'auto';
+    const hasAlarm = Boolean(node.data.alarms?.length || node.data.runtime.alarmText || node.data.simulation.alarmText);
+    const connectedEdge = projectEdges.find((edge) => edge.source === node.id || edge.target === node.id);
+    const sourceEdge = projectEdges.find((edge) => edge.target === node.id);
+    const targetEdge = projectEdges.find((edge) => edge.source === node.id);
+    const items: ContextMenuItem[] = [];
+
+    if (node.data.kind === 'pump' || node.data.kind === 'dosingPump') {
+      const speedFactor = Number(process.speedFactor ?? 1);
+      items.push(
+        { id: 'pump-start', label: 'Включить', disabled: running, onClick: () => withNodeSelection(node.id, () => executeNodeAction(node.id, 'pump:start')) },
+        { id: 'pump-stop', label: 'Остановить', disabled: !running, onClick: () => withNodeSelection(node.id, () => executeNodeAction(node.id, 'pump:stop')) },
+        { id: 'pump-alarm', label: 'Сбросить тревогу', disabled: !hasAlarm, onClick: () => withNodeSelection(node.id, () => executeNodeAction(node.id, 'pump:clearAlarm')) },
+        { id: 'pump-speed-up', label: 'Подача +10%', onClick: () => withNodeSelection(node.id, () => updateNodeField(node.id, 'speedFactor', Math.min(2, Number((speedFactor + 0.1).toFixed(2))))) },
+        { id: 'pump-speed-down', label: 'Подача -10%', onClick: () => withNodeSelection(node.id, () => updateNodeField(node.id, 'speedFactor', Math.max(0.1, Number((speedFactor - 0.1).toFixed(2))))) },
+      );
+    } else if (node.data.className === 'valve') {
+      items.push(
+        { id: 'valve-open', label: 'Открыть', disabled: valveOpen, onClick: () => withNodeSelection(node.id, () => executeNodeAction(node.id, 'valve:open')) },
+        { id: 'valve-close', label: 'Закрыть', disabled: !valveOpen, onClick: () => withNodeSelection(node.id, () => executeNodeAction(node.id, 'valve:close')) },
+        { id: 'valve-auto', label: 'Авто', disabled: isAuto, onClick: () => withNodeSelection(node.id, () => executeNodeAction(node.id, 'valve:auto')) },
+        { id: 'valve-manual', label: 'Ручной', disabled: !isAuto, onClick: () => withNodeSelection(node.id, () => executeNodeAction(node.id, 'valve:manual')) },
+      );
+    } else if (node.data.kind === 'tank' || node.data.kind === 'bufferTank') {
+      items.push(
+        { id: 'tank-intake-on', label: 'Разрешить приём', disabled: intakeAllowed, onClick: () => withNodeSelection(node.id, () => executeNodeAction(node.id, 'tank:enableReceive')) },
+        { id: 'tank-intake-off', label: 'Запретить приём', disabled: !intakeAllowed, onClick: () => withNodeSelection(node.id, () => executeNodeAction(node.id, 'tank:disableReceive')) },
+        { id: 'tank-discharge-on', label: 'Разрешить выдачу', disabled: dischargeAllowed, onClick: () => withNodeSelection(node.id, () => executeNodeAction(node.id, 'tank:enableDischarge')) },
+        { id: 'tank-discharge-off', label: 'Запретить выдачу', disabled: !dischargeAllowed, onClick: () => withNodeSelection(node.id, () => executeNodeAction(node.id, 'tank:disableDischarge')) },
+      );
+    } else if (node.data.kind === 'reactor' || node.data.kind === 'heatedReactor' || node.data.kind === 'fillingStation') {
+      items.push(
+        { id: 'reactor-start', label: 'Включить', disabled: running, onClick: () => withNodeSelection(node.id, () => executeNodeAction(node.id, 'reactor:start')) },
+        { id: 'reactor-stop', label: 'Остановить', disabled: !running, onClick: () => withNodeSelection(node.id, () => executeNodeAction(node.id, 'reactor:stop')) },
+        { id: 'reactor-idle', label: 'Ожидание', disabled: node.data.status === 'idle', onClick: () => withNodeSelection(node.id, () => executeNodeAction(node.id, 'reactor:setIdle')) },
+        { id: 'reactor-maint', label: 'Ремонт', disabled: node.data.status === 'maintenance', onClick: () => withNodeSelection(node.id, () => executeNodeAction(node.id, 'reactor:setMaintenance')) },
+      );
+    }
+
+    if (sourceEdge) items.push({ id: 'jump-source', label: 'Перейти к источнику', onClick: () => withNodeSelection(node.id, () => selectNode(sourceEdge.source)) });
+    if (targetEdge) items.push({ id: 'jump-target', label: 'Перейти к приёмнику', onClick: () => withNodeSelection(node.id, () => selectNode(targetEdge.target)) });
+
+    items.push(
+      { id: 'open-inspector', label: 'Открыть инспектор', onClick: () => withNodeSelection(node.id, () => setInspectorTab('main')) },
+      { id: 'measurement-probe', label: 'Поставить контрольную точку', onClick: () => withNodeSelection(node.id, () => addMeasurementPoint('probe', { nodeId: node.id })) },
+    );
+    if (connectedEdge) {
+      items.push({ id: 'measurement-pressure', label: 'Поставить манометр', onClick: () => withNodeSelection(node.id, () => addMeasurementPoint('pressure', { nodeId: node.id })) });
+    }
+    return items;
+  }, [addMeasurementPoint, executeNodeAction, projectEdges, selectNode, setInspectorTab, updateNodeField, withNodeSelection]);
+
+  const edgeMenuItems = useCallback((edge: SoapEdge): ContextMenuItem[] => {
+    const source = nodeById.get(edge.source);
+    const target = nodeById.get(edge.target);
+    const items: ContextMenuItem[] = [
+      { id: 'edge-inspector', label: 'Открыть инспектор', onClick: () => withEdgeSelection(edge.id, () => setInspectorTab('main')) },
+      { id: 'edge-source', label: 'Перейти к источнику', disabled: !source, onClick: () => withEdgeSelection(edge.id, () => source && selectNode(source.id)) },
+      { id: 'edge-target', label: 'Перейти к приёмнику', disabled: !target, onClick: () => withEdgeSelection(edge.id, () => target && selectNode(target.id)) },
+      { id: 'edge-delete', label: 'Удалить сегмент', tone: 'danger', onClick: () => withEdgeSelection(edge.id, () => executeEdgeAction('delete', edge.id)) },
+      { id: 'edge-pressure', label: 'Поставить манометр', onClick: () => withEdgeSelection(edge.id, () => addMeasurementPoint('pressure', { edgeId: edge.id, ratio: 0.5 })) },
+      { id: 'edge-flow', label: 'Поставить расходомер', onClick: () => withEdgeSelection(edge.id, () => addMeasurementPoint('flow', { edgeId: edge.id, ratio: 0.5 })) },
+      { id: 'edge-probe', label: 'Поставить контрольную точку', onClick: () => withEdgeSelection(edge.id, () => addMeasurementPoint('probe', { edgeId: edge.id, ratio: 0.5 })) },
+      { id: 'edge-insert', label: 'Добавить элемент в линию', onClick: () => withEdgeSelection(edge.id, () => openLibraryPicker('context-insert', { edgeId: edge.id })) },
+      { id: 'edge-break', label: 'Разорвать линию', onClick: () => withEdgeSelection(edge.id, () => executeEdgeAction('break', edge.id)) },
+      { id: 'edge-zeta-up', label: 'Сопротивление +0.2', onClick: () => withEdgeSelection(edge.id, () => updateEdgeField(edge.id, 'localResistanceZeta', Number((Number(edge.data?.localResistanceZeta ?? edge.data?.minorLossCoefficient ?? 1.2) + 0.2).toFixed(2)))) },
+      { id: 'edge-zeta-down', label: 'Сопротивление -0.2', onClick: () => withEdgeSelection(edge.id, () => updateEdgeField(edge.id, 'localResistanceZeta', Math.max(0, Number((Number(edge.data?.localResistanceZeta ?? edge.data?.minorLossCoefficient ?? 1.2) - 0.2).toFixed(2))))) },
+    ];
+    return items;
+  }, [addMeasurementPoint, executeEdgeAction, nodeById, openLibraryPicker, selectNode, setInspectorTab, updateEdgeField, withEdgeSelection]);
+
+  const canvasMenuItems = useMemo<ContextMenuItem[]>(() => [
+    { id: 'fit', label: 'Вписать схему', onClick: () => { void handleFitToView(); closeContextMenu(); } },
+    { id: 'reset-zoom', label: 'Сбросить масштаб', onClick: () => { void handleResetZoom(); closeContextMenu(); } },
+    { id: 'add-element', label: 'Добавить элемент', onClick: () => { openLibraryPicker('global'); closeContextMenu(); } },
+    {
+      id: 'add-point',
+      label: 'Поставить контрольную точку',
+      onClick: () => {
+        if (!flow || !contextMenu) return;
+        const position = flow.screenToFlowPosition({ x: contextMenu.x, y: contextMenu.y });
+        addMeasurementPoint('probe', { x: position.x, y: position.y });
+        closeContextMenu();
+      },
+    },
+    { id: 'open-library', label: 'Открыть библиотеку', onClick: () => { openLibraryPicker('global'); closeContextMenu(); } },
+  ], [addMeasurementPoint, closeContextMenu, contextMenu, flow, handleFitToView, handleResetZoom, openLibraryPicker]);
+
+  const contextMenuItems = useMemo(() => {
+    if (!contextMenu) return [];
+    if (contextMenu.target.kind === 'node') {
+      const node = nodeById.get(contextMenu.target.nodeId);
+      return node ? nodeMenuItems(node) : [];
+    }
+    if (contextMenu.target.kind === 'edge') {
+      const edge = edgeById.get(contextMenu.target.edgeId);
+      return edge ? edgeMenuItems(edge) : [];
+    }
+    return canvasMenuItems;
+  }, [canvasMenuItems, contextMenu, edgeById, edgeMenuItems, nodeById, nodeMenuItems]);
+
   return (
     <div className={`canvas-shell sim-${simulationStatus} ${focusMode ? 'is-focus-mode' : ''}`} ref={shellRef}>
       <ReactFlow
@@ -349,22 +530,39 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         onNodeClick={(_, node) => {
+          closeContextMenu();
           if (measurementToolType) {
             addMeasurementPoint(measurementToolType, { nodeId: node.id });
             return;
           }
           selectNode(node.id);
         }}
+        onNodeContextMenu={(event, node) => {
+          event.preventDefault();
+          const shellRect = shellRef.current?.getBoundingClientRect();
+          if (!shellRect) return;
+          selectNode(node.id);
+          setContextMenu({ x: event.clientX - shellRect.left, y: event.clientY - shellRect.top, target: { kind: 'node', nodeId: node.id } });
+        }}
         onEdgeClick={(_, edge) => {
+          closeContextMenu();
           if (measurementToolType) {
             addMeasurementPoint(measurementToolType, { edgeId: edge.id, ratio: 0.5 });
             return;
           }
           selectEdge(edge.id);
         }}
+        onEdgeContextMenu={(event, edge) => {
+          event.preventDefault();
+          const shellRect = shellRef.current?.getBoundingClientRect();
+          if (!shellRect) return;
+          selectEdge(edge.id);
+          setContextMenu({ x: event.clientX - shellRect.left, y: event.clientY - shellRect.top, target: { kind: 'edge', edgeId: edge.id } });
+        }}
         onEdgeMouseEnter={(_, edge) => hoverEdge(edge.id)}
         onEdgeMouseLeave={() => hoverEdge(undefined)}
         onPaneClick={(event) => {
+          closeContextMenu();
           if (measurementToolType) {
             const position = flow?.screenToFlowPosition({ x: event.clientX, y: event.clientY });
             addMeasurementPoint(measurementToolType, { x: position?.x ?? 0, y: position?.y ?? 0 });
@@ -374,6 +572,12 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
           selectEdge(undefined);
           selectMeasurementPoint(undefined);
           hoverEdge(undefined);
+        }}
+        onPaneContextMenu={(event) => {
+          event.preventDefault();
+          const shellRect = shellRef.current?.getBoundingClientRect();
+          if (!shellRect) return;
+          setContextMenu({ x: event.clientX - shellRect.left, y: event.clientY - shellRect.top, target: { kind: 'canvas' } });
         }}
         defaultViewport={view.viewport}
         onMoveEnd={(_, viewport) => {
@@ -419,6 +623,28 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
         })}
       </div>
       <LocalActionPanel selectedNode={selectedNode} selectedEdge={selectedEdge} selectedMeasurementPoint={selectedMeasurementPoint} anchor={selectedMeasurementPoint ? measurementPanelAnchor : localPanelAnchor} presentationMode={view.presentationMode} />
+      {contextMenu ? (
+        <div
+          ref={contextMenuRef}
+          className="context-menu"
+          style={{ left: menuPosition?.left ?? contextMenu.x, top: menuPosition?.top ?? contextMenu.y }}
+          role="menu"
+          aria-label="Контекстные действия"
+        >
+          {contextMenuItems.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={`context-menu__item ${item.tone === 'danger' ? 'is-danger' : ''}`}
+              disabled={item.disabled}
+              title={item.note}
+              onClick={item.onClick}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
       {!focusMode ? (
         <div className="canvas-navigation-cluster" aria-label="Управление видом" onWheel={stopCanvasViewportPropagation} onPointerDown={stopCanvasViewportPropagation} onMouseDown={stopCanvasViewportPropagation}>
           <div className="viewport-controls-card" aria-label="Управление видом">
