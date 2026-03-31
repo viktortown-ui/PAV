@@ -612,10 +612,11 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
             <button
               key={point.id}
               type="button"
-              className={`measurement-marker ${typeClass} ${selectedMeasurementPointId === point.id ? 'is-selected' : ''} ${view.presentationMode === 'simulation' ? 'is-live' : ''}`}
+              className={`measurement-marker ${typeClass} ${selectedMeasurementPointId === point.id ? 'is-selected' : ''} ${view.presentationMode === 'simulation' && point.enabled ? 'is-live' : ''} ${point.enabled ? '' : 'is-disabled'}`}
               style={{ left, top }}
               onClick={() => selectMeasurementPoint(point.id)}
-              title={`${point.shortTag}: ${anchor.anchorText}`}
+              disabled={!point.enabled}
+              title={`${point.shortTag}: ${anchor.anchorText}${point.enabled ? '' : ' (отключена)'}`}
             >
               <span>{glyph}</span>
             </button>

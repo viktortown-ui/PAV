@@ -150,15 +150,21 @@ export const LocalActionPanel = ({
     const pressure = sourceEdge?.data?.pressure ?? (sourceNode?.data.process as any)?.pressureBar;
     const temperature = (sourceNode?.data.process as any)?.temperatureC;
     const flow = sourceEdge?.data?.flowLpm ?? sourceEdge?.data?.flowRate ?? sourceNode?.data.runtime.flowLpm;
+    const signalRows = selectedMeasurementPoint.type === 'pressure'
+      ? [pressure != null ? `${pressure.toFixed(2)} бар` : 'Давление: нет данных', flow != null ? `${flow.toFixed(1)} л/мин` : 'Расход: нет данных']
+      : selectedMeasurementPoint.type === 'temperature'
+        ? [temperature != null ? `${temperature.toFixed(1)} °C` : 'Температура: нет данных', pressure != null ? `${pressure.toFixed(2)} бар` : 'Давление: нет данных']
+        : selectedMeasurementPoint.type === 'flow'
+          ? [flow != null ? `${flow.toFixed(1)} л/мин` : 'Расход: нет данных', pressure != null ? `${pressure.toFixed(2)} бар` : 'Давление: нет данных']
+          : [pressure != null ? `${pressure.toFixed(2)} бар` : 'Давление: нет данных', temperature != null ? `${temperature.toFixed(1)} °C` : 'Температура: нет данных', flow != null ? `${flow.toFixed(1)} л/мин` : 'Расход: нет данных'];
+    if (!selectedMeasurementPoint.enabled) signalRows.unshift('Точка отключена: сигнал не участвует в контроле');
     return <aside className={`local-action-panel ${panelPosition.placeLeft ? 'is-flipped' : ''}`} style={{ left: panelPosition.left, top: panelPosition.top }}>
       <header className="local-action-panel__head">
         <strong>{selectedMeasurementPoint.shortTag}</strong>
         <span>{selectedMeasurementPoint.type === 'pressure' ? 'Манометр' : selectedMeasurementPoint.type === 'temperature' ? 'Термометр' : selectedMeasurementPoint.type === 'flow' ? 'Расходомер' : 'Контрольная точка'}</span>
       </header>
       <div className="local-action-panel__status-row">
-        <span className="local-status">{pressure != null ? `${pressure.toFixed(2)} бар` : 'давление: нет данных'}</span>
-        <span className="local-status">{temperature != null ? `${temperature.toFixed(1)} °C` : 'температура: нет данных'}</span>
-        <span className="local-status">{flow != null ? `${flow.toFixed(1)} л/мин` : 'расход: нет данных'}</span>
+        {signalRows.map((row) => <span key={row} className="local-status">{row}</span>)}
       </div>
       <div className="local-action-grid">
         <button type="button" className="local-action-btn" onClick={() => setInspectorTab('main')}>В инспектор</button>

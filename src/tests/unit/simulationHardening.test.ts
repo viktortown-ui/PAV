@@ -288,6 +288,43 @@ describe('simulation hardening', () => {
     expect(nextPump.data.status).toBe('off');
   });
 
+
+  it('блокирует маршрут при пустой исходной ёмкости', () => {
+    const project = makeProject();
+    const source = buildNode('tank', { x: 0, y: 0 }, project);
+    const pump = buildNode('pump', { x: 150, y: 0 }, project);
+    const sink = buildNode('tank', { x: 300, y: 0 }, project);
+
+    const sourceProcess = source.data.process as any;
+    sourceProcess.currentLevelLiters = 0;
+    sourceProcess.capacityLiters = 400;
+    sourceProcess.allowDischarge = true;
+
+    const pumpProcess = pump.data.process as any;
+    pumpProcess.pumpOn = true;
+    pumpProcess.isRunning = true;
+    pumpProcess.nominalFlowLpm = 60;
+
+    const sinkProcess = sink.data.process as any;
+    sinkProcess.currentLevelLiters = 80;
+    sinkProcess.capacityLiters = 400;
+    sinkProcess.allowIntake = true;
+
+    project.nodes = [source, pump, sink];
+    project.edges = [
+      buildEdge(source.id, pump.id, 'water', 'DN50', undefined, project),
+      buildEdge(pump.id, sink.id, 'water', 'DN50', undefined, project),
+    ];
+    project.simulation = { ...project.simulation, running: true, status: 'running', speed: 1 };
+
+    const step = runSimulationStep(project, 1);
+    const blockedReasons = step.edges.flatMap((edge) => edge.data?.blockedBy ?? []);
+
+    expect(step.totalActiveFlow).toBe(0);
+    expect(blockedReasons.some((reason) => reason.includes('ёмкость пуста'))).toBe(true);
+    expect((step.nodes.find((node) => node.id === sink.id)!.data.process as any).currentLevelLiters).toBe(80);
+  });
+
   it('fluid viscosity and density influence hydraulic transfer', () => {
     const buildPumpedProject = () => {
       const project = makeProject();
