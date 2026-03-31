@@ -26,11 +26,11 @@ export type LeftShellEvent =
 export const defaultLeftShellState = (): LeftShellState => ({
   mode: 'normal',
   railVisible: true,
-  drawerOpen: true,
+  drawerOpen: false,
   activeFamily: 'library',
   quickAddCloseBehavior: 'close-drawer',
   lastNormal: {
-    drawerOpen: true,
+    drawerOpen: false,
     activeFamily: 'library',
   },
 });
@@ -147,8 +147,8 @@ export const leftShellStateMachineDefinition = `
   lastNormal = { drawerOpen, activeFamily }
 
 ВИЗУАЛЬНЫЙ КОНТРАКТ
-- Закрыто: rail видим, drawerOpen=false, ширина выдвижной панели не резервируется.
-- Открыто: rail видим, drawerOpen=true, одна оверлей-панель рядом с rail.
+- Закрыто: rail видим, drawerOpen=false, compact-rail с иконками и tooltip.
+- Открыто: rail видим, drawerOpen=true, расширенный rail с подписями инструментов.
 - Смена разделов: select-family переиспользует ту же панель и меняет контент без перестроения оболочки.
 - Быстрое добавление: quick-add-complete либо оставляет панель открытой, либо закрывает её по quickAddCloseBehavior.
 - Режим схемы: mode=focus принудительно делает drawerOpen=false, сохраняя lastNormal для восстановления.

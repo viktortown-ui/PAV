@@ -32,12 +32,13 @@ describe('leftShellState', () => {
     expect(next.lastNormal.drawerOpen).toBe(false);
   });
 
-  it('keeps the drawer open after quick add when configured to keep open', () => {
+  it('keeps the expanded rail open after quick add when configured to keep open', () => {
     const configured = transitionLeftShell(defaultLeftShellState(), {
       type: 'set-quick-add-close-behavior',
       behavior: 'keep-open',
     });
-    const next = transitionLeftShell(configured, { type: 'quick-add-complete' });
+    const opened = transitionLeftShell(configured, { type: 'toggle-drawer' });
+    const next = transitionLeftShell(opened, { type: 'quick-add-complete' });
     expect(next.drawerOpen).toBe(true);
   });
 });
