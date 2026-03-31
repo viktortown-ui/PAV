@@ -11,61 +11,187 @@ type ToolboxPanelProps = {
   onSelectTool: (tool: 'select' | 'connect') => void;
   onToggleGrid: () => void;
   onTogglePanel: (panel: 'lines' | 'diagnostics') => void;
+  presentationMode: 'simulation' | 'schematic';
 };
 
-const railActions = [
-  { id: 'select', label: 'Выбор', glyph: '↖︎', hint: 'Режим выбора и редактирования узлов.' },
-  { id: 'connect', label: 'Связи', glyph: '⟷', hint: 'Режим соединения и прокладки маршрутов.' },
-  { id: 'layers', label: 'Структура', glyph: '☰', hint: 'Открыть список линий и структуру связей.' },
-  { id: 'grid', label: 'Сетка', glyph: '#', hint: 'Показать/скрыть сетку и привязку.' },
-  { id: 'metrics', label: 'Метрики', glyph: '◔', hint: 'Показать диагностику и метрики схемы.' },
-];
+type RailControl = {
+  id: string;
+  label: string;
+  glyph: string;
+  description: string;
+  type: 'mode' | 'toggle' | 'action';
+  isActive: boolean;
+  disabled?: boolean;
+  disabledReason?: string;
+  onClick: () => void;
+};
 
-export const ToolboxPanel = ({ leftShell, stateMachineDefinition, onEvent, onOpenLibrary, activeCanvasTool, gridEnabled, activeRightPanel, onSelectTool, onToggleGrid, onTogglePanel }: ToolboxPanelProps) => (
-  <aside className="toolbox-shell tool-rail-shell" aria-label="Левая инструментальная панель">
-    <div className="shell-rail shell-rail-left" aria-label="Инструменты схемы">
-      {railActions.map((action) => (
+type RailGroup = {
+  id: string;
+  title: string;
+  controls: RailControl[];
+};
+
+export const ToolboxPanel = ({
+  leftShell,
+  stateMachineDefinition,
+  onEvent,
+  onOpenLibrary,
+  activeCanvasTool,
+  gridEnabled,
+  activeRightPanel,
+  onSelectTool,
+  onToggleGrid,
+  onTogglePanel,
+  presentationMode,
+}: ToolboxPanelProps) => {
+  const isExpanded = leftShell.drawerOpen;
+  const isFocus = leftShell.mode === 'focus';
+  const simulationMode = presentationMode === 'simulation';
+
+  const groups: RailGroup[] = [
+    {
+      id: 'selection',
+      title: 'Выбор',
+      controls: [
+        {
+          id: 'select',
+          label: 'Курсор',
+          glyph: '↖',
+          description: 'Выбор и редактирование объектов схемы.',
+          type: 'mode',
+          isActive: activeCanvasTool === 'select',
+          onClick: () => onSelectTool('select'),
+        },
+        {
+          id: 'connect',
+          label: 'Соединение',
+          glyph: '⟷',
+          description: simulationMode
+            ? 'В режиме «Симуляция» прокладка связей отключена. Переключитесь в режим «Схема». '
+            : 'Создание и прокладка связей между узлами.',
+          type: 'mode',
+          isActive: activeCanvasTool === 'connect',
+          disabled: simulationMode,
+          disabledReason: 'Доступно только в режиме «Схема».',
+          onClick: () => onSelectTool('connect'),
+        },
+      ],
+    },
+    {
+      id: 'view',
+      title: 'Вид и привязка',
+      controls: [
+        {
+          id: 'grid',
+          label: 'Сетка',
+          glyph: '#',
+          description: 'Показ сетки и привязка к шагу при перетаскивании.',
+          type: 'toggle',
+          isActive: gridEnabled,
+          onClick: onToggleGrid,
+        },
+      ],
+    },
+    {
+      id: 'panels',
+      title: 'Контроль',
+      controls: [
+        {
+          id: 'lines',
+          label: 'Линии',
+          glyph: '≋',
+          description: 'Список линий, переход к сегментам и маршрутам.',
+          type: 'toggle',
+          isActive: activeRightPanel === 'lines',
+          onClick: () => onTogglePanel('lines'),
+        },
+        {
+          id: 'diagnostics',
+          label: 'Диагностика',
+          glyph: '◔',
+          description: 'Ошибки, предупреждения и метрики текущей схемы.',
+          type: 'toggle',
+          isActive: activeRightPanel === 'diagnostics',
+          onClick: () => onTogglePanel('diagnostics'),
+        },
+      ],
+    },
+    {
+      id: 'service',
+      title: 'Сервис',
+      controls: [
+        {
+          id: 'library',
+          label: 'Библиотека',
+          glyph: '⌘',
+          description: 'Открыть библиотеку оборудования и шаблонов.',
+          type: 'action',
+          isActive: false,
+          onClick: onOpenLibrary,
+        },
+        {
+          id: 'focus',
+          label: 'Режим схемы',
+          glyph: isFocus ? '◉' : '○',
+          description: isFocus
+            ? 'Компактный режим без боковых панелей.'
+            : 'Скрыть панели и оставить только рабочее полотно.',
+          type: 'toggle',
+          isActive: isFocus,
+          onClick: () => onEvent({ type: isFocus ? 'exit-focus' : 'enter-focus' }),
+        },
+      ],
+    },
+  ];
+
+  return (
+    <aside className="toolbox-shell tool-rail-shell" aria-label="Левая инструментальная панель" data-expanded={isExpanded ? 'true' : 'false'}>
+      <div className="shell-rail shell-rail-left" aria-label="Инструменты схемы">
         <button
-          key={action.id}
           type="button"
-          className={`rail-icon-button ${(
-            (action.id === 'select' && activeCanvasTool === 'select')
-            || (action.id === 'connect' && activeCanvasTool === 'connect')
-            || (action.id === 'grid' && gridEnabled)
-            || (action.id === 'layers' && activeRightPanel === 'lines')
-            || (action.id === 'metrics' && activeRightPanel === 'diagnostics')
-          ) ? 'is-active' : ''}`}
-          onClick={() => {
-            if (action.id === 'select') onSelectTool('select');
-            if (action.id === 'connect') onSelectTool('connect');
-            if (action.id === 'grid') onToggleGrid();
-            if (action.id === 'layers') onTogglePanel('lines');
-            if (action.id === 'metrics') onTogglePanel('diagnostics');
-          }}
-          title={action.hint}
-          aria-label={action.label}
-          aria-pressed={
-            action.id === 'select' || action.id === 'connect'
-              ? activeCanvasTool === action.id
-              : action.id === 'grid'
-                ? gridEnabled
-                : action.id === 'layers'
-                  ? activeRightPanel === 'lines'
-                  : action.id === 'metrics'
-                    ? activeRightPanel === 'diagnostics'
-                    : false
-          }
+          className={`rail-expand-toggle ${isExpanded ? 'is-active' : ''}`}
+          onClick={() => onEvent({ type: 'toggle-drawer' })}
+          aria-pressed={isExpanded}
+          title={isExpanded ? 'Свернуть панель инструментов' : 'Развернуть панель инструментов'}
+          aria-label={isExpanded ? 'Свернуть панель инструментов' : 'Развернуть панель инструментов'}
         >
-          <span className="tool-rail-glyph">{action.glyph}</span>
+          <span className="tool-rail-glyph">{isExpanded ? '«' : '»'}</span>
+          {isExpanded ? <span className="rail-control-copy"><strong>Инструменты</strong><small>{simulationMode ? 'Режим: Симуляция' : 'Режим: Схема'}</small></span> : null}
         </button>
-      ))}
-      <button type="button" className="rail-icon-button rail-icon-button-library" onClick={onOpenLibrary} title="Открыть библиотеку" aria-label="Открыть библиотеку">
-        <span className="tool-rail-glyph">⌘</span>
-      </button>
-      <button type="button" className={`rail-icon-button ${leftShell.mode === 'focus' ? 'is-active' : ''}`} onClick={() => onEvent({ type: leftShell.mode === 'focus' ? 'exit-focus' : 'enter-focus' })} title="Режим схемы" aria-label="Режим схемы">
-        <span className="tool-rail-glyph">{leftShell.mode === 'focus' ? '◉' : '○'}</span>
-      </button>
-    </div>
-    <div className="tool-rail-footnote">{stateMachineDefinition.split('\n')[1]?.trim() ?? 'СОСТОЯНИЕ ЛЕВОЙ ПАНЕЛИ'}</div>
-  </aside>
-);
+
+        <div className="rail-groups" role="list">
+          {groups.map((group) => (
+            <section key={group.id} className="rail-group" aria-label={group.title}>
+              {isExpanded ? <div className="rail-group-title">{group.title}</div> : null}
+              {group.controls.map((control) => {
+                const title = control.disabled ? `${control.label}: ${control.disabledReason ?? control.description}` : `${control.label}: ${control.description}`;
+                return (
+                  <button
+                    key={control.id}
+                    type="button"
+                    className={`rail-control ${control.isActive ? 'is-active' : ''} ${control.disabled ? 'is-disabled' : ''}`}
+                    onClick={control.onClick}
+                    disabled={control.disabled}
+                    aria-pressed={control.type !== 'action' ? control.isActive : undefined}
+                    aria-label={control.label}
+                    title={title}
+                  >
+                    <span className="tool-rail-glyph" aria-hidden="true">{control.glyph}</span>
+                    {isExpanded ? (
+                      <span className="rail-control-copy">
+                        <strong>{control.label}</strong>
+                        <small>{control.disabledReason ?? control.description}</small>
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </section>
+          ))}
+        </div>
+      </div>
+      <div className="tool-rail-footnote">{stateMachineDefinition.split('\n')[1]?.trim() ?? 'СОСТОЯНИЕ ЛЕВОЙ ПАНЕЛИ'}</div>
+    </aside>
+  );
+};
