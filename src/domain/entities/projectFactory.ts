@@ -80,6 +80,16 @@ export const buildEdge = (
       segmentId: crypto.randomUUID(),
       upstreamRef: source,
       downstreamRef: target,
+      lengthM: 12,
+      innerDiameterMm: 50,
+      roughnessM: 0.000045,
+      minorLossCoefficient: 1.2,
+      localResistanceZeta: 1.2,
+      hydraulicLossBar: 0,
+      reynolds: 0,
+      frictionFactor: 0,
+      hydraulicConstraint: '',
+      pumpHeadGainM: 0,
     },
   };
 };

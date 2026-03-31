@@ -30,6 +30,11 @@ const parseDnToMeters = (dn?: string) => {
   const parsed = Number(String(dn ?? 'DN50').replace(/[^\d.]/g, ''));
   return clamp((Number.isFinite(parsed) && parsed > 0 ? parsed : 50) / 1000, 0.01, 0.6);
 };
+const parseDiameterFromEdgeData = (edge: SoapEdge) => {
+  const explicitMm = Number(edge.data?.innerDiameterMm);
+  if (Number.isFinite(explicitMm) && explicitMm > 0) return clamp(explicitMm / 1000, 0.005, 0.6);
+  return parseDnToMeters(edge.data?.nominalDiameter);
+};
 
 const metersFromLiters = (liters: number) => Math.max(0, Number(liters) || 0) / 1000;
 const litersFromM3 = (m3: number) => Math.max(0, Number(m3) || 0) * 1000;
@@ -86,7 +91,7 @@ const buildHydraulicNetwork = (project: ProjectDocument): HydraulicNetworkInput 
     const tx = target?.position.x ?? sx + 100;
     const ty = target?.position.y ?? sy;
     const lengthM = Math.max(1, Number(edge.data?.lengthM ?? Math.hypot(tx - sx, ty - sy) / 30));
-    const innerDiameterM = parseDnToMeters(edge.data?.nominalDiameter);
+    const innerDiameterM = parseDiameterFromEdgeData(edge);
 
     if (source && pumpKinds.has(source.data.kind)) {
       const p = source.data.process as any;
@@ -96,9 +101,9 @@ const buildHydraulicNetwork = (project: ProjectDocument): HydraulicNetworkInput 
         fromNodeId: edge.source,
         toNodeId: edge.target,
         ratedFlowM3PerS: Math.max(0, Number(p.nominalFlowLpm ?? p.flowRate ?? 0) / 60000),
-        ratedHeadM: Math.max(1, Number(p.ratedHeadM ?? 20)),
+        ratedHeadM: Math.max(1, Number(p.nominalHeadM ?? p.ratedHeadM ?? 20)),
         efficiency: clamp(Number(p.efficiency ?? 0.75), 0.1, 1),
-        speedRatio: Boolean(p.pumpOn ?? true) ? clamp(Number(p.speedRatio ?? 1), 0, 2) : 0,
+        speedRatio: Boolean(p.pumpOn ?? true) ? clamp(Number(p.speedFactor ?? p.speedRatio ?? 1), 0, 2) : 0,
       };
     }
 
@@ -126,7 +131,7 @@ const buildHydraulicNetwork = (project: ProjectDocument): HydraulicNetworkInput 
       lengthM,
       innerDiameterM,
       roughnessM: Number(edge.data?.roughnessM ?? 0.000045),
-      minorLossCoefficient: Number(edge.data?.minorLossCoefficient ?? 1.2),
+      minorLossCoefficient: Number(edge.data?.localResistanceZeta ?? edge.data?.minorLossCoefficient ?? 1.2),
     };
   });
 
@@ -464,6 +469,16 @@ export const runSimulationStep = (project: ProjectDocument, dt: number): Simulat
       routeState,
       pressure: Number(hydraulic?.pressureDropBar ?? 0),
       velocityMPerS: Number(hydraulic?.velocityMPerS ?? 0),
+      hydraulicLossBar: Number(hydraulic?.pressureDropBar ?? 0),
+      reynolds: Number(hydraulic?.reynolds ?? 0),
+      frictionFactor: Number(hydraulic?.frictionFactor ?? 0),
+      lengthM: Number(hydraulic?.lengthM ?? edge.data?.lengthM ?? 0),
+      innerDiameterMm: Number((hydraulic?.diameterM ?? parseDiameterFromEdgeData(edge)) * 1000),
+      roughnessM: Number(edge.data?.roughnessM ?? 0.000045),
+      localResistanceZeta: Number(hydraulic?.localResistanceZeta ?? edge.data?.localResistanceZeta ?? edge.data?.minorLossCoefficient ?? 0),
+      minorLossCoefficient: Number(hydraulic?.localResistanceZeta ?? edge.data?.localResistanceZeta ?? edge.data?.minorLossCoefficient ?? 0),
+      pumpHeadGainM: Number(hydraulic?.pumpHeadGainM ?? 0),
+      hydraulicConstraint: String(hydraulic?.hydraulicConstraint ?? ''),
       sourceLabel: source.data.visibleName,
       targetLabel: target.data.visibleName,
       stateLabel: routeState === 'flowing' ? 'Поток' : blocked ? 'Блокировка' : 'Ожидание',

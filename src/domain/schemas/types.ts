@@ -158,6 +158,8 @@ export interface ReactorProcess extends TankProcess {
 export interface PumpProcess extends BaseEquipmentProcess {
   nominalFlowLpm: number;
   actualFlowLpm: number;
+  nominalHeadM?: number;
+  speedFactor?: number;
   powerKw: number;
   rpm: number;
   startAllowed: boolean;
@@ -294,8 +296,15 @@ export interface SoapEdgeData {
   mixedFlow?: boolean;
   velocityMPerS?: number;
   lengthM?: number;
+  innerDiameterMm?: number;
   roughnessM?: number;
   minorLossCoefficient?: number;
+  localResistanceZeta?: number;
+  hydraulicLossBar?: number;
+  reynolds?: number;
+  frictionFactor?: number;
+  hydraulicConstraint?: string;
+  pumpHeadGainM?: number;
 }
 
 export type SoapNode = Node<SoapNodeData>;
