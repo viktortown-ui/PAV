@@ -756,6 +756,7 @@ button.primary, .toolbox-actions .primary { background: linear-gradient(180deg, 
 .measurement-marker.type-probe { border-color: rgba(188, 161, 255, 0.72); }
 .measurement-marker.is-selected { box-shadow: 0 0 0 2px rgba(166, 205, 255, 0.36); }
 .measurement-marker.is-live { background: rgba(19, 42, 62, 0.97); }
+.measurement-marker.is-disabled { opacity: 0.45; filter: grayscale(0.35); cursor: not-allowed; }
 .is-focus-mode .shell-rail-right { border-left-color: rgba(122, 150, 183, 0.08); }
 .is-focus-mode .shell-rail-right button { width: 42px; min-height: 42px; }
 

@@ -264,8 +264,14 @@ const nodeCanPassFlow = (node: SoapNode) => {
     const isOpen = Boolean(process.isOpen ?? process.valveOpen ?? process.valveState !== 'closed');
     if (!isOpen) return { pass: false, reason: `${node.data.visibleName}: клапан закрыт` };
   }
-  if (tankKinds.has(node.data.kind) && Boolean(process.allowDischarge) === false) {
-    return { pass: false, reason: `${node.data.visibleName}: выдача запрещена` };
+  if (tankKinds.has(node.data.kind)) {
+    if (Boolean(process.allowDischarge) === false) {
+      return { pass: false, reason: `${node.data.visibleName}: выдача запрещена` };
+    }
+    const levelLiters = toFiniteNumber(process.currentLevelLiters ?? process.level, 0);
+    if (levelLiters <= 0.001) {
+      return { pass: false, reason: `${node.data.visibleName}: ёмкость пуста` };
+    }
   }
   if (reactorKinds.has(node.data.kind) && Boolean(process.isRunning ?? true) === false) {
     return { pass: false, reason: `${node.data.visibleName}: реактор в ожидании` };
@@ -376,14 +382,31 @@ export const runSimulationStep = (project: ProjectDocument, dt: number): Simulat
     edgeBlockedBy.set(edge.id, Array.from(new Set(reasons)));
   });
 
-  const qInByNodeId = new Map<string, number>();
-  const qOutByNodeId = new Map<string, number>();
+  const accumulateNodeFlows = () => {
+    const qInByNodeId = new Map<string, number>();
+    const qOutByNodeId = new Map<string, number>();
+    nextEdges.forEach((edge) => {
+      const flow = edgeFlowById.get(edge.id) ?? 0;
+      if (flow <= 0.001) return;
+      qOutByNodeId.set(edge.source, (qOutByNodeId.get(edge.source) ?? 0) + flow);
+      qInByNodeId.set(edge.target, (qInByNodeId.get(edge.target) ?? 0) + flow);
+    });
+    return { qInByNodeId, qOutByNodeId };
+  };
+
+  let { qInByNodeId, qOutByNodeId } = accumulateNodeFlows();
+
   nextEdges.forEach((edge) => {
-    const flow = edgeFlowById.get(edge.id) ?? 0;
-    if (flow <= 0.001) return;
-    qOutByNodeId.set(edge.source, (qOutByNodeId.get(edge.source) ?? 0) + flow);
-    qInByNodeId.set(edge.target, (qInByNodeId.get(edge.target) ?? 0) + flow);
+    const source = nodeById.get(edge.source);
+    if (!source || !pumpKinds.has(source.data.kind)) return;
+    const inflowLpm = qInByNodeId.get(source.id) ?? 0;
+    if (inflowLpm > 0.001) return;
+    const reasons = edgeBlockedBy.get(edge.id) ?? [];
+    edgeBlockedBy.set(edge.id, Array.from(new Set([...reasons, `${source.data.visibleName}: нет подпитки на всасе`])));
+    edgeFlowById.set(edge.id, 0);
   });
+
+  ({ qInByNodeId, qOutByNodeId } = accumulateNodeFlows());
 
   nextEdges.forEach((edge) => {
     const source = nodeById.get(edge.source);
