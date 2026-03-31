@@ -708,6 +708,32 @@ button.primary, .toolbox-actions .primary { background: linear-gradient(180deg, 
 .local-action-btn.is-warning { border-color: rgba(255, 201, 109, 0.45); }
 .local-action-btn.is-danger { border-color: rgba(255, 125, 153, 0.42); background: rgba(72, 29, 41, 0.94); }
 .local-action-btn:disabled { cursor: not-allowed; opacity: 0.5; filter: grayscale(0.2); }
+.context-menu {
+  position: absolute;
+  min-width: 214px;
+  max-width: 280px;
+  z-index: 30;
+  border-radius: 11px;
+  border: 1px solid rgba(132, 170, 214, 0.38);
+  background: linear-gradient(180deg, rgba(8, 18, 30, 0.98), rgba(7, 15, 26, 0.98));
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.32);
+  padding: 6px;
+  display: grid;
+  gap: 4px;
+}
+.context-menu__item {
+  border: 1px solid rgba(143, 181, 226, 0.16);
+  background: rgba(20, 40, 62, 0.92);
+  color: #eaf3ff;
+  border-radius: 8px;
+  text-align: left;
+  font-size: 12px;
+  line-height: 1.2;
+  padding: 8px 10px;
+}
+.context-menu__item:hover:not(:disabled) { border-color: rgba(164, 207, 255, 0.46); background: rgba(36, 71, 107, 0.98); }
+.context-menu__item.is-danger { border-color: rgba(255, 133, 160, 0.5); background: rgba(71, 30, 43, 0.95); }
+.context-menu__item:disabled { opacity: 0.5; cursor: not-allowed; }
 .measurement-layer { position: absolute; inset: 0; z-index: 6; pointer-events: none; }
 .measurement-marker {
   position: absolute;
