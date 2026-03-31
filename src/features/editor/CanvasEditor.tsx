@@ -15,6 +15,8 @@ const isDev = import.meta.env.DEV;
 const nodeTypes = { processNode: ProcessNode };
 const edgeTypes = { flowEdge: FlowEdge };
 const EDGE_ANCHOR_OFFSET = 26;
+export type CanvasTool = 'select' | 'connect' | 'measure-pressure' | 'measure-temperature' | 'measure-flow' | 'measure-probe';
+type MarkerAnchor = { worldX: number; worldY: number; anchorText: string };
 
 const sameViewport = (a: Viewport, b: Viewport) => (
   Math.abs(a.x - b.x) < VIEWPORT_POSITION_EPSILON
@@ -28,7 +30,7 @@ const debugLog = (scope: string, message: string, payload?: unknown) => {
   else console.debug(`[perf:${scope}] ${message}`, payload);
 };
 
-const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridEnabled = true }: { focusMode?: boolean; activeTool?: 'select' | 'connect'; gridEnabled?: boolean }) => {
+const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridEnabled = true }: { focusMode?: boolean; activeTool?: CanvasTool; gridEnabled?: boolean }) => {
   const edgeLabelMode = useAppStore((state) => state.edgeLabelMode);
   const {
     nodes: projectNodes,
@@ -47,7 +49,11 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
     onConnect,
     selectNode,
     selectEdge,
+    selectMeasurementPoint,
+    addMeasurementPoint,
     setViewportState,
+    measurementPoints,
+    selectedMeasurementPointId,
     tickSimulation,
     hoverEdge,
   } = useAppStore((state) => ({
@@ -68,7 +74,11 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
     onConnect: state.onConnect,
     selectNode: state.selectNode,
     selectEdge: state.selectEdge,
+    selectMeasurementPoint: state.selectMeasurementPoint,
+    addMeasurementPoint: state.addMeasurementPoint,
     setViewportState: state.setViewport,
+    measurementPoints: state.project.measurementPoints,
+    selectedMeasurementPointId: state.selectedMeasurementPointId,
     tickSimulation: state.tickSimulation,
     hoverEdge: state.hoverEdge,
   }), shallow);
@@ -132,6 +142,16 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
   })), [edgeLabelMode, hoveredEdgeId, pathSelection.edges, problemEdgeIds, projectEdges, showProblematicOnly]);
   const selectedNode = useMemo(() => projectNodes.find((node) => node.id === selectedNodeId), [projectNodes, selectedNodeId]);
   const selectedEdge = useMemo(() => projectEdges.find((edge) => edge.id === selectedEdgeId), [projectEdges, selectedEdgeId]);
+  const selectedMeasurementPoint = useMemo(() => measurementPoints.find((point) => point.id === selectedMeasurementPointId), [measurementPoints, selectedMeasurementPointId]);
+  const measurementToolType = activeTool === 'measure-pressure'
+    ? 'pressure'
+    : activeTool === 'measure-temperature'
+      ? 'temperature'
+      : activeTool === 'measure-flow'
+        ? 'flow'
+        : activeTool === 'measure-probe'
+          ? 'probe'
+          : undefined;
 
   const getNodeVisualSize = useCallback((className: string) => {
     if (className === 'major') return { width: 230, height: 122 };
@@ -176,6 +196,57 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
 
     return undefined;
   }, [getNodeVisualSize, liveViewport.x, liveViewport.y, liveViewport.zoom, projectNodes, selectedEdge, selectedNode]);
+
+  const resolveMarkerAnchor = useCallback((pointId: string): MarkerAnchor | undefined => {
+    const point = measurementPoints.find((item) => item.id === pointId);
+    if (!point) return undefined;
+    if (point.anchor.kind === 'node' && point.anchor.nodeId) {
+      const node = projectNodes.find((item) => item.id === point.anchor.nodeId);
+      if (!node) return undefined;
+      const nodeSize = getNodeVisualSize(node.data.className);
+      return {
+        worldX: node.position.x + nodeSize.width / 2 + (point.anchor.offsetX ?? 0),
+        worldY: node.position.y + nodeSize.height / 2 + (point.anchor.offsetY ?? 0),
+        anchorText: node.data.shortName || node.data.visibleName,
+      };
+    }
+    if (point.anchor.kind === 'edge' && point.anchor.edgeId) {
+      const edge = projectEdges.find((item) => item.id === point.anchor.edgeId);
+      if (!edge) return undefined;
+      const source = projectNodes.find((item) => item.id === edge.source);
+      const target = projectNodes.find((item) => item.id === edge.target);
+      if (!source || !target) return undefined;
+      const sourceSize = getNodeVisualSize(source.data.className);
+      const targetSize = getNodeVisualSize(target.data.className);
+      const sourceX = source.position.x + sourceSize.width / 2;
+      const sourceY = source.position.y + sourceSize.height / 2;
+      const targetX = target.position.x + targetSize.width / 2;
+      const targetY = target.position.y + targetSize.height / 2;
+      const ratio = point.anchor.ratio ?? 0.5;
+      return {
+        worldX: sourceX + (targetX - sourceX) * ratio + (point.anchor.offsetX ?? 0),
+        worldY: sourceY + (targetY - sourceY) * ratio + (point.anchor.offsetY ?? 0),
+        anchorText: `${source.data.shortName} → ${target.data.shortName}`,
+      };
+    }
+    return {
+      worldX: (point.anchor.x ?? 0) + (point.anchor.offsetX ?? 0),
+      worldY: (point.anchor.y ?? 0) + (point.anchor.offsetY ?? 0),
+      anchorText: 'Координата схемы',
+    };
+  }, [getNodeVisualSize, measurementPoints, projectEdges, projectNodes]);
+
+  const measurementPanelAnchor = useMemo(() => {
+    if (!selectedMeasurementPoint || !shellRef.current) return undefined;
+    const anchor = resolveMarkerAnchor(selectedMeasurementPoint.id);
+    if (!anchor) return undefined;
+    return {
+      x: anchor.worldX * liveViewport.zoom + liveViewport.x,
+      y: anchor.worldY * liveViewport.zoom + liveViewport.y,
+      viewportWidth: shellRef.current.clientWidth,
+      viewportHeight: shellRef.current.clientHeight,
+    };
+  }, [liveViewport.x, liveViewport.y, liveViewport.zoom, resolveMarkerAnchor, selectedMeasurementPoint]);
 
   const buildCuratedViewport = useCallback((): Viewport | null => {
     if (!shellRef.current) return null;
@@ -277,11 +348,33 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
-        onNodeClick={(_, node) => selectNode(node.id)}
-        onEdgeClick={(_, edge) => selectEdge(edge.id)}
+        onNodeClick={(_, node) => {
+          if (measurementToolType) {
+            addMeasurementPoint(measurementToolType, { nodeId: node.id });
+            return;
+          }
+          selectNode(node.id);
+        }}
+        onEdgeClick={(_, edge) => {
+          if (measurementToolType) {
+            addMeasurementPoint(measurementToolType, { edgeId: edge.id, ratio: 0.5 });
+            return;
+          }
+          selectEdge(edge.id);
+        }}
         onEdgeMouseEnter={(_, edge) => hoverEdge(edge.id)}
         onEdgeMouseLeave={() => hoverEdge(undefined)}
-        onPaneClick={() => { selectNode(undefined); selectEdge(undefined); hoverEdge(undefined); }}
+        onPaneClick={(event) => {
+          if (measurementToolType) {
+            const position = flow?.screenToFlowPosition({ x: event.clientX, y: event.clientY });
+            addMeasurementPoint(measurementToolType, { x: position?.x ?? 0, y: position?.y ?? 0 });
+            return;
+          }
+          selectNode(undefined);
+          selectEdge(undefined);
+          selectMeasurementPoint(undefined);
+          hoverEdge(undefined);
+        }}
         defaultViewport={view.viewport}
         onMoveEnd={(_, viewport) => {
           setLiveViewport(viewport);
@@ -303,7 +396,29 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
       >
         {gridEnabled ? <Background color="rgba(93,117,145,0.18)" gap={24} size={1.2} /> : null}
       </ReactFlow>
-      <LocalActionPanel selectedNode={selectedNode} selectedEdge={selectedEdge} anchor={localPanelAnchor} presentationMode={view.presentationMode} />
+      <div className="measurement-layer" aria-label="Точки измерения">
+        {measurementPoints.filter((point) => point.visible).map((point) => {
+          const anchor = resolveMarkerAnchor(point.id);
+          if (!anchor) return null;
+          const left = anchor.worldX * liveViewport.zoom + liveViewport.x;
+          const top = anchor.worldY * liveViewport.zoom + liveViewport.y;
+          const glyph = point.type === 'pressure' ? 'P' : point.type === 'temperature' ? 'T' : point.type === 'flow' ? 'Q' : 'К';
+          const typeClass = `type-${point.type}`;
+          return (
+            <button
+              key={point.id}
+              type="button"
+              className={`measurement-marker ${typeClass} ${selectedMeasurementPointId === point.id ? 'is-selected' : ''} ${view.presentationMode === 'simulation' ? 'is-live' : ''}`}
+              style={{ left, top }}
+              onClick={() => selectMeasurementPoint(point.id)}
+              title={`${point.shortTag}: ${anchor.anchorText}`}
+            >
+              <span>{glyph}</span>
+            </button>
+          );
+        })}
+      </div>
+      <LocalActionPanel selectedNode={selectedNode} selectedEdge={selectedEdge} selectedMeasurementPoint={selectedMeasurementPoint} anchor={selectedMeasurementPoint ? measurementPanelAnchor : localPanelAnchor} presentationMode={view.presentationMode} />
       {!focusMode ? (
         <div className="canvas-navigation-cluster" aria-label="Управление видом" onWheel={stopCanvasViewportPropagation} onPointerDown={stopCanvasViewportPropagation} onMouseDown={stopCanvasViewportPropagation}>
           <div className="viewport-controls-card" aria-label="Управление видом">

@@ -1,14 +1,15 @@
 import { LeftShellEvent, LeftShellState } from './leftShellState';
+import type { CanvasTool } from '../editor/CanvasEditor';
 
 type ToolboxPanelProps = {
   leftShell: LeftShellState;
   stateMachineDefinition: string;
   onEvent: (event: LeftShellEvent) => void;
   onOpenLibrary: () => void;
-  activeCanvasTool: 'select' | 'connect';
+  activeCanvasTool: CanvasTool;
   gridEnabled: boolean;
   activeRightPanel: 'lines' | 'diagnostics' | null;
-  onSelectTool: (tool: 'select' | 'connect') => void;
+  onSelectTool: (tool: CanvasTool) => void;
   onToggleGrid: () => void;
   onTogglePanel: (panel: 'lines' | 'diagnostics') => void;
   presentationMode: 'simulation' | 'schematic';
@@ -75,6 +76,48 @@ export const ToolboxPanel = ({
           disabled: simulationMode,
           disabledReason: 'Доступно только в режиме «Схема».',
           onClick: () => onSelectTool('connect'),
+        },
+      ],
+    },
+    {
+      id: 'measurement',
+      title: 'Измерения',
+      controls: [
+        {
+          id: 'measure-pressure',
+          label: 'Манометр',
+          glyph: 'P',
+          description: 'Поставить точку давления на линию или узел.',
+          type: 'mode',
+          isActive: activeCanvasTool === 'measure-pressure',
+          onClick: () => onSelectTool('measure-pressure'),
+        },
+        {
+          id: 'measure-temperature',
+          label: 'Термометр',
+          glyph: 'T',
+          description: 'Поставить точку температуры на объект.',
+          type: 'mode',
+          isActive: activeCanvasTool === 'measure-temperature',
+          onClick: () => onSelectTool('measure-temperature'),
+        },
+        {
+          id: 'measure-flow',
+          label: 'Расходомер',
+          glyph: 'Q',
+          description: 'Поставить точку расхода на линию.',
+          type: 'mode',
+          isActive: activeCanvasTool === 'measure-flow',
+          onClick: () => onSelectTool('measure-flow'),
+        },
+        {
+          id: 'measure-probe',
+          label: 'Контрольная точка',
+          glyph: 'К',
+          description: 'Универсальная точка с набором доступных параметров.',
+          type: 'mode',
+          isActive: activeCanvasTool === 'measure-probe',
+          onClick: () => onSelectTool('measure-probe'),
         },
       ],
     },

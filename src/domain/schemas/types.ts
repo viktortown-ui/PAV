@@ -60,6 +60,8 @@ export type Severity = 'info' | 'warning' | 'error';
 export type TemplateId = 'water-prep' | 'soap-line' | 'cip-fragment';
 export type EdgeLabelMode = 'hidden' | 'selected' | 'active' | 'all';
 export type PresentationMode = 'schematic' | 'simulation';
+export type MeasurementPointType = 'pressure' | 'temperature' | 'flow' | 'probe';
+export type MeasurementAnchorKind = 'node' | 'edge' | 'canvas';
 export type EquipmentClass = 'major' | 'line' | 'valve' | 'instrument' | 'topology' | 'terminal';
 export type SymbolFamily = 'vessel' | 'machinery' | 'valve' | 'instrument' | 'topology' | 'terminal';
 export type FailPosition = 'open' | 'closed' | 'hold';
@@ -364,6 +366,28 @@ export interface SimulationSettings {
   scenarioRevision: number;
 }
 
+export interface MeasurementPoint {
+  id: string;
+  type: MeasurementPointType;
+  shortTag: string;
+  label?: string;
+  anchor: {
+    kind: MeasurementAnchorKind;
+    nodeId?: string;
+    edgeId?: string;
+    ratio?: number;
+    x?: number;
+    y?: number;
+    offsetX?: number;
+    offsetY?: number;
+  };
+  visible: boolean;
+  enabled: boolean;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ProjectDocument {
   id: string;
   name: string;
@@ -376,5 +400,6 @@ export interface ProjectDocument {
   view: ProjectViewState;
   simulation: SimulationSettings;
   eventLog: EventLogEntry[];
+  measurementPoints: MeasurementPoint[];
   defaults: ProjectDefaults;
 }
