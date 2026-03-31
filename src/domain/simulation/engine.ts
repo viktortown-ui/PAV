@@ -107,6 +107,23 @@ const buildHydraulicNetwork = (project: ProjectDocument): HydraulicNetworkInput 
       };
     }
 
+    if (source?.data.kind === 'source') {
+      const p = source.data.process as any;
+      const ratedFlowLpm = Math.max(0, Number(p.actualFlowLpm ?? p.flowRate ?? p.nominalFlowLpm ?? 0));
+      if (ratedFlowLpm > 0) {
+        return {
+          id: edge.id,
+          kind: 'pump',
+          fromNodeId: edge.source,
+          toNodeId: edge.target,
+          ratedFlowM3PerS: ratedFlowLpm / 60000,
+          ratedHeadM: Math.max(1, Number(p.nominalHeadM ?? p.ratedHeadM ?? 12)),
+          efficiency: clamp(Number(p.efficiency ?? 0.75), 0.1, 1),
+          speedRatio: Boolean(p.allowDischarge ?? p.canDischarge ?? true) ? 1 : 0,
+        };
+      }
+    }
+
     const sourceValve = source && valveKinds.has(source.data.kind);
     const targetValve = target && valveKinds.has(target.data.kind);
     if (sourceValve || targetValve) {
@@ -309,7 +326,16 @@ export const runSimulationStep = (project: ProjectDocument, dt: number): Simulat
 
   const network = buildHydraulicNetwork({ ...project, nodes: nextNodes, edges: nextEdges });
   const engine = new PhysicsSimulationEngine(network);
-  const uiResult = engine.step({ dtSeconds: Math.max(0.01, dt * project.simulation.speed) });
+  const speedRatio = Math.max(0, project.simulation.speed);
+  const pumpSpeedRatioById: Record<string, number> = {};
+  network.edges.forEach((edge) => {
+    if (edge.kind !== 'pump') return;
+    pumpSpeedRatioById[edge.id] = Math.max(0, (edge.speedRatio ?? 1) * speedRatio);
+  });
+  const uiResult = engine.step({
+    dtSeconds: Math.max(0.01, dt * speedRatio),
+    overrides: { pumpSpeedRatioById },
+  });
   const edgeResultById = new Map(uiResult.edges.map((edge) => [edge.edgeId, edge]));
   const nodeResultById = new Map(uiResult.nodes.map((node) => [node.nodeId, node]));
   const nodeById = new Map(nextNodes.map((node) => [node.id, node]));
@@ -325,121 +351,38 @@ export const runSimulationStep = (project: ProjectDocument, dt: number): Simulat
 
   let totalActiveFlow = 0;
   const activeMediums = new Set<string>();
-
   const dtSeconds = Math.max(0.01, dt * project.simulation.speed);
-  const executableRoutes = buildExecutableRoutes(nextNodes, nextEdges);
-  const availableLitersByNodeId = new Map<string, number>();
-  const receivableLitersByNodeId = new Map<string, number>();
-  nextNodes.forEach((node) => {
-    if (!tankKinds.has(node.data.kind)) return;
-    const process = node.data.process as any;
-    const current = Math.max(0, toFiniteNumber(process.currentLevelLiters ?? process.level, 0));
-    const capacity = Math.max(0, toFiniteNumber(process.capacityLiters ?? process.capacity, 0));
-    availableLitersByNodeId.set(node.id, current);
-    receivableLitersByNodeId.set(node.id, Math.max(0, capacity - current));
-  });
-
-  const routeFlows: RouteEvaluation[] = executableRoutes.map((route) => {
-    const sourceNode = route.nodes[0]?.node;
-    const targetNode = route.nodes[route.nodes.length - 1]?.node;
-    const edgeFlows = route.edges.map((segment) => Math.max(0, toFiniteNumber(edgeResultById.get(segment.edge.id)?.flowLpm, 0)));
-    const hydraulicFlowLpm = edgeFlows.length > 0 ? Math.min(...edgeFlows) : 0;
-    const blockers: string[] = [];
-
-    if (!sourceNode || !targetNode) blockers.push('маршрут разорван');
-    const sourceProcess = (sourceNode?.data.process ?? {}) as any;
-    if (sourceNode && tankKinds.has(sourceNode.data.kind)) {
-      const canDischarge = Boolean(sourceProcess.allowDischarge ?? sourceProcess.canDischarge ?? true);
-      const sourceLevel = Math.max(0, toFiniteNumber(sourceProcess.currentLevelLiters ?? sourceProcess.level, 0));
-      if (!canDischarge) blockers.push(`${sourceNode.data.visibleName}: выдача запрещена`);
-      if (sourceLevel <= 0) blockers.push(`${sourceNode.data.visibleName}: пустая ёмкость`);
-    }
-    route.nodes.forEach(({ node }) => {
-      const gate = nodeCanPassFlow(node);
-      if (!gate.pass) blockers.push(gate.reason);
-    });
-    if (targetNode && !nodeAcceptsFlow(targetNode)) blockers.push(`${targetNode.data.visibleName}: приём далее по линии запрещён`);
-    const hasPumpOnRoute = route.nodes.some(({ node }) => pumpKinds.has(node.data.kind));
-    const pumpCommandedFlowLpm = route.nodes.reduce((maxFlow, { node }) => {
-      if (!pumpKinds.has(node.data.kind)) return maxFlow;
-      const process = node.data.process as any;
-      return Math.max(maxFlow, Math.max(0, toFiniteNumber(process.nominalFlowLpm ?? process.flowRate ?? process.actualFlowLpm, 0)));
-    }, 0) * project.simulation.speed;
-    const sourceCommandedFlowLpm = Math.max(0, toFiniteNumber(sourceProcess.actualFlowLpm ?? sourceProcess.flowRate, 0)) * project.simulation.speed;
-    let requestedFlowLpm = hydraulicFlowLpm;
-    if (!hasPumpOnRoute && requestedFlowLpm <= 0.001) {
-      requestedFlowLpm = sourceCommandedFlowLpm;
-    }
-    if (hasPumpOnRoute && requestedFlowLpm <= 0.001) {
-      requestedFlowLpm = pumpCommandedFlowLpm;
-    }
-    if (requestedFlowLpm <= 0.001) blockers.push('гидравлика: Q = 0');
-
-    let flowLpm = blockers.length > 0 ? 0 : requestedFlowLpm;
-    if (flowLpm > 0 && sourceNode) {
-      const sourceRemaining = availableLitersByNodeId.get(sourceNode.id) ?? Number.POSITIVE_INFINITY;
-      const sourceLimitLpm = (sourceRemaining / dtSeconds) * 60;
-      flowLpm = Math.min(flowLpm, sourceLimitLpm);
-    }
-    if (flowLpm > 0 && targetNode && tankKinds.has(targetNode.data.kind)) {
-      const sinkRemaining = receivableLitersByNodeId.get(targetNode.id) ?? 0;
-      const sinkLimitLpm = (sinkRemaining / dtSeconds) * 60;
-      flowLpm = Math.min(flowLpm, sinkLimitLpm);
-      if (sinkLimitLpm <= 0.001) blockers.push(`${targetNode.data.visibleName}: ёмкость заполнена`);
-    }
-    if (flowLpm <= 0.001) flowLpm = 0;
-
-    if (flowLpm > 0 && sourceNode) {
-      const movedLiters = flowLpm * dtSeconds / 60;
-      if (availableLitersByNodeId.has(sourceNode.id)) availableLitersByNodeId.set(sourceNode.id, Math.max(0, (availableLitersByNodeId.get(sourceNode.id) ?? 0) - movedLiters));
-      if (targetNode && receivableLitersByNodeId.has(targetNode.id)) receivableLitersByNodeId.set(targetNode.id, Math.max(0, (receivableLitersByNodeId.get(targetNode.id) ?? 0) - movedLiters));
-    }
-
-    return {
-      route,
-      requestedFlowLpm,
-      actualFlowLpm: flowLpm,
-      blockers: Array.from(new Set(blockers)),
-      active: flowLpm > 0 && blockers.length === 0,
-    };
-  });
 
   const edgeFlowById = new Map<string, number>();
   const edgeBlockedBy = new Map<string, string[]>();
-  routeFlows.forEach((entry) => {
-    entry.route.edges.forEach(({ edge }) => {
-      edgeFlowById.set(edge.id, (edgeFlowById.get(edge.id) ?? 0) + entry.actualFlowLpm);
-      if (!entry.active && entry.blockers.length > 0) {
-        edgeBlockedBy.set(edge.id, [...(edgeBlockedBy.get(edge.id) ?? []), ...entry.blockers]);
-      }
-      if (!entry.active && entry.requestedFlowLpm > 0.001 && entry.actualFlowLpm <= 0.001 && entry.blockers.length === 0) {
-        edgeBlockedBy.set(edge.id, [...(edgeBlockedBy.get(edge.id) ?? []), 'баланс: недостаточно объёма или свободной ёмкости']);
-      }
-      if (entry.requestedFlowLpm <= 0.001) {
-        edgeBlockedBy.set(edge.id, [...(edgeBlockedBy.get(edge.id) ?? []), 'гидравлика: Q = 0']);
-      }
-      if (!entry.active && entry.blockers.length > 0) {
-        edgeBlockedBy.set(edge.id, [...(edgeBlockedBy.get(edge.id) ?? []), ...entry.blockers]);
-      }
-      if (!entry.active && entry.requestedFlowLpm > 0.001 && entry.actualFlowLpm <= 0.001) {
-        edgeBlockedBy.set(edge.id, [...(edgeBlockedBy.get(edge.id) ?? []), 'фактический расход отсутствует']);
-      }
-      if (entry.actualFlowLpm <= 0.001 && entry.blockers.length > 0) {
-        edgeBlockedBy.set(edge.id, [...(edgeBlockedBy.get(edge.id) ?? []), ...entry.blockers]);
-      }
-    });
+  nextEdges.forEach((edge) => {
+    let flowLpm = Math.max(0, toFiniteNumber(edgeResultById.get(edge.id)?.flowLpm, 0));
+    const reasons: string[] = [];
+    const source = nodeById.get(edge.source);
+    const target = nodeById.get(edge.target);
+    if (!source || !target) reasons.push('маршрут разорван');
+    if (source) {
+      const sourceGate = nodeCanPassFlow(source);
+      if (!sourceGate.pass) reasons.push(sourceGate.reason);
+    }
+    if (target) {
+      const targetGate = nodeCanPassFlow(target);
+      if (!targetGate.pass) reasons.push(targetGate.reason);
+      if (!nodeAcceptsFlow(target)) reasons.push(`${target.data.visibleName}: приём запрещён downstream`);
+    }
+    if (reasons.length > 0) flowLpm = 0;
+    edgeFlowById.set(edge.id, flowLpm);
+    if (flowLpm <= 0.001 && reasons.length === 0) reasons.push('гидравлика: Q = 0');
+    edgeBlockedBy.set(edge.id, Array.from(new Set(reasons)));
   });
 
   const qInByNodeId = new Map<string, number>();
   const qOutByNodeId = new Map<string, number>();
-  routeFlows.forEach((entry) => {
-    if (entry.actualFlowLpm <= 0.001) return;
-    entry.route.candidate.edgeIds.forEach((edgeId) => {
-      const edge = nextEdges.find((candidate) => candidate.id === edgeId);
-      if (!edge) return;
-      qOutByNodeId.set(edge.source, (qOutByNodeId.get(edge.source) ?? 0) + entry.actualFlowLpm);
-      qInByNodeId.set(edge.target, (qInByNodeId.get(edge.target) ?? 0) + entry.actualFlowLpm);
-    });
+  nextEdges.forEach((edge) => {
+    const flow = edgeFlowById.get(edge.id) ?? 0;
+    if (flow <= 0.001) return;
+    qOutByNodeId.set(edge.source, (qOutByNodeId.get(edge.source) ?? 0) + flow);
+    qInByNodeId.set(edge.target, (qInByNodeId.get(edge.target) ?? 0) + flow);
   });
 
   nextEdges.forEach((edge) => {
