@@ -311,6 +311,9 @@ export const InspectorPanel = ({ compact = false }: { compact?: boolean }) => {
     const lineTag = `ЛИНИЯ ${schema.upstreamRef || source?.data.technicalTag || 'A'} → ${schema.downstreamRef || target?.data.technicalTag || 'B'} · ${schema.nominalDiameter}`;
     const events = project.eventLog.filter((event) => event.targetId === edge.id).slice(-6).reverse();
     const edgeFlow = Number(edge.data?.flowLpm ?? edge.data?.flowRate ?? 0);
+    const edgeVelocity = Number(edge.data?.velocityMPerS ?? 0);
+    const edgeLoss = Number(edge.data?.hydraulicLossBar ?? edge.data?.pressure ?? 0);
+    const hydraulicConstraint = String(edge.data?.hydraulicConstraint ?? '').trim();
     const routeStateLabel = ruState[schema.routeState] ?? schema.routeState;
     const stopReason = edge.data?.blockedBy?.length
       ? `Поток остановлен: ${edge.data?.blockedBy?.join(', ')}.`
@@ -370,6 +373,14 @@ export const InspectorPanel = ({ compact = false }: { compact?: boolean }) => {
           <div className={`issue-card severity-${edgeFlow <= 0.01 ? 'warning' : 'info'}`}>
             <strong>Наличие потока: {edgeFlow <= 0.01 ? 'нет' : 'есть'}</strong>
             <span>Текущий расход: {formatSmartNumber(edgeFlow, 1)} л/мин. Связанный маршрут: {routeRef}.</span>
+          </div>
+          <div className={`issue-card severity-${edgeLoss > 0.8 ? 'warning' : 'info'}`}>
+            <strong>Потери и скорость: {edgeLoss > 0.8 ? 'риск' : 'норма'}</strong>
+            <span>Потери давления: {formatSmartNumber(edgeLoss, 3)} бар, скорость: {formatSmartNumber(edgeVelocity, 3)} м/с.</span>
+          </div>
+          <div className={`issue-card severity-${hydraulicConstraint ? 'warning' : 'info'}`}>
+            <strong>Гидравлический зажим: {hydraulicConstraint ? 'обнаружен' : 'нет'}</strong>
+            <span>{hydraulicConstraint || 'Участок не является основным ограничением для текущего маршрута.'}</span>
           </div>
         </div>
         {relatedIssues.length ? relatedIssues.map((issue) => <div key={issue.id} className={`issue-card severity-${issue.severity}`}><strong>{issueTitle(issue)}</strong><span>{issue.message}</span></div>) : <div className="issue-card severity-info"><strong>Маршрут совместим</strong><span>Блокировок потока и физических замечаний для выбранной линии не выявлено.</span></div>}

@@ -4,6 +4,15 @@ export interface EdgeInspectorSchema {
   mediumType: MediumType;
   flowLpm: number;
   nominalDiameter: string;
+  lengthM: number;
+  innerDiameterMm: number;
+  roughnessM: number;
+  localResistanceZeta: number;
+  velocityMPerS: number;
+  pressureLossBar: number;
+  reynolds: number;
+  frictionFactor: number;
+  hydraulicConstraint: string;
   routeState: RouteState;
   directionMode: FlowDirectionMode;
   mediumMode: MediumMode;
@@ -26,6 +35,15 @@ export const edgeInspectorFields: Array<{ key: keyof EdgeInspectorSchema; label:
   },
   { key: 'flowLpm', label: 'Расход, л/мин', type: 'number' },
   { key: 'nominalDiameter', label: 'Диаметр', type: 'text' },
+  { key: 'lengthM', label: 'Длина, м', type: 'number' },
+  { key: 'innerDiameterMm', label: 'Внутренний диаметр, мм', type: 'number' },
+  { key: 'roughnessM', label: 'Шероховатость, м', type: 'number' },
+  { key: 'localResistanceZeta', label: 'Местное сопротивление ζ', type: 'number' },
+  { key: 'velocityMPerS', label: 'Скорость, м/с', type: 'number' },
+  { key: 'pressureLossBar', label: 'Потери давления, бар', type: 'number' },
+  { key: 'reynolds', label: 'Reynolds', type: 'number' },
+  { key: 'frictionFactor', label: 'Коэффициент трения', type: 'number' },
+  { key: 'hydraulicConstraint', label: 'Гидроограничение', type: 'text' },
   {
     key: 'routeState',
     label: 'Состояние',
@@ -84,6 +102,15 @@ export const createEdgeInspectorSchema = (edge: SoapEdge, fallbackRefs: { upstre
   mediumType: (edge.data?.mediumType === 'composite' ? 'product' : edge.data?.mediumType) ?? 'water',
   flowLpm: edge.data?.flowLpm ?? 0,
   nominalDiameter: edge.data?.nominalDiameter ?? 'DN50',
+  lengthM: Number(edge.data?.lengthM ?? 12),
+  innerDiameterMm: Number((edge.data?.innerDiameterMm ?? Number(String(edge.data?.nominalDiameter ?? 'DN50').replace(/[^\d.]/g, ''))) || 50),
+  roughnessM: Number(edge.data?.roughnessM ?? 0.000045),
+  localResistanceZeta: Number(edge.data?.localResistanceZeta ?? edge.data?.minorLossCoefficient ?? 1.2),
+  velocityMPerS: Number(edge.data?.velocityMPerS ?? 0),
+  pressureLossBar: Number(edge.data?.hydraulicLossBar ?? edge.data?.pressure ?? 0),
+  reynolds: Number(edge.data?.reynolds ?? 0),
+  frictionFactor: Number(edge.data?.frictionFactor ?? 0),
+  hydraulicConstraint: edge.data?.hydraulicConstraint ?? '',
   routeState: edge.data?.routeState ?? 'idle',
   directionMode: edge.data?.directionMode ?? 'derived',
   mediumMode: edge.data?.mediumMode ?? 'single',

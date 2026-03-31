@@ -77,6 +77,14 @@ export interface EdgeHydraulicResult {
   pressureDropPa: number;
   velocityMPerS?: number;
   flowRegime?: 'laminar' | 'transitional' | 'turbulent';
+  reynolds?: number;
+  frictionFactor?: number;
+  headLossM?: number;
+  hydraulicConstraint?: string;
+  localResistanceZeta?: number;
+  diameterM?: number;
+  lengthM?: number;
+  pumpHeadGainM?: number;
 }
 
 export interface NodeHydraulicResult {
@@ -120,6 +128,14 @@ export interface SimulationUiEdgeResult {
   flowLpm: number;
   pressureDropBar: number;
   velocityMPerS?: number;
+  reynolds?: number;
+  frictionFactor?: number;
+  headLossM?: number;
+  hydraulicConstraint?: string;
+  localResistanceZeta?: number;
+  diameterM?: number;
+  lengthM?: number;
+  pumpHeadGainM?: number;
 }
 
 export interface SimulationUiResult {

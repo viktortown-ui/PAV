@@ -213,6 +213,17 @@ const sanitizeEdge = (value: unknown, nodeIds: Set<string>): SoapEdge | null => 
       routeWarnings: Array.isArray(edgeData.routeWarnings) ? edgeData.routeWarnings.filter((item): item is string => typeof item === 'string') : [],
       composition: isObject(edgeData.composition) ? Object.fromEntries(Object.entries(edgeData.composition).filter(([key, val]) => MEDIUM_TYPES.has(key as MediumType) && typeof val === 'number')) : undefined,
       mixedFlow: asBoolean(edgeData.mixedFlow, false),
+      velocityMPerS: asNumber(edgeData.velocityMPerS, 0),
+      lengthM: Math.max(0.1, asNumber(edgeData.lengthM, 12)),
+      innerDiameterMm: Math.max(5, asNumber(edgeData.innerDiameterMm, 50)),
+      roughnessM: Math.max(0.000001, asNumber(edgeData.roughnessM, 0.000045)),
+      minorLossCoefficient: asNumber(edgeData.minorLossCoefficient, asNumber(edgeData.localResistanceZeta, 1.2)),
+      localResistanceZeta: asNumber(edgeData.localResistanceZeta, asNumber(edgeData.minorLossCoefficient, 1.2)),
+      hydraulicLossBar: asNumber(edgeData.hydraulicLossBar, 0),
+      reynolds: Math.max(0, asNumber(edgeData.reynolds, 0)),
+      frictionFactor: Math.max(0, asNumber(edgeData.frictionFactor, 0)),
+      hydraulicConstraint: asString(edgeData.hydraulicConstraint, ''),
+      pumpHeadGainM: asNumber(edgeData.pumpHeadGainM, 0),
     },
   };
 };

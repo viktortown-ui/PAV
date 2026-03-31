@@ -247,6 +247,45 @@ describe('physics simulation engine skeleton', () => {
     expect(dn20.pressureDropBar).toBeGreaterThan(dn50.pressureDropBar);
   });
 
+  it('longer pipeline reduces achievable flow for the same pump', () => {
+    const create = (lengthM: number) => new PhysicsSimulationEngine({
+      id: `len-${lengthM}`,
+      fluid: { id: 'water', kind: 'water', name: 'Water', densityKgPerM3: 997, dynamicViscosityPaS: 0.00089 },
+      nodes: [
+        { id: 'src', kind: 'junction', elevationM: 0 },
+        { id: 'mid', kind: 'junction', elevationM: 0 },
+        { id: 'dst', kind: 'tank', elevationM: 0, volumeM3: 1, liquidLevelM: 1, crossSectionAreaM2: 1, maxVolumeM3: 2 },
+      ],
+      edges: [
+        { id: 'pump-1', kind: 'pump', fromNodeId: 'src', toNodeId: 'mid', ratedFlowM3PerS: 80 / 1000 / 60, ratedHeadM: 12, efficiency: 0.7 },
+        { id: 'pipe-1', kind: 'pipe', fromNodeId: 'mid', toNodeId: 'dst', lengthM, innerDiameterM: 0.02, roughnessM: 0.0001, minorLossCoefficient: 2 },
+      ],
+    });
+    const shortLine = create(20).step({ dtSeconds: 1 }).edges.find((item) => item.edgeId === 'pipe-1')!;
+    const longLine = create(200).step({ dtSeconds: 1 }).edges.find((item) => item.edgeId === 'pipe-1')!;
+    expect(longLine.flowLpm).toBeLessThan(shortLine.flowLpm);
+    expect(longLine.pressureDropBar).toBeGreaterThan(shortLine.pressureDropBar);
+  });
+
+  it('insufficient pump head reports hydraulic limitation warning', () => {
+    const engine = new PhysicsSimulationEngine({
+      id: 'weak-pump-net',
+      fluid: { id: 'water', kind: 'water', name: 'Water', densityKgPerM3: 998, dynamicViscosityPaS: 0.001 },
+      nodes: [
+        { id: 'src', kind: 'junction', elevationM: 0 },
+        { id: 'mid', kind: 'junction', elevationM: 0 },
+        { id: 'dst', kind: 'tank', elevationM: 10, volumeM3: 1, liquidLevelM: 1, crossSectionAreaM2: 1, maxVolumeM3: 2 },
+      ],
+      edges: [
+        { id: 'pump', kind: 'pump', fromNodeId: 'src', toNodeId: 'mid', ratedFlowM3PerS: 15 / 1000 / 60, ratedHeadM: 2, efficiency: 0.7 },
+        { id: 'pipe', kind: 'pipe', fromNodeId: 'mid', toNodeId: 'dst', lengthM: 80, innerDiameterM: 0.02, roughnessM: 0.0001, minorLossCoefficient: 4 },
+      ],
+    });
+    const step = engine.step({ dtSeconds: 1 });
+    expect(step.edges.find((edge) => edge.edgeId === 'pipe')?.flowLpm ?? 0).toBe(0);
+    expect(step.warnings.some((item) => item.includes('насосный напор'))).toBe(true);
+  });
+
   it('emits warnings for unrealistic velocity and cavitation placeholder', () => {
     const engine = new PhysicsSimulationEngine({
       id: 'warn-net',
