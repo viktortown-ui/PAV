@@ -310,30 +310,36 @@ export const SimulationPanel = ({ focusMode = false, rightPanelVisible = false, 
         <button type="button" onClick={resetSimulation}>↺ Сброс</button>
       </div>
       <div className="dock-fluid-block" aria-label="Параметры жидкости">
-        <span className="dock-field-label">Жидкость</span>
-        <select
-          value={currentFluid.id}
-          onChange={(event) => {
-            const preset = FLUID_PRESETS.find((item) => item.id === event.target.value);
-            if (!preset) return;
-            setSimulationFluid({
-              id: preset.id,
-              kind: preset.id === 'water' ? 'water' : preset.id === 'ethylene-glycol' ? 'glycol' : 'custom',
-              name: preset.name,
-              densityKgPerM3: preset.density_kg_m3,
-              dynamicViscosityPaS: preset.dynamicViscosity_Pa_s,
-            });
-          }}
-        >
-          {FLUID_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
-        </select>
-        <label className="dock-field-label">Плотность, кг/м³
-          <input type="number" value={Number(project.simulation.fluid?.densityKgPerM3 ?? 998)} onChange={(event) => setSimulationFluid({ ...currentFluid, densityKgPerM3: Number(event.target.value) })} />
+        <label className="dock-fluid-field dock-fluid-field-fluid">
+          <span className="dock-field-label">Жидкость</span>
+          <select
+            value={currentFluid.id}
+            onChange={(event) => {
+              const preset = FLUID_PRESETS.find((item) => item.id === event.target.value);
+              if (!preset) return;
+              setSimulationFluid({
+                id: preset.id,
+                kind: preset.id === 'water' ? 'water' : preset.id === 'ethylene-glycol' ? 'glycol' : 'custom',
+                name: preset.name,
+                densityKgPerM3: preset.density_kg_m3,
+                dynamicViscosityPaS: preset.dynamicViscosity_Pa_s,
+              });
+            }}
+          >
+            {FLUID_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
+          </select>
         </label>
-        <label className="dock-field-label">Вязкость, Па·с
-          <input type="number" step={0.0001} value={Number(project.simulation.fluid?.dynamicViscosityPaS ?? 0.001)} onChange={(event) => setSimulationFluid({ ...currentFluid, dynamicViscosityPaS: Number(event.target.value) })} />
-        </label>
-        <button type="button" onClick={runFluidScenario}>Запустить сценарий</button>
+        <div className="dock-fluid-metrics">
+          <label className="dock-fluid-field">
+            <span className="dock-field-label">Плотность, кг/м³</span>
+            <input type="number" value={Number(project.simulation.fluid?.densityKgPerM3 ?? 998)} onChange={(event) => setSimulationFluid({ ...currentFluid, densityKgPerM3: Number(event.target.value) })} />
+          </label>
+          <label className="dock-fluid-field">
+            <span className="dock-field-label">Вязкость, Па·с</span>
+            <input type="number" step={0.0001} value={Number(project.simulation.fluid?.dynamicViscosityPaS ?? 0.001)} onChange={(event) => setSimulationFluid({ ...currentFluid, dynamicViscosityPaS: Number(event.target.value) })} />
+          </label>
+        </div>
+        <button type="button" className="dock-fluid-apply" onClick={runFluidScenario}>Запустить сценарий</button>
       </div>
       <div className="dock-speed-block" aria-label="Скорость симуляции">
         <span className="dock-field-label">Скорость</span>
@@ -490,12 +496,11 @@ export const SimulationPanel = ({ focusMode = false, rightPanelVisible = false, 
       <div className="simulation-dock-panel">
         <div className="dock-topline">
           <div className="simulation-dock-titleblock">
-            <span className="simulation-dock-kicker">Конструктор техсхем</span>
-            <strong>{isCompact ? 'Компактная панель' : 'Стандартная панель'}</strong>
-            <small>{modeSummary}</small>
+            <strong>Конструктор техсхем</strong>
+            <small>{getDiagnosticsPanelStepLabel(panelState)} · {modeSummary}</small>
           </div>
           <div className="simulation-dock-toolbar-actions">
-            <span className="simulation-dock-state-label">{getDiagnosticsPanelStepLabel(panelState)}</span>
+            <span className={`simulation-status-chip is-${simulationStatus}`}>{modeChipLabel}</span>
             <button type="button" className="simulation-dock-close" onClick={() => setPanelState((currentState) => transitionDiagnosticsPanelState(currentState, 'close'))}>Скрыть</button>
           </div>
         </div>
@@ -509,166 +514,208 @@ export const SimulationPanel = ({ focusMode = false, rightPanelVisible = false, 
         ) : null}
 
         {isStandard || isFull ? (
-          <>
+          <div className="dock-layout-standard-shell">
             <div className="dock-layout-standard-top">
               {renderControlZone()}
               {renderSummaryZone(true)}
               {renderNavigatorZone(false)}
             </div>
-            <div className="dock-layout-standard-bottom">
-              <section className="dock-zone">
-                <span className="dock-zone-label">Контекст</span>
-                <div className="dock-detail-grid">
-                  <div>
-                    <span className="metric-label">Среда</span>
-                    <strong>{mediumLabel[project.simulation.activeMedium]}</strong>
-                  </div>
-                  <div>
-                    <span className="metric-label">Выбор</span>
-                    <strong>{selectionLabel}</strong>
-                  </div>
-                </div>
-              </section>
-              <section className="dock-zone">
-                <span className="dock-zone-label">Фильтры</span>
-                <div className="dock-filter-chips">
-                  <button type="button" className={!showProblematicOnly ? 'is-active' : ''} onClick={() => showProblematicOnly && toggleProblematicOnly()}>Все</button>
-                  <button type="button" className={showProblematicOnly ? 'is-active' : ''} onClick={() => !showProblematicOnly && toggleProblematicOnly()}>Только проблемные</button>
-                  <button type="button" className={(selectedNode || selectedEdge) ? 'is-active' : ''} disabled>Выбранное</button>
-                </div>
-                <small className="dock-help-line">Текущий фильтр: {filterLabel}</small>
-              </section>
-              <section className="dock-zone">
-                <span className="dock-zone-label">Активное предупреждение</span>
-                <div className="dock-alert-card">
-                  <strong>{activeWarnings[0] ?? 'Нет активных предупреждений'}</strong>
-                  <span>Скорость: {project.simulation.speed.toFixed(project.simulation.speed % 1 === 0 ? 0 : 1)}×</span>
-                </div>
-              </section>
-            </div>
-          </>
-        ) : null}
-      </div>
-
-      {isFull ? (
-        <aside className="dock-full-console" aria-label="Панель полной диагностики">
-          <header className="dock-full-console-header">
-            <div className="dock-full-console-header-copy">
-              <strong>Полная диагностика</strong>
-              <small>{modeSummary}</small>
-            </div>
-            <div className="dock-full-console-actions">
-              <button type="button" className="dock-inline-button" onClick={() => setPanelState('standard')}>Свернуть до стандартной</button>
-              <button type="button" className="dock-inline-button" onClick={() => setPanelState('hidden')}>Скрыть панель</button>
-            </div>
-          </header>
-          <div className="dock-full-console-content">
-            <section className="console-column console-column-control">
-              <div className="console-card">
-                <div className="console-card-head">
-                  <strong>Управление</strong>
-                </div>
-                <div className="dock-controls-row">
-                  <button type="button" className="is-primary" onClick={() => setSimulationRunning(true)} disabled={isRunning}>
-                    {isPaused ? '▶ Продолжить' : '▶ Пуск'}
-                  </button>
-                  <button type="button" onClick={() => setSimulationRunning(false)} disabled={!isRunning}>❚❚ Пауза</button>
-                  <button type="button" onClick={resetSimulation}>↺ Сброс</button>
-                </div>
-                <div className="console-inline-row">
-                  <span className="metric-label">Скорость</span>
-                  <div className="dock-speed-options">
-                    {speedOptions.map((speed) => (
-                      <button
-                        type="button"
-                        key={speed}
-                        className={project.simulation.speed === speed ? 'is-selected' : ''}
-                        onClick={() => setSimulationSpeed(speed)}
-                      >
-                        {speed.toFixed(speed % 1 === 0 ? 0 : 1)}×
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="console-inline-row">
-                  <span className="metric-label">Контекст</span>
-                  <strong>{selectionLabel}</strong>
-                </div>
-              </div>
-            </section>
-            <section className="console-column console-column-process">
-              <div className="console-card console-process-card">
-                <div className="console-card-head">
-                  <strong>Текущий процесс</strong>
-                  <span className={`simulation-status-chip is-${simulationStatus}`}>{modeChipLabel}</span>
-                </div>
-                <div className="console-process-grid">
-                  <div><span className="metric-label">Режим</span><strong>{modeChipReadableLabel}</strong></div>
-                  <div><span className="metric-label">Маршрут</span><strong>{routeLabel}</strong></div>
-                  <div><span className="metric-label">Поток</span><strong>{Math.round(project.simulation.totalActiveFlow)} л/мин</strong></div>
-                  <div><span className="metric-label">Причина состояния</span><strong>{processReason}</strong></div>
-                  <div><span className="metric-label">Активное ограничение</span><strong>{blockingLabel}</strong></div>
-                  <div><span className="metric-label">Предупреждений</span><strong>{warningCount}</strong></div>
-                </div>
-              </div>
-              <div className="console-card">
-                <div className="console-card-head">
-                  <strong>Последние события</strong>
-                  <button type="button" className="dock-inline-button" onClick={() => setIsFullJournalVisible((current) => !current)}>
-                    {isFullJournalVisible ? 'Скрыть журнал' : 'Показать журнал'}
-                  </button>
-                </div>
-                <div className="sheet-journal-list">
-                  {recentSignificantEvents.map((event) => (
-                    <article key={event.id} className={`sheet-journal-item severity-${event.severity}`}>
-                      <span className="sheet-journal-time">{formatEventTime(event.timestamp)}</span>
-                      <strong className="sheet-journal-message">{event.message}</strong>
-                      <small className="sheet-journal-type">{event.type}</small>
-                    </article>
-                  ))}
-                </div>
-                {isFullJournalVisible ? (
-                  <div className="console-full-journal">
-                    <div className="console-card-head">
-                      <strong>Журнал событий</strong>
-                      <span>Буфер: {project.eventLog.length}</span>
+            {!isFull ? (
+              <div className="dock-layout-standard-bottom">
+                <section className="dock-zone">
+                  <span className="dock-zone-label">Контекст</span>
+                  <div className="dock-detail-grid">
+                    <div>
+                      <span className="metric-label">Среда</span>
+                      <strong>{mediumLabel[project.simulation.activeMedium]}</strong>
                     </div>
-                    <div className="sheet-journal-list">
-                      {fullJournalEvents.map((event) => (
-                        <article key={event.id} className={`sheet-journal-item severity-${event.severity}`}>
-                          <span className="sheet-journal-time">{formatEventTime(event.timestamp)}</span>
-                          <strong className="sheet-journal-message">{event.message}</strong>
-                          <small className="sheet-journal-type">{event.type}</small>
-                        </article>
+                    <div>
+                      <span className="metric-label">Выбор</span>
+                      <strong>{selectionLabel}</strong>
+                    </div>
+                  </div>
+                </section>
+                <section className="dock-zone">
+                  <span className="dock-zone-label">Фильтры</span>
+                  <div className="dock-filter-chips">
+                    <button type="button" className={!showProblematicOnly ? 'is-active' : ''} onClick={() => showProblematicOnly && toggleProblematicOnly()}>Все</button>
+                    <button type="button" className={showProblematicOnly ? 'is-active' : ''} onClick={() => !showProblematicOnly && toggleProblematicOnly()}>Только проблемные</button>
+                    <button type="button" className={(selectedNode || selectedEdge) ? 'is-active' : ''} disabled>Выбранное</button>
+                  </div>
+                  <small className="dock-help-line">Текущий фильтр: {filterLabel}</small>
+                </section>
+                <section className="dock-zone">
+                  <span className="dock-zone-label">Активное предупреждение</span>
+                  <div className="dock-alert-card">
+                    <strong>{activeWarnings[0] ?? 'Нет активных предупреждений'}</strong>
+                    <span>Скорость: {project.simulation.speed.toFixed(project.simulation.speed % 1 === 0 ? 0 : 1)}×</span>
+                  </div>
+                </section>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        {isFull ? (
+          <aside className="dock-full-console" aria-label="Панель полной диагностики">
+            <header className="dock-full-console-header">
+              <div className="dock-full-console-header-copy">
+                <strong>Полная диагностика</strong>
+                <small>{modeSummary}</small>
+              </div>
+              <div className="dock-full-console-actions">
+                <button type="button" className="dock-inline-button" onClick={() => setPanelState('standard')}>Свернуть до стандартной</button>
+                <button type="button" className="dock-inline-button" onClick={() => setPanelState('hidden')}>Скрыть панель</button>
+              </div>
+            </header>
+            <div className="dock-full-console-content">
+              <section className="console-column console-column-control">
+                <div className="console-card">
+                  <div className="console-card-head">
+                    <strong>Управление</strong>
+                  </div>
+                  <div className="dock-controls-row">
+                    <button type="button" className="is-primary" onClick={() => setSimulationRunning(true)} disabled={isRunning}>
+                      {isPaused ? '▶ Продолжить' : '▶ Пуск'}
+                    </button>
+                    <button type="button" onClick={() => setSimulationRunning(false)} disabled={!isRunning}>❚❚ Пауза</button>
+                    <button type="button" onClick={resetSimulation}>↺ Сброс</button>
+                  </div>
+                  <div className="console-inline-row">
+                    <span className="metric-label">Скорость</span>
+                    <div className="dock-speed-options">
+                      {speedOptions.map((speed) => (
+                        <button
+                          type="button"
+                          key={speed}
+                          className={project.simulation.speed === speed ? 'is-selected' : ''}
+                          onClick={() => setSimulationSpeed(speed)}
+                        >
+                          {speed.toFixed(speed % 1 === 0 ? 0 : 1)}×
+                        </button>
                       ))}
                     </div>
                   </div>
-                ) : null}
-              </div>
-            </section>
-            <section className="console-column console-column-instruments">
-              <div className="console-card">
-                <div className="console-card-head">
-                  <strong>Приборы и диагностика</strong>
+                  <div className="console-inline-row">
+                    <span className="metric-label">Контекст</span>
+                    <strong>{selectionLabel}</strong>
+                  </div>
+                  <div className="console-inline-row">
+                    <span className="metric-label">Среда</span>
+                    <strong>{mediumLabel[project.simulation.activeMedium]}</strong>
+                  </div>
                 </div>
-                <div className="console-instrument-grid">
-                  <div className="console-instrument-card"><span className="metric-label">Температура</span><strong>{Math.round(avgTemperature)} °C</strong></div>
-                  <div className="console-instrument-card"><span className="metric-label">Давление</span><strong>{avgPressure.toFixed(2)} бар</strong></div>
-                  <div className="console-instrument-card"><span className="metric-label">Расход</span><strong>{Math.round(project.simulation.totalActiveFlow)} л/мин</strong></div>
-                  <div className="console-instrument-card"><span className="metric-label">Уровень</span><strong>{Math.round(avgLevel)} %</strong></div>
-                  <div className="console-instrument-card"><span className="metric-label">Среда</span><strong>{mediumLabel[project.simulation.activeMedium]}</strong></div>
-                  <div className="console-instrument-card"><span className="metric-label">Вязкость</span><strong>{Number(currentFluid.dynamicViscosityPaS).toFixed(4)} Па·с</strong></div>
+              </section>
+              <section className="console-column console-column-process">
+                <div className="console-card console-process-card">
+                  <div className="console-card-head">
+                    <strong>Текущий процесс</strong>
+                    <span className={`simulation-status-chip is-${simulationStatus}`}>{modeChipLabel}</span>
+                  </div>
+                  <div className="console-process-grid">
+                    <div><span className="metric-label">Режим</span><strong>{modeChipReadableLabel}</strong></div>
+                    <div><span className="metric-label">Маршрут</span><strong>{routeLabel}</strong></div>
+                    <div><span className="metric-label">Поток</span><strong>{Math.round(project.simulation.totalActiveFlow)} л/мин</strong></div>
+                    <div><span className="metric-label">Причина состояния</span><strong>{processReason}</strong></div>
+                    <div><span className="metric-label">Активное ограничение</span><strong>{blockingLabel}</strong></div>
+                    <div><span className="metric-label">Предупреждений</span><strong>{warningCount}</strong></div>
+                  </div>
                 </div>
-              </div>
-            </section>
-          </div>
-          <footer className="dock-full-console-footer">
-            <span>Полная диагностика · {modeSummary.toLowerCase()}</span>
-            <span>Фильтр: {filterLabel}</span>
-            <span>Последнее изменение: {latestEvent ? formatEventTime(latestEvent.timestamp) : 'нет данных'}</span>
-          </footer>
-        </aside>
-      ) : null}
+                <div className="console-card">
+                  <div className="console-card-head">
+                    <strong>Последние события</strong>
+                    <button type="button" className="dock-inline-button" onClick={() => setIsFullJournalVisible((current) => !current)}>
+                      {isFullJournalVisible ? 'Скрыть журнал' : 'Показать журнал'}
+                    </button>
+                  </div>
+                  <div className="sheet-journal-list">
+                    {recentSignificantEvents.map((event) => (
+                      <article key={event.id} className={`sheet-journal-item severity-${event.severity}`}>
+                        <span className="sheet-journal-time">{formatEventTime(event.timestamp)}</span>
+                        <strong className="sheet-journal-message">{event.message}</strong>
+                        <small className="sheet-journal-type">{event.type}</small>
+                      </article>
+                    ))}
+                  </div>
+                  {isFullJournalVisible ? (
+                    <div className="console-full-journal">
+                      <div className="console-card-head">
+                        <strong>Журнал событий</strong>
+                        <span>Буфер: {project.eventLog.length}</span>
+                      </div>
+                      <div className="sheet-journal-list">
+                        {fullJournalEvents.map((event) => (
+                          <article key={event.id} className={`sheet-journal-item severity-${event.severity}`}>
+                            <span className="sheet-journal-time">{formatEventTime(event.timestamp)}</span>
+                            <strong className="sheet-journal-message">{event.message}</strong>
+                            <small className="sheet-journal-type">{event.type}</small>
+                          </article>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              </section>
+              <section className="console-column console-column-instruments">
+                <div className="console-card">
+                  <div className="console-card-head">
+                    <strong>Приборы и диагностика</strong>
+                  </div>
+                  <div className="console-instrument-grid">
+                    <div className="console-instrument-card"><span className="metric-label">Температура</span><strong>{Math.round(avgTemperature)} °C</strong></div>
+                    <div className="console-instrument-card"><span className="metric-label">Давление</span><strong>{avgPressure.toFixed(2)} бар</strong></div>
+                    <div className="console-instrument-card"><span className="metric-label">Расход</span><strong>{Math.round(project.simulation.totalActiveFlow)} л/мин</strong></div>
+                    <div className="console-instrument-card"><span className="metric-label">Уровень</span><strong>{Math.round(avgLevel)} %</strong></div>
+                    <div className="console-instrument-card"><span className="metric-label">Среда</span><strong>{mediumLabel[project.simulation.activeMedium]}</strong></div>
+                    <div className="console-instrument-card"><span className="metric-label">Вязкость</span><strong>{Number(currentFluid.dynamicViscosityPaS).toFixed(4)} Па·с</strong></div>
+                  </div>
+                </div>
+                <div className="console-card">
+                  <div className="console-card-head">
+                    <strong>Жидкость и свойства</strong>
+                  </div>
+                  <div className="dock-fluid-block dock-fluid-block-console">
+                    <label className="dock-fluid-field dock-fluid-field-fluid">
+                      <span className="dock-field-label">Жидкость</span>
+                      <select
+                        value={currentFluid.id}
+                        onChange={(event) => {
+                          const preset = FLUID_PRESETS.find((item) => item.id === event.target.value);
+                          if (!preset) return;
+                          setSimulationFluid({
+                            id: preset.id,
+                            kind: preset.id === 'water' ? 'water' : preset.id === 'ethylene-glycol' ? 'glycol' : 'custom',
+                            name: preset.name,
+                            densityKgPerM3: preset.density_kg_m3,
+                            dynamicViscosityPaS: preset.dynamicViscosity_Pa_s,
+                          });
+                        }}
+                      >
+                        {FLUID_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
+                      </select>
+                    </label>
+                    <div className="dock-fluid-metrics">
+                      <label className="dock-fluid-field">
+                        <span className="dock-field-label">Плотность, кг/м³</span>
+                        <input type="number" value={Number(project.simulation.fluid?.densityKgPerM3 ?? 998)} onChange={(event) => setSimulationFluid({ ...currentFluid, densityKgPerM3: Number(event.target.value) })} />
+                      </label>
+                      <label className="dock-fluid-field">
+                        <span className="dock-field-label">Вязкость, Па·с</span>
+                        <input type="number" step={0.0001} value={Number(project.simulation.fluid?.dynamicViscosityPaS ?? 0.001)} onChange={(event) => setSimulationFluid({ ...currentFluid, dynamicViscosityPaS: Number(event.target.value) })} />
+                      </label>
+                    </div>
+                    <button type="button" className="dock-fluid-apply" onClick={runFluidScenario}>Запустить сценарий</button>
+                  </div>
+                </div>
+              </section>
+            </div>
+            <footer className="dock-full-console-footer">
+              <span>Полная диагностика · {modeSummary.toLowerCase()}</span>
+              <span>Фильтр: {filterLabel}</span>
+              <span>Последнее изменение: {latestEvent ? formatEventTime(latestEvent.timestamp) : 'нет данных'}</span>
+            </footer>
+          </aside>
+        ) : null}
+      </div>
     </section>
   );
 
