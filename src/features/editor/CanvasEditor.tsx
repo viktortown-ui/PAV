@@ -5,6 +5,7 @@ import { FlowEdge } from '../../ui/edges/FlowEdge';
 import { ProcessNode } from '../../ui/nodes/ProcessNode';
 import { useAppStore } from '../../store/useAppStore';
 import { instrumentCallsite } from '../../utils/instrumentation';
+import { LocalActionPanel } from './LocalActionPanel';
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const VIEWPORT_POSITION_EPSILON = 0.5;
@@ -13,6 +14,7 @@ const isDev = import.meta.env.DEV;
 
 const nodeTypes = { processNode: ProcessNode };
 const edgeTypes = { flowEdge: FlowEdge };
+const EDGE_ANCHOR_OFFSET = 26;
 
 const sameViewport = (a: Viewport, b: Viewport) => (
   Math.abs(a.x - b.x) < VIEWPORT_POSITION_EPSILON
@@ -78,9 +80,11 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
   const latestViewRef = useRef(view);
   const [flow, setFlow] = useState<ReactFlowInstance | null>(null);
   const [isViewportLocked, setIsViewportLocked] = useState(false);
+  const [liveViewport, setLiveViewport] = useState<Viewport>(view.viewport);
 
   useEffect(() => {
     latestViewRef.current = view;
+    setLiveViewport(view.viewport);
   }, [view]);
 
   const animate = useCallback((time: number) => {
@@ -126,6 +130,52 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
     data: { ...edge.data, selectedPath: pathSelection.edges.includes(edge.id), hovered: hoveredEdgeId === edge.id, labelMode: edgeLabelMode },
     style: { opacity: pathSelection.edges.length ? (pathSelection.edges.includes(edge.id) ? 1 : 0.16) : 1 },
   })), [edgeLabelMode, hoveredEdgeId, pathSelection.edges, problemEdgeIds, projectEdges, showProblematicOnly]);
+  const selectedNode = useMemo(() => projectNodes.find((node) => node.id === selectedNodeId), [projectNodes, selectedNodeId]);
+  const selectedEdge = useMemo(() => projectEdges.find((edge) => edge.id === selectedEdgeId), [projectEdges, selectedEdgeId]);
+
+  const getNodeVisualSize = useCallback((className: string) => {
+    if (className === 'major') return { width: 230, height: 122 };
+    if (className === 'valve' || className === 'instrument' || className === 'topology') return { width: 138, height: 86 };
+    if (className === 'terminal') return { width: 150, height: 88 };
+    return { width: 180, height: 98 };
+  }, []);
+
+  const localPanelAnchor = useMemo(() => {
+    const shell = shellRef.current;
+    if (!shell) return undefined;
+    const viewportWidth = shell.clientWidth;
+    const viewportHeight = shell.clientHeight;
+    if (!viewportWidth || !viewportHeight) return undefined;
+
+    if (selectedNode) {
+      const nodeSize = getNodeVisualSize(selectedNode.data.className);
+      const anchorX = selectedNode.position.x * liveViewport.zoom + liveViewport.x + nodeSize.width;
+      const anchorY = selectedNode.position.y * liveViewport.zoom + liveViewport.y + nodeSize.height / 2;
+      return { x: anchorX, y: anchorY, viewportWidth, viewportHeight };
+    }
+
+    if (selectedEdge) {
+      const source = projectNodes.find((node) => node.id === selectedEdge.source);
+      const target = projectNodes.find((node) => node.id === selectedEdge.target);
+      if (!source || !target) return undefined;
+      const sourceSize = getNodeVisualSize(source.data.className);
+      const targetSize = getNodeVisualSize(target.data.className);
+      const sourceCenterX = source.position.x + sourceSize.width / 2;
+      const sourceCenterY = source.position.y + sourceSize.height / 2;
+      const targetCenterX = target.position.x + targetSize.width / 2;
+      const targetCenterY = target.position.y + targetSize.height / 2;
+      const midX = (sourceCenterX + targetCenterX) / 2;
+      const midY = (sourceCenterY + targetCenterY) / 2;
+      return {
+        x: midX * liveViewport.zoom + liveViewport.x,
+        y: midY * liveViewport.zoom + liveViewport.y - EDGE_ANCHOR_OFFSET,
+        viewportWidth,
+        viewportHeight,
+      };
+    }
+
+    return undefined;
+  }, [getNodeVisualSize, liveViewport.x, liveViewport.y, liveViewport.zoom, projectNodes, selectedEdge, selectedNode]);
 
   const buildCuratedViewport = useCallback((): Viewport | null => {
     if (!shellRef.current) return null;
@@ -234,6 +284,7 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
         onPaneClick={() => { selectNode(undefined); selectEdge(undefined); hoverEdge(undefined); }}
         defaultViewport={view.viewport}
         onMoveEnd={(_, viewport) => {
+          setLiveViewport(viewport);
           if (suppressMoveEndRef.current) {
             suppressMoveEndRef.current = false;
             return;
@@ -242,6 +293,7 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
           debugLog('viewport', 'move end -> persist manual viewport', viewport);
           setViewportState(viewport, { manual: true });
         }}
+        onMove={(_, viewport) => setLiveViewport(viewport)}
         snapToGrid={gridEnabled}
         snapGrid={[20, 20]}
         minZoom={0.45}
@@ -251,6 +303,7 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
       >
         {gridEnabled ? <Background color="rgba(93,117,145,0.18)" gap={24} size={1.2} /> : null}
       </ReactFlow>
+      <LocalActionPanel selectedNode={selectedNode} selectedEdge={selectedEdge} anchor={localPanelAnchor} presentationMode={view.presentationMode} />
       {!focusMode ? (
         <div className="canvas-navigation-cluster" aria-label="Управление видом" onWheel={stopCanvasViewportPropagation} onPointerDown={stopCanvasViewportPropagation} onMouseDown={stopCanvasViewportPropagation}>
           <div className="viewport-controls-card" aria-label="Управление видом">
