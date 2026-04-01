@@ -9,7 +9,7 @@ import { useAppStore } from '../../store/useAppStore';
 import { instrumentCallsite } from '../../utils/instrumentation';
 import { LocalActionPanel } from './LocalActionPanel';
 import { SoapEdge, SoapNode } from '../../domain/schemas/types';
-import { buildSchematicLayout } from './schematicLayout';
+import { buildSchematicLayout, buildSchematicLayoutElk, shouldUseElkLayout } from './schematicLayout';
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const VIEWPORT_POSITION_EPSILON = 0.5;
@@ -71,6 +71,8 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
     selectedMeasurementPointId,
     tickSimulation,
     hoverEdge,
+    setSchematicManualNodePosition,
+    setSchematicAutoNodePositions,
   } = useAppStore((state) => ({
     nodes: state.project.nodes,
     edges: state.project.edges,
@@ -102,6 +104,8 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
     selectedMeasurementPointId: state.selectedMeasurementPointId,
     tickSimulation: state.tickSimulation,
     hoverEdge: state.hoverEdge,
+    setSchematicManualNodePosition: state.setSchematicManualNodePosition,
+    setSchematicAutoNodePositions: state.setSchematicAutoNodePositions,
   }), shallow);
   const frameRef = useRef<number>();
   const lastTimeRef = useRef<number>();
@@ -164,11 +168,25 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
     data: { ...edge.data, selectedPath: pathSelection.edges.includes(edge.id), hovered: hoveredEdgeId === edge.id, labelMode: edgeLabelMode },
     style: { opacity: pathSelection.edges.length ? (pathSelection.edges.includes(edge.id) ? 1 : 0.16) : 1 },
   })), [edgeLabelMode, hoveredEdgeId, pathSelection.edges, problemEdgeIds, projectEdges, showProblematicOnly]);
-  const schematicLayout = useMemo(() => (
+  const lightweightSchematicLayout = useMemo(() => (
     view.presentationMode === 'schematic'
       ? buildSchematicLayout(nodes, edges, view.schematicLayout)
       : undefined
   ), [edges, nodes, view.presentationMode, view.schematicLayout]);
+  const [schematicLayout, setSchematicLayout] = useState(lightweightSchematicLayout);
+
+  useEffect(() => {
+    setSchematicLayout(lightweightSchematicLayout);
+    if (!lightweightSchematicLayout) return;
+    if (!shouldUseElkLayout()) return;
+    let cancelled = false;
+    void buildSchematicLayoutElk(nodes, edges, view.schematicLayout).then((elkLayout) => {
+      if (cancelled) return;
+      setSchematicLayout(elkLayout);
+      setSchematicAutoNodePositions(elkLayout.autoPositions);
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [edges, lightweightSchematicLayout, nodes, setSchematicAutoNodePositions, view.schematicLayout]);
   const renderedNodes = useMemo(() => (
     schematicLayout
       ? nodes.map((node) => ({ ...node, position: schematicLayout.positions[node.id] ?? node.position }))
@@ -181,6 +199,11 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
   ), [edges, schematicLayout]);
   const rendererNodeTypes = view.presentationMode === 'schematic' ? schematicNodeTypes : simulationNodeTypes;
   const rendererEdgeTypes = view.presentationMode === 'schematic' ? schematicEdgeTypes : simulationEdgeTypes;
+
+  const onNodeDragStop = useCallback((_: unknown, node: SoapNode) => {
+    if (view.presentationMode !== 'schematic') return;
+    setSchematicManualNodePosition(node.id, node.position);
+  }, [setSchematicManualNodePosition, view.presentationMode]);
   const selectedNode = useMemo(() => projectNodes.find((node) => node.id === selectedNodeId), [projectNodes, selectedNodeId]);
   const selectedEdge = useMemo(() => projectEdges.find((edge) => edge.id === selectedEdgeId), [projectEdges, selectedEdgeId]);
   const selectedMeasurementPoint = useMemo(() => measurementPoints.find((point) => point.id === selectedMeasurementPointId), [measurementPoints, selectedMeasurementPointId]);
@@ -549,6 +572,7 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
           setFlow(instance);
         }}
         onNodesChange={onNodesChange}
+        onNodeDragStop={onNodeDragStop}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         onNodeClick={(_, node) => {

@@ -218,6 +218,8 @@ const makeDefinition = (type: SoapNodeKind, config: DefinitionConfig): Component
     auditNote: config.auditNote,
     defaults: {
       kind: type,
+      subtype,
+      orientation: ports.preferredDirection === 'ttb' ? 'vertical' : 'horizontal',
       status: 'idle',
       rotation: 0,
       mediumType: 'water',
