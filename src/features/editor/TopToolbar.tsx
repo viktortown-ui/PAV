@@ -27,6 +27,9 @@ export const TopToolbar = ({ focusMode, onToggleFocusMode, onOpenLibrary, onOpen
   const presentationMode = useAppStore((state) => state.project.view.presentationMode);
   const setPresentationMode = useAppStore((state) => state.setPresentationMode);
   const persistenceStatus = useAppStore((state) => state.persistenceStatus);
+  const selectedNodeId = useAppStore((state) => state.selectedNodeId);
+  const resetSchematicNodeOverride = useAppStore((state) => state.resetSchematicNodeOverride);
+  const resetAllSchematicOverrides = useAppStore((state) => state.resetAllSchematicOverrides);
   const persistenceError = useAppStore((state) => state.persistenceError);
   const hasUnsavedChanges = useAppStore((state) => state.projectRevision !== state.persistedRevision);
 
@@ -114,6 +117,12 @@ export const TopToolbar = ({ focusMode, onToggleFocusMode, onOpenLibrary, onOpen
                 </select>
               </label>
               <button onClick={runValidation}>Проверить схему</button>
+              {presentationMode === 'schematic' && (
+                <>
+                  <button onClick={() => selectedNodeId && resetSchematicNodeOverride(selectedNodeId)} disabled={!selectedNodeId}>Сброс узла</button>
+                  <button onClick={resetAllSchematicOverrides}>Сброс всех правок</button>
+                </>
+              )}
             </div>
           </details>
           <details className="toolbar-menu">

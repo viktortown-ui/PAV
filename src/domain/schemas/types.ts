@@ -49,6 +49,7 @@ export type FlowDirection = 'forward' | 'reverse' | 'bidirectional';
 export type MediumMode = 'single' | 'mixed' | 'unknown';
 export type LineRole = 'process' | 'drain' | 'CIP' | 'utility' | 'recycle';
 export type PortRole = 'inlet' | 'outlet' | 'branch' | 'bidirectional';
+export type SchematicOrientation = 'horizontal' | 'vertical';
 export type PortOccupancy = 'occupied' | 'free';
 export type MediaGroup = 'water' | 'product' | 'cip' | 'waste' | 'utility' | 'any' | 'unknown' | 'composite';
 export type DirectionPolicy = 'inherited' | 'lockedForward' | 'lockedReverse' | 'bidirectional' | 'routeDriven';
@@ -236,6 +237,8 @@ export interface SoapNodeData {
   revision: number;
   description: string;
   className: EquipmentClass;
+  subtype?: string;
+  orientation?: SchematicOrientation;
   rotation: number;
   process: EquipmentProcess;
   visual: {
@@ -281,6 +284,7 @@ export interface SoapEdgeData {
   routeState: RouteState;
   mediumMode: MediumMode;
   lineRole: LineRole;
+  serviceTag?: string;
   upstreamRef?: string;
   downstreamRef?: string;
   flowActive: boolean;
@@ -294,6 +298,7 @@ export interface SoapEdgeData {
   labelMode?: EdgeLabelMode;
   segmentId?: string;
   direction?: FlowDirection;
+  flowDirection?: FlowDirection;
   stateLabel?: string;
   routeWarnings?: string[];
   composition?: Partial<Record<MediumType, number>>;

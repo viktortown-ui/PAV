@@ -606,17 +606,27 @@ button.primary, .toolbox-actions .primary { background: linear-gradient(180deg, 
 .command-palette-list::-webkit-scrollbar-thumb { background: rgba(121, 156, 204, 0.45); border-radius: 10px; }
 .command-palette-list::-webkit-scrollbar-thumb:hover { background: rgba(143, 184, 241, 0.6); }
 
-.schematic-node { width: 164px; min-height: 92px; border: 1px solid #5b6a7d; background: #f5f7fb; color: #1f2b3d; border-radius: 8px; box-shadow: 0 2px 0 rgba(20, 33, 50, 0.15); display: grid; grid-template-columns: 34px 1fr; gap: 10px; align-items: center; padding: 8px 10px; font-family: 'Inter', system-ui, sans-serif; }
-.schematic-node.is-inline { min-height: 74px; width: 150px; }
+.schematic-node { width: 164px; min-height: 92px; border: 1px solid #647992; background: #f5f7fb; color: #1f2b3d; border-radius: 8px; box-shadow: 0 1px 0 rgba(20, 33, 50, 0.12); display: grid; grid-template-columns: 32px 1fr; gap: 10px; align-items: center; padding: 8px 10px; font-family: 'Inter', system-ui, sans-serif; }
 .schematic-node.is-selected { border-color: #2f4c74; box-shadow: 0 0 0 1px #2f4c74; }
+.schematic-node.shape-vessel,
+.schematic-node.shape-reactor { border-radius: 12px; }
+.schematic-node.shape-valve,
+.schematic-node.shape-inline,
+.schematic-node.shape-instrument,
+.schematic-node.shape-filter,
+.schematic-node.shape-mixer { min-height: 74px; }
 .schematic-node-symbol { width: 24px; height: 24px; border: 1px solid #5d6b80; border-radius: 4px; display: grid; place-items: center; font-weight: 700; background: #fff; }
 .schematic-node-labels { display: grid; gap: 3px; }
 .schematic-node-labels strong { font-size: 12px; line-height: 1.15; color: #1e2a3a; }
-.schematic-node-labels span { font-size: 11px; color: #43546c; }
-.schematic-node-labels small { font-size: 10px; color: #6a7788; text-transform: uppercase; letter-spacing: 0.04em; }
-.schematic-edge-arrow { fill: none; stroke: #7b8ca3; stroke-width: 1.6; stroke-dasharray: 3 5; opacity: 0.75; }
-.schematic-edge-label { position: absolute; pointer-events: none; font-size: 10px; letter-spacing: 0.02em; border: 1px solid rgba(73, 93, 122, 0.3); background: rgba(245, 247, 251, 0.96); color: #33435a; border-radius: 5px; padding: 2px 5px; }
-.mode-schematic .canvas-shell .react-flow { background: #eef2f8; }
+.schematic-node-labels span { font-size: 10px; color: #53647e; }
+.schematic-node-labels small { font-size: 10px; color: #7d8897; text-transform: uppercase; letter-spacing: 0.04em; }
+.schematic-edge-arrow { fill: none; stroke: #7086a2; stroke-width: 1.5; stroke-dasharray: 2 5; opacity: 0.7; }
+.schematic-edge-label { position: absolute; pointer-events: none; display: grid; gap: 1px; font-size: 10px; letter-spacing: 0.02em; border: 1px solid rgba(73, 93, 122, 0.28); background: rgba(245, 247, 251, 0.97); color: #33435a; border-radius: 5px; padding: 2px 5px; min-width: 48px; text-align: center; }
+.schematic-edge-label strong { font-size: 10px; line-height: 1.2; }
+.schematic-edge-label span { font-size: 9px; color: #617089; }
+.mode-schematic .canvas-shell .react-flow { background: #e8edf5; }
+.mode-schematic .react-flow__attribution { opacity: 0.35; }
+
 
 .wizard-overlay { position: fixed; inset: 0; background: rgba(2, 8, 15, 0.72); display: grid; place-items: center; z-index: 120; padding: 24px; }
 .wizard-card { width: min(980px, 100%); max-height: calc(100vh - 48px); overflow: auto; border-radius: 24px; border: 1px solid rgba(132, 171, 218, 0.18); background: linear-gradient(180deg, #101c2d, #0a1320); box-shadow: 0 28px 60px rgba(0,0,0,0.45); padding: 18px; display: grid; gap: 14px; }

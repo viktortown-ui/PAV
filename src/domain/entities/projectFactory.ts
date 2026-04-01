@@ -73,6 +73,8 @@ export const buildEdge = (
       mediumMode: 'single',
       lineRole: resolved.lineRole,
       direction: 'forward',
+      flowDirection: 'forward',
+      serviceTag: '',
       stateLabel: 'Ожидание',
       routeWarnings: [],
       composition: { [selectedMedium]: 1 },
