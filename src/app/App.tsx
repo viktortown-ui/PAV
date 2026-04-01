@@ -1,4 +1,4 @@
-import { Component, ErrorInfo, ReactNode, useEffect, useMemo, useState } from 'react';
+import { Component, ErrorInfo, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { useReactFlow } from 'reactflow';
 import { CanvasEditor } from '../features/editor/CanvasEditor';
 import type { CanvasTool } from '../features/editor/CanvasEditor';
@@ -105,6 +105,7 @@ const DatasheetPanel = () => {
 const CommandPalette = ({ open, onClose, actions }: { open: boolean; onClose: () => void; actions: PaletteAction[] }) => {
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
+  const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) {
@@ -124,6 +125,13 @@ const CommandPalette = ({ open, onClose, actions }: { open: boolean; onClose: ()
   useEffect(() => {
     if (activeIndex >= filteredActions.length) setActiveIndex(0);
   }, [activeIndex, filteredActions.length]);
+
+  useEffect(() => {
+    if (!open) return;
+    const { overflow } = document.body.style;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = overflow; };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -152,8 +160,14 @@ const CommandPalette = ({ open, onClose, actions }: { open: boolean; onClose: ()
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [activeIndex, filteredActions, onClose, open]);
 
+  useEffect(() => {
+    if (!open || !listRef.current) return;
+    const activeElement = listRef.current.querySelector<HTMLElement>(`[data-action-index=\"${activeIndex}\"]`);
+    activeElement?.scrollIntoView({ block: 'nearest' });
+  }, [activeIndex, open]);
+
   if (!open) return null;
-  return <div className="command-palette-backdrop" onClick={onClose}><div className="command-palette" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Командная палитра"><div className="command-palette-head"><div><strong>Командная палитра</strong><span className="panel-caption">Быстрый доступ к действиям и панелям • Ctrl/⌘K</span></div><button type="button" onClick={onClose}>Esc</button></div><input autoFocus className="panel-search command-palette-search" placeholder="Команда, панель, оборудование, шаблон…" value={query} onChange={(e) => { setQuery(e.target.value); setActiveIndex(0); }} /><div className="command-palette-meta"><span>↑ ↓ переход</span><span>Enter выбрать</span><span>Shift+F режим схемы</span></div><div className="command-palette-list">{filteredActions.length ? filteredActions.map((action, index) => <button key={action.id} type="button" className={`command-palette-item ${index === activeIndex ? 'is-active' : ''}`} onMouseEnter={() => setActiveIndex(index)} onClick={() => { action.run(); onClose(); }}><div><strong>{action.title}</strong><span>{action.subtitle}</span></div><div className="command-palette-item-meta"><small>{action.group}</small>{action.hint ? <kbd>{action.hint}</kbd> : null}</div></button>) : <div className="command-palette-empty"><strong>Ничего не найдено</strong><span>Попробуйте «диагностика», «линии» или «шаблон».</span></div>}</div></div></div>;
+  return <div className="command-palette-backdrop" onClick={onClose}><div className="command-palette" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Командная палитра"><div className="command-palette-head"><div><strong>Командная палитра</strong><span className="panel-caption">Быстрый доступ к действиям и панелям • Ctrl/⌘K</span></div><button type="button" onClick={onClose}>Esc</button></div><input autoFocus className="panel-search command-palette-search" placeholder="Команда, панель, оборудование, шаблон…" value={query} onChange={(e) => { setQuery(e.target.value); setActiveIndex(0); }} /><div className="command-palette-meta"><span>↑ ↓ переход</span><span>Enter выбрать</span><span>Shift+F режим схемы</span></div><div className="command-palette-list" ref={listRef}>{filteredActions.length ? filteredActions.map((action, index) => <button key={action.id} type="button" data-action-index={index} className={`command-palette-item ${index === activeIndex ? 'is-active' : ''}`} onMouseEnter={() => setActiveIndex(index)} onClick={() => { action.run(); onClose(); }}><div><strong>{action.title}</strong><span>{action.subtitle}</span></div><div className="command-palette-item-meta"><small>{action.group}</small>{action.hint ? <kbd>{action.hint}</kbd> : null}</div></button>) : <div className="command-palette-empty"><strong>Ничего не найдено</strong><span>Попробуйте «диагностика», «линии» или «шаблон».</span></div>}</div></div></div>;
 };
 
 export const App = () => {

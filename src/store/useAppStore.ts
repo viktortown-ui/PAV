@@ -187,7 +187,11 @@ const reapplyDerivedState = (project: ProjectDocument) => {
 
 const sanitizeProjectState = (project: ProjectDocument, revision = 0, persistedRevision = revision, viewportNonce = 0) => {
   const normalizedProject = normalizeProjectEdgeHandles(project);
-  normalizedProject.view = { ...normalizedProject.view, presentationMode: normalizedProject.view.presentationMode ?? 'schematic' };
+  normalizedProject.view = {
+    ...normalizedProject.view,
+    presentationMode: normalizedProject.view.presentationMode ?? 'schematic',
+    schematicLayout: normalizedProject.view.schematicLayout ?? { autoNodePositions: {}, manualNodePositions: {} },
+  };
   normalizedProject.simulation = {
     ...normalizedProject.simulation,
     status: normalizedProject.simulation.status ?? (normalizedProject.simulation.running ? 'running' : 'idle'),
