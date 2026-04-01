@@ -22,6 +22,7 @@ export const SchematicNode = memo(({ data, selected }: NodeProps<SoapNodeData>) 
   const handles = getHandleSpecs(data);
   const symbol = getSchematicSymbol({ id: data.id, data, position: { x: 0, y: 0 } } as any);
   const glyph = symbolByShape[symbol.shape] ?? '□';
+  const showSecondary = symbol.size.height >= 86 && symbol.size.width >= 150;
 
   return (
     <div
@@ -35,7 +36,7 @@ export const SchematicNode = memo(({ data, selected }: NodeProps<SoapNodeData>) 
       <div className="schematic-node-labels">
         <strong>{data.shortName || data.visibleName}</strong>
         <span>{data.technicalTag || data.visibleName}</span>
-        <small>{data.kind}</small>
+        {showSecondary ? <small>{data.kind}{symbol.variant ? ` • ${symbol.variant}` : ''}</small> : null}
       </div>
       {handles.filter((handle) => handle.type === 'source').map((handle) => (
         <Handle key={handle.id} id={handle.id} type={handle.type} position={handle.position} className={handle.className} />

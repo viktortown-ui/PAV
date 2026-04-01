@@ -34,9 +34,21 @@ const VESSEL_PORTS: SchematicPort[] = [
   { id: 'out-bottom', side: 'bottom', ratio: 0.5, role: 'source' },
 ];
 
+const HEATER_VARIANTS = {
+  'heat-exchanger': { variant: 'heat-exchanger', size: { width: 176, height: 94 } },
+  heater: { variant: 'heater', size: { width: 170, height: 92 } },
+  cooler: { variant: 'cooler', size: { width: 170, height: 92 } },
+} as const;
+
+const TERMINAL_VARIANTS: Record<string, { variant: string; ports: SchematicPort[] }> = {
+  source: { variant: 'source', ports: [{ id: 'out-right', side: 'right', ratio: 0.5, role: 'source' as const }] },
+  sink: { variant: 'sink', ports: [{ id: 'in-left', side: 'left', ratio: 0.5, role: 'target' as const }] },
+  external: { variant: 'external', ports: INLINE_PORTS },
+};
+
 const symbolByKind: Partial<Record<SoapNodeData['kind'], SchematicSymbolDefinition>> = {
-  tank: { shape: 'vessel', size: { width: 180, height: 112 }, ports: VESSEL_PORTS, labelPlacement: { primary: 'east', secondary: 'south' }, orientation: 'vertical' },
-  bufferTank: { shape: 'vessel', size: { width: 180, height: 112 }, ports: VESSEL_PORTS, labelPlacement: { primary: 'east', secondary: 'south' }, orientation: 'vertical' },
+  tank: { shape: 'vessel', variant: 'tank-vertical', size: { width: 180, height: 112 }, ports: VESSEL_PORTS, labelPlacement: { primary: 'east', secondary: 'south' }, orientation: 'vertical' },
+  bufferTank: { shape: 'vessel', variant: 'tank-vertical', size: { width: 180, height: 112 }, ports: VESSEL_PORTS, labelPlacement: { primary: 'east', secondary: 'south' }, orientation: 'vertical' },
   reactor: { shape: 'reactor', size: { width: 188, height: 120 }, ports: VESSEL_PORTS, labelPlacement: { primary: 'east', secondary: 'south' }, orientation: 'vertical' },
   heatedReactor: { shape: 'reactor', variant: 'heated', size: { width: 192, height: 122 }, ports: VESSEL_PORTS, labelPlacement: { primary: 'east', secondary: 'south' }, orientation: 'vertical' },
   pump: { shape: 'pump', size: { width: 164, height: 88 }, ports: INLINE_PORTS, labelPlacement: { primary: 'east', secondary: 'south' }, orientation: 'horizontal' },
@@ -57,11 +69,11 @@ const symbolByKind: Partial<Record<SoapNodeData['kind'], SchematicSymbolDefiniti
   filterUnit: { shape: 'filter', variant: 'housing', size: { width: 168, height: 92 }, ports: INLINE_PORTS, labelPlacement: { primary: 'east', secondary: 'south' }, orientation: 'horizontal' },
   inlineMixer: { shape: 'mixer', size: { width: 154, height: 80 }, ports: INLINE_PORTS, labelPlacement: { primary: 'east', secondary: 'south' }, orientation: 'horizontal' },
   heatExchanger: { shape: 'heater', variant: 'heat-exchanger', size: { width: 176, height: 94 }, ports: INLINE_PORTS, labelPlacement: { primary: 'east', secondary: 'south' }, orientation: 'horizontal' },
-  source: { shape: 'terminal', variant: 'source', size: { width: 150, height: 84 }, ports: [{ id: 'out-right', side: 'right', ratio: 0.5, role: 'source' }], labelPlacement: { primary: 'east', secondary: 'south' } },
-  consumer: { shape: 'terminal', variant: 'sink', size: { width: 150, height: 84 }, ports: [{ id: 'in-left', side: 'left', ratio: 0.5, role: 'target' }], labelPlacement: { primary: 'west', secondary: 'south' } },
-  utilityDrain: { shape: 'terminal', variant: 'sink', size: { width: 150, height: 84 }, ports: [{ id: 'in-left', side: 'left', ratio: 0.5, role: 'target' }], labelPlacement: { primary: 'west', secondary: 'south' } },
-  serviceTerminal: { shape: 'terminal', variant: 'external', size: { width: 150, height: 82 }, ports: INLINE_PORTS, labelPlacement: { primary: 'east', secondary: 'south' } },
-  offPageConnector: { shape: 'terminal', variant: 'external', size: { width: 150, height: 82 }, ports: INLINE_PORTS, labelPlacement: { primary: 'east', secondary: 'south' } },
+  source: { shape: 'terminal', variant: 'source', size: { width: 150, height: 84 }, ports: TERMINAL_VARIANTS.source.ports, labelPlacement: { primary: 'east', secondary: 'south' } },
+  consumer: { shape: 'terminal', variant: 'sink', size: { width: 150, height: 84 }, ports: TERMINAL_VARIANTS.sink.ports, labelPlacement: { primary: 'west', secondary: 'south' } },
+  utilityDrain: { shape: 'terminal', variant: 'sink', size: { width: 150, height: 84 }, ports: TERMINAL_VARIANTS.sink.ports, labelPlacement: { primary: 'west', secondary: 'south' } },
+  serviceTerminal: { shape: 'terminal', variant: 'external', size: { width: 150, height: 82 }, ports: TERMINAL_VARIANTS.external.ports, labelPlacement: { primary: 'east', secondary: 'south' } },
+  offPageConnector: { shape: 'terminal', variant: 'external', size: { width: 150, height: 82 }, ports: TERMINAL_VARIANTS.external.ports, labelPlacement: { primary: 'east', secondary: 'south' } },
 };
 
 const FALLBACK_SYMBOL: SchematicSymbolDefinition = {
@@ -71,11 +83,67 @@ const FALLBACK_SYMBOL: SchematicSymbolDefinition = {
   labelPlacement: { primary: 'east', secondary: 'south' },
 };
 
+const getOrientation = (node: Node<SoapNodeData>) => node.data.orientation ?? (node.data.ports.preferredDirection === 'ttb' ? 'vertical' : 'horizontal');
+
+const rotatePort = (port: SchematicPort): SchematicPort => {
+  const remappedSide: Record<PortSide, PortSide> = {
+    left: 'top',
+    right: 'bottom',
+    top: 'left',
+    bottom: 'right',
+  };
+  const suffix = port.id.endsWith('-left')
+    ? '-top'
+    : port.id.endsWith('-right')
+      ? '-bottom'
+      : port.id.endsWith('-top')
+        ? '-left'
+        : port.id.endsWith('-bottom')
+          ? '-right'
+          : '';
+  const nextId = suffix ? `${port.id.slice(0, -suffix.length)}${suffix}` : port.id;
+  return { ...port, id: nextId, side: remappedSide[port.side] };
+};
+
+const applyVariantPreset = (base: SchematicSymbolDefinition, node: Node<SoapNodeData>): SchematicSymbolDefinition => {
+  const variant = node.data.symbolVariant?.trim();
+  if (!variant) return base;
+  if (node.data.kind === 'heatExchanger' && variant in HEATER_VARIANTS) {
+    const next = HEATER_VARIANTS[variant as keyof typeof HEATER_VARIANTS];
+    return { ...base, variant: next.variant, size: next.size };
+  }
+  if ((node.data.kind === 'tank' || node.data.kind === 'bufferTank') && variant === 'tank-horizontal') {
+    return { ...base, variant, size: { width: 210, height: 96 }, orientation: 'horizontal' };
+  }
+  if (node.data.className === 'terminal' && variant in TERMINAL_VARIANTS) {
+    const terminal = TERMINAL_VARIANTS[variant as keyof typeof TERMINAL_VARIANTS];
+    return { ...base, variant: terminal.variant, ports: terminal.ports };
+  }
+  return { ...base, variant };
+};
+
+export const getAvailableSymbolVariants = (node: Node<SoapNodeData>) => {
+  if (node.data.kind === 'heatExchanger') return ['heat-exchanger', 'heater', 'cooler'];
+  if (node.data.kind === 'tank' || node.data.kind === 'bufferTank') return ['tank-vertical', 'tank-horizontal'];
+  if (node.data.className === 'terminal') return ['source', 'sink', 'external'];
+  return [];
+};
+
 export const getSchematicSymbol = (node: Node<SoapNodeData>): SchematicSymbolDefinition => {
-  const mapped = symbolByKind[node.data.kind];
-  if (mapped) return mapped;
-  if (node.data.className === 'major') return { ...FALLBACK_SYMBOL, shape: 'vessel', size: { width: 178, height: 106 }, ports: VESSEL_PORTS };
-  return FALLBACK_SYMBOL;
+  const mapped = symbolByKind[node.data.kind]
+    ?? (node.data.className === 'major' ? { ...FALLBACK_SYMBOL, shape: 'vessel', size: { width: 178, height: 106 }, ports: VESSEL_PORTS } : FALLBACK_SYMBOL);
+  const withVariant = applyVariantPreset(mapped, node);
+  const orientation = getOrientation(node);
+  if (orientation === 'vertical' && withVariant.orientation !== 'vertical') {
+    return {
+      ...withVariant,
+      orientation,
+      size: { width: withVariant.size.height, height: withVariant.size.width },
+      ports: withVariant.ports.map(rotatePort),
+      labelPlacement: { primary: 'south', secondary: 'east' },
+    };
+  }
+  return { ...withVariant, orientation };
 };
 
 export const getSchematicPorts = (node: Node<SoapNodeData>) => getSchematicSymbol(node).ports;

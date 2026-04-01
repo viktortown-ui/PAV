@@ -16,6 +16,8 @@ export const SchematicEdge = memo(({ id, sourceX, sourceY, targetX, targetY, dat
   const medium = typeof data?.medium === 'string' ? data.medium.toUpperCase() : '';
   const tag = typeof data?.serviceTag === 'string' ? data.serviceTag : '';
   const secondary = [medium, tag].filter(Boolean).join(' · ');
+  const secondaryPoint = data?.schematicRoute?.secondaryLabelPoint as { x: number; y: number } | undefined;
+  const showSecondary = Boolean(data?.schematicRoute?.showSecondaryLabel ?? true);
 
   return (
     <>
@@ -24,8 +26,8 @@ export const SchematicEdge = memo(({ id, sourceX, sourceY, targetX, targetY, dat
       <EdgeLabelRenderer>
         <div className="schematic-edge-label" style={{ left: labelPoint.x, top: labelPoint.y, transform: 'translate(-50%, -50%)' }}>
           <strong>{dn}</strong>
-          {secondary && <span>{secondary}</span>}
         </div>
+        {secondary && showSecondary && secondaryPoint ? <div className="schematic-edge-label schematic-edge-label-secondary" style={{ left: secondaryPoint.x, top: secondaryPoint.y, transform: 'translate(-50%, -50%)' }}><span>{secondary}</span></div> : null}
       </EdgeLabelRenderer>
     </>
   );

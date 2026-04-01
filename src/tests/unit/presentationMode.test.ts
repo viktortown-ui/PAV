@@ -61,4 +61,13 @@ describe('presentation mode', () => {
     expect(next.selectedNodeId).toBe(nodeId);
     expect(next.project.view.presentationMode).toBe('schematic');
   });
+
+  it('keeps orientation and symbol variant through sanitize restore', () => {
+    const project = cloneProject(demoProject) as any;
+    project.nodes[0].data.orientation = 'vertical';
+    project.nodes[0].data.symbolVariant = 'heater';
+    const restored = restoreProjectDocument(project);
+    expect(restored.nodes[0].data.orientation).toBe('vertical');
+    expect(restored.nodes[0].data.symbolVariant).toBe('heater');
+  });
 });

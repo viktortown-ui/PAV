@@ -4,6 +4,7 @@ import { EdgeActionKind, useAppStore } from '../../store/useAppStore';
 import { createEdgeInspectorSchema, edgeInspectorFields } from './schemas';
 import { buildSegmentList, summarizeDiagnostics } from '../editor/lineList';
 import { compactEvents, formatEventTime, formatSmartNumber } from './presentation';
+import { getAvailableSymbolVariants } from '../editor/schematicSymbols';
 
 const ruMedium: Record<string, string> = { water: 'Вода', product: 'Продукт', cip: 'СИП', waste: 'Сток', composite: 'Смесь' };
 const ruState: Record<string, string> = { idle: 'Ожидание', primed: 'Подготовлен', flowing: 'Поток', blocked: 'Блокировка', starved: 'Нет подпитки', draining: 'Слив', cip: 'СИП', alarm: 'Авария', maintenance: 'Ремонт', offline: 'Отключён' };
@@ -253,6 +254,7 @@ export const InspectorPanel = ({ compact = false }: { compact?: boolean }) => {
   const updateNodeField = useAppStore((state) => state.updateNodeField);
   const updateEdgeField = useAppStore((state) => state.updateEdgeField);
   const updateMeasurementPoint = useAppStore((state) => state.updateMeasurementPoint);
+  const presentationMode = useAppStore((state) => state.project.view.presentationMode);
   const deleteMeasurementPoint = useAppStore((state) => state.deleteMeasurementPoint);
   const executeNodeAction = useAppStore((state) => state.executeNodeAction);
   const issues = useAppStore((state) => state.issues);
@@ -437,6 +439,9 @@ export const InspectorPanel = ({ compact = false }: { compact?: boolean }) => {
     { label: 'Расход', state: flowBand.state, reason: summaryFlow < 0.1 ? 'поток практически остановлен' : summaryFlow > 60 ? 'расход выше расчётного диапазона' : 'расход в допустимом коридоре' },
     { label: 'Уровень', state: levelBand.state, reason: levelPercent > 90 ? 'резервуар близок к переполнению' : levelPercent < 15 ? 'уровень низкий, возможен срыв подачи' : 'уровень в рабочем диапазоне' },
   ];
+  const schematicNodeStub = { id: node!.id, data: node!.data, position: node!.position } as any;
+  const variantOptions = getAvailableSymbolVariants(schematicNodeStub);
+  const showOrientationControl = node!.data.className !== 'topology';
 
   return <aside className={`panel inspector-panel ${compact ? 'is-compact' : ''}`}>
     <div className="panel-title">Инспектор оборудования</div>
@@ -504,6 +509,21 @@ export const InspectorPanel = ({ compact = false }: { compact?: boolean }) => {
 
     <section className="route-card inspector-card">
       <strong>Паспорт оборудования</strong>
+      {presentationMode === 'schematic' ? <div className="inspector-stack">
+        {showOrientationControl ? <label className="field">
+          <span>Ориентация (Schematic)</span>
+          <select value={node!.data.orientation ?? 'horizontal'} onChange={(e) => updateNodeField(node!.id, 'orientation', e.target.value)}>
+            <option value="horizontal">Горизонтальная</option>
+            <option value="vertical">Вертикальная</option>
+          </select>
+        </label> : null}
+        {variantOptions.length ? <label className="field">
+          <span>Вариант символа</span>
+          <select value={node!.data.symbolVariant ?? variantOptions[0]} onChange={(e) => updateNodeField(node!.id, 'symbolVariant', e.target.value)}>
+            {variantOptions.map((variant) => <option key={variant} value={variant}>{variant}</option>)}
+          </select>
+        </label> : null}
+      </div> : null}
       {passportFields.map((field) => {
         const value = getValue(node!, field);
         return <label key={field.key} className="field">

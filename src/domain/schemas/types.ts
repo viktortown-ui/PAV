@@ -239,6 +239,7 @@ export interface SoapNodeData {
   className: EquipmentClass;
   subtype?: string;
   orientation?: SchematicOrientation;
+  symbolVariant?: string;
   rotation: number;
   process: EquipmentProcess;
   visual: {
@@ -285,6 +286,8 @@ export interface SoapEdgeData {
   mediumMode: MediumMode;
   lineRole: LineRole;
   serviceTag?: string;
+  sourcePortId?: string;
+  targetPortId?: string;
   upstreamRef?: string;
   downstreamRef?: string;
   flowActive: boolean;
