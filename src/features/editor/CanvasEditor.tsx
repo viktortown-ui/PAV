@@ -119,6 +119,7 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
   const [liveViewport, setLiveViewport] = useState<Viewport>(view.viewport);
   const [contextMenu, setContextMenu] = useState<ContextMenuState>();
   const [menuPosition, setMenuPosition] = useState<{ left: number; top: number }>();
+  const [legendOpen, setLegendOpen] = useState(false);
 
   useEffect(() => {
     latestViewRef.current = view;
@@ -646,6 +647,17 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
       >
         {gridEnabled ? <Background color="rgba(93,117,145,0.18)" gap={24} size={1.2} /> : null}
       </ReactFlow>
+      {view.presentationMode === 'schematic' ? <details className="schematic-legend" open={legendOpen} onToggle={(e) => setLegendOpen((e.target as HTMLDetailsElement).open)}>
+        <summary>Легенда схемы</summary>
+        <div>
+          <span>◯ Аппарат/ёмкость</span>
+          <span>▶ Насос</span>
+          <span>▭ Теплообмен/нагрев</span>
+          <span>◇ Арматура</span>
+          <span>◌ КИП</span>
+          <span>Подписи: secondary скрываются при коллизиях</span>
+        </div>
+      </details> : null}
       <div className="measurement-layer" aria-label="Точки измерения">
         {measurementPoints.filter((point) => point.visible).map((point) => {
           const anchor = resolveMarkerAnchor(point.id);

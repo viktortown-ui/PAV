@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildEdge, buildNode } from '../../domain/entities/projectFactory';
 import { makeProject } from '../../domain/entities/projectFactory';
-import { buildSchematicLayoutLightweight, resolveEdgeAnchors } from '../../features/editor/schematicLayout';
+import { buildElkGraphFromProcessModel, buildSchematicLayoutLightweight, resolveEdgeAnchors } from '../../features/editor/schematicLayout';
 
 const project = makeProject();
 
@@ -29,5 +29,16 @@ describe('schematic layout', () => {
 
     expect(result.positions[right.id]).toEqual({ x: 999, y: 444 });
     expect(result.routes[edge.id]?.points.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('builds ELK graph with explicit ports and bound source/target ports', () => {
+    const source = buildNode('pump', { x: 10, y: 10 }, project);
+    const target = buildNode('tank', { x: 240, y: 100 }, project);
+    const edge = buildEdge(source.id, target.id, 'water', 'DN50', { sourceHandle: 'out-right', targetHandle: 'in-left' }, project);
+    const graph = buildElkGraphFromProcessModel([source, target], [edge]);
+
+    expect(graph.children[0].ports.length).toBeGreaterThan(0);
+    expect(graph.edges[0].sourcePort).toContain(`${source.id}:out-right`);
+    expect(graph.edges[0].targetPort).toContain(`${target.id}:in-left`);
   });
 });

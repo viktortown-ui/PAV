@@ -93,6 +93,7 @@ const flushPendingPersistence = async () => {
 
 const syncNodePresentation = (node: SoapNode) => {
   const process = node.data.process as any;
+  if (node.data.orientation) node.data.ports.preferredDirection = node.data.orientation === 'vertical' ? 'ttb' : 'ltr';
   if (process.mediumType || process.medium) {
     const medium = (process.mediumType ?? process.medium ?? node.data.mediumType) as SoapNode['data']['medium'];
     node.data.medium = medium;
@@ -213,7 +214,7 @@ const sanitizeProjectState = (project: ProjectDocument, revision = 0, persistedR
 
 const setByPath = (node: SoapNode, path: string, value: string | number | boolean) => {
   const data = node.data as any;
-  if (['visibleName', 'description', 'shortName', 'notes', 'technicalTag', 'status', 'mode'].includes(path)) data[path] = value;
+  if (['visibleName', 'description', 'shortName', 'notes', 'technicalTag', 'status', 'mode', 'orientation', 'symbolVariant'].includes(path)) data[path] = value;
   else if (path === 'medium' || path === 'mediumType') { data.medium = value; data.mediumType = value; data.process.medium = value; data.process.mediumType = value; }
   else if (path === 'inputs' || path === 'outputs' || path === 'preferredDirection' || path === 'inline') data.ports[path] = path === 'inputs' || path === 'outputs' ? Number(value) : value;
   else if (path === 'accent' || path === 'fill' || path === 'enabled' || path === 'showLabel') {
