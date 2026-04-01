@@ -3,18 +3,23 @@ import ReactFlow, { Background, ReactFlowInstance, SelectionMode, Viewport, getV
 import { shallow } from 'zustand/shallow';
 import { FlowEdge } from '../../ui/edges/FlowEdge';
 import { ProcessNode } from '../../ui/nodes/ProcessNode';
+import { SchematicNode } from '../../ui/nodes/SchematicNode';
+import { SchematicEdge } from '../../ui/edges/SchematicEdge';
 import { useAppStore } from '../../store/useAppStore';
 import { instrumentCallsite } from '../../utils/instrumentation';
 import { LocalActionPanel } from './LocalActionPanel';
 import { SoapEdge, SoapNode } from '../../domain/schemas/types';
+import { buildSchematicLayout } from './schematicLayout';
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const VIEWPORT_POSITION_EPSILON = 0.5;
 const VIEWPORT_ZOOM_EPSILON = 0.001;
 const isDev = import.meta.env.DEV;
 
-const nodeTypes = { processNode: ProcessNode };
-const edgeTypes = { flowEdge: FlowEdge };
+const simulationNodeTypes = { processNode: ProcessNode };
+const simulationEdgeTypes = { flowEdge: FlowEdge };
+const schematicNodeTypes = { processNode: SchematicNode };
+const schematicEdgeTypes = { flowEdge: SchematicEdge };
 const EDGE_ANCHOR_OFFSET = 26;
 export type CanvasTool = 'select' | 'connect' | 'measure-pressure' | 'measure-temperature' | 'measure-flow' | 'measure-probe';
 type MarkerAnchor = { worldX: number; worldY: number; anchorText: string };
@@ -159,6 +164,23 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
     data: { ...edge.data, selectedPath: pathSelection.edges.includes(edge.id), hovered: hoveredEdgeId === edge.id, labelMode: edgeLabelMode },
     style: { opacity: pathSelection.edges.length ? (pathSelection.edges.includes(edge.id) ? 1 : 0.16) : 1 },
   })), [edgeLabelMode, hoveredEdgeId, pathSelection.edges, problemEdgeIds, projectEdges, showProblematicOnly]);
+  const schematicLayout = useMemo(() => (
+    view.presentationMode === 'schematic'
+      ? buildSchematicLayout(nodes, edges, view.schematicLayout)
+      : undefined
+  ), [edges, nodes, view.presentationMode, view.schematicLayout]);
+  const renderedNodes = useMemo(() => (
+    schematicLayout
+      ? nodes.map((node) => ({ ...node, position: schematicLayout.positions[node.id] ?? node.position }))
+      : nodes
+  ), [nodes, schematicLayout]);
+  const renderedEdges = useMemo(() => (
+    schematicLayout
+      ? edges.map((edge) => ({ ...edge, data: { ...edge.data, schematicRoute: schematicLayout.routes[edge.id] } }))
+      : edges
+  ), [edges, schematicLayout]);
+  const rendererNodeTypes = view.presentationMode === 'schematic' ? schematicNodeTypes : simulationNodeTypes;
+  const rendererEdgeTypes = view.presentationMode === 'schematic' ? schematicEdgeTypes : simulationEdgeTypes;
   const selectedNode = useMemo(() => projectNodes.find((node) => node.id === selectedNodeId), [projectNodes, selectedNodeId]);
   const selectedEdge = useMemo(() => projectEdges.find((edge) => edge.id === selectedEdgeId), [projectEdges, selectedEdgeId]);
   const selectedMeasurementPoint = useMemo(() => measurementPoints.find((point) => point.id === selectedMeasurementPointId), [measurementPoints, selectedMeasurementPointId]);
@@ -518,10 +540,10 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
         elementsSelectable={activeTool === 'select'}
         nodesConnectable={activeTool === 'connect'}
         selectionOnDrag={activeTool === 'select'}
-        nodes={nodes}
-        edges={edges}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
+        nodes={renderedNodes}
+        edges={renderedEdges}
+        nodeTypes={rendererNodeTypes}
+        edgeTypes={rendererEdgeTypes}
         onInit={(instance) => {
           debugLog('startup', 'react-flow initialized');
           setFlow(instance);

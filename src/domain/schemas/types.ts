@@ -131,6 +131,10 @@ export interface ProjectViewState {
   metadata: TemplateViewMetadata;
   hasManualViewport: boolean;
   presentationMode: PresentationMode;
+  schematicLayout?: {
+    autoNodePositions: Record<string, { x: number; y: number }>;
+    manualNodePositions: Record<string, { x: number; y: number }>;
+  };
 }
 
 export interface BaseEquipmentProcess {

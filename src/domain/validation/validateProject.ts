@@ -59,6 +59,20 @@ const sanitizeView = (value: unknown, fallback: ProjectViewState): ProjectViewSt
   presentationMode: isObject(value) && (value.presentationMode === 'schematic' || value.presentationMode === 'simulation')
     ? value.presentationMode
     : fallback.presentationMode,
+  schematicLayout: {
+    autoNodePositions: isObject(value) && isObject(value.schematicLayout) && isObject(value.schematicLayout.autoNodePositions)
+      ? Object.fromEntries(Object.entries(value.schematicLayout.autoNodePositions).filter(([, point]) => isObject(point)).map(([id, point]) => {
+        const safePoint = point as Record<string, unknown>;
+        return [id, { x: asNumber(safePoint.x, 0), y: asNumber(safePoint.y, 0) }];
+      }))
+      : fallback.schematicLayout?.autoNodePositions ?? {},
+    manualNodePositions: isObject(value) && isObject(value.schematicLayout) && isObject(value.schematicLayout.manualNodePositions)
+      ? Object.fromEntries(Object.entries(value.schematicLayout.manualNodePositions).filter(([, point]) => isObject(point)).map(([id, point]) => {
+        const safePoint = point as Record<string, unknown>;
+        return [id, { x: asNumber(safePoint.x, 0), y: asNumber(safePoint.y, 0) }];
+      }))
+      : fallback.schematicLayout?.manualNodePositions ?? {},
+  },
 });
 const sanitizeSimulation = (value: unknown, fallback: SimulationSettings): SimulationSettings => {
   const running = asBoolean(isObject(value) ? value.running : undefined, false);

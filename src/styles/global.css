@@ -586,18 +586,37 @@ button.primary, .toolbox-actions .primary { background: linear-gradient(180deg, 
 .is-focus-mode .simulation-dock { left: 10px; right: 10px; }
 .is-focus-mode .simulation-dock.is-right-panel-open { right: 10px; }
 
-.command-palette-backdrop { position: fixed; inset: 0; background: rgba(2, 8, 15, 0.68); display: grid; place-items: start center; padding-top: 12vh; z-index: 140; }
-.command-palette { width: min(720px, calc(100vw - 32px)); border-radius: 22px; border: 1px solid rgba(132, 171, 218, 0.18); background: linear-gradient(180deg, #101c2d, #0a1320); box-shadow: 0 28px 60px rgba(0,0,0,0.45); padding: 18px; display: grid; gap: 14px; }
-.command-palette-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.command-palette-backdrop { position: fixed; inset: 0; background: rgba(2, 8, 15, 0.68); display: grid; place-items: start center; padding: max(22px, 6vh) 16px 16px; z-index: 140; overscroll-behavior: contain; }
+.command-palette { width: min(720px, calc(100vw - 32px)); max-height: min(84vh, calc(100dvh - 34px)); border-radius: 22px; border: 1px solid rgba(132, 171, 218, 0.18); background: linear-gradient(180deg, #101c2d, #0a1320); box-shadow: 0 28px 60px rgba(0,0,0,0.45); padding: 0; display: grid; gap: 0; overflow: hidden; }
+.command-palette-head { position: sticky; top: 0; z-index: 2; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 16px 18px 10px; background: rgba(12, 24, 38, 0.95); border-bottom: 1px solid rgba(132, 171, 218, 0.14); }
 .command-palette-search { margin-top: 0; }
-.command-palette-meta { display: flex; flex-wrap: wrap; gap: 8px; color: #8ea4bf; font-size: 12px; }
-.command-palette-list { display: grid; gap: 8px; }
+.command-palette .command-palette-search,
+.command-palette .command-palette-meta { position: sticky; z-index: 2; background: rgba(12, 24, 38, 0.95); padding: 0 18px; }
+.command-palette .command-palette-search { top: 68px; margin: 0; padding-bottom: 10px; }
+.command-palette-meta { top: 116px; display: flex; flex-wrap: wrap; gap: 8px; color: #8ea4bf; font-size: 12px; padding-bottom: 12px !important; border-bottom: 1px solid rgba(132, 171, 218, 0.1); }
+.command-palette-list { display: grid; gap: 8px; padding: 12px 18px 18px; overflow-y: auto; overscroll-behavior: contain; min-height: 0; scrollbar-gutter: stable both-edges; }
 .command-palette-item { text-align: left; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .command-palette-item span { display: block; color: #8ea4bf; margin-top: 4px; }
 .command-palette-item.is-active { border-color: rgba(120, 166, 255, 0.5); background: linear-gradient(180deg, rgba(39, 77, 126, 0.65), rgba(16, 31, 49, 0.96)); }
 .command-palette-item-meta { display: grid; gap: 6px; justify-items: end; color: #a9bdd6; }
 .command-palette-item-meta kbd { border: 1px solid rgba(255,255,255,0.08); border-bottom-width: 2px; border-radius: 8px; padding: 4px 7px; background: rgba(255,255,255,0.04); font: inherit; font-size: 11px; }
 .command-palette-empty { border: 1px dashed rgba(132, 171, 218, 0.2); border-radius: 18px; padding: 18px; display: grid; gap: 6px; color: #9ab0ca; }
+.command-palette-list::-webkit-scrollbar { width: 10px; }
+.command-palette-list::-webkit-scrollbar-track { background: rgba(7, 15, 24, 0.6); border-radius: 10px; }
+.command-palette-list::-webkit-scrollbar-thumb { background: rgba(121, 156, 204, 0.45); border-radius: 10px; }
+.command-palette-list::-webkit-scrollbar-thumb:hover { background: rgba(143, 184, 241, 0.6); }
+
+.schematic-node { width: 164px; min-height: 92px; border: 1px solid #5b6a7d; background: #f5f7fb; color: #1f2b3d; border-radius: 8px; box-shadow: 0 2px 0 rgba(20, 33, 50, 0.15); display: grid; grid-template-columns: 34px 1fr; gap: 10px; align-items: center; padding: 8px 10px; font-family: 'Inter', system-ui, sans-serif; }
+.schematic-node.is-inline { min-height: 74px; width: 150px; }
+.schematic-node.is-selected { border-color: #2f4c74; box-shadow: 0 0 0 1px #2f4c74; }
+.schematic-node-symbol { width: 24px; height: 24px; border: 1px solid #5d6b80; border-radius: 4px; display: grid; place-items: center; font-weight: 700; background: #fff; }
+.schematic-node-labels { display: grid; gap: 3px; }
+.schematic-node-labels strong { font-size: 12px; line-height: 1.15; color: #1e2a3a; }
+.schematic-node-labels span { font-size: 11px; color: #43546c; }
+.schematic-node-labels small { font-size: 10px; color: #6a7788; text-transform: uppercase; letter-spacing: 0.04em; }
+.schematic-edge-arrow { fill: none; stroke: #7b8ca3; stroke-width: 1.6; stroke-dasharray: 3 5; opacity: 0.75; }
+.schematic-edge-label { position: absolute; pointer-events: none; font-size: 10px; letter-spacing: 0.02em; border: 1px solid rgba(73, 93, 122, 0.3); background: rgba(245, 247, 251, 0.96); color: #33435a; border-radius: 5px; padding: 2px 5px; }
+.mode-schematic .canvas-shell .react-flow { background: #eef2f8; }
 
 .wizard-overlay { position: fixed; inset: 0; background: rgba(2, 8, 15, 0.72); display: grid; place-items: center; z-index: 120; padding: 24px; }
 .wizard-card { width: min(980px, 100%); max-height: calc(100vh - 48px); overflow: auto; border-radius: 24px; border: 1px solid rgba(132, 171, 218, 0.18); background: linear-gradient(180deg, #101c2d, #0a1320); box-shadow: 0 28px 60px rgba(0,0,0,0.45); padding: 18px; display: grid; gap: 14px; }
