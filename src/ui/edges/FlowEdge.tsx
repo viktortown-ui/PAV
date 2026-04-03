@@ -3,6 +3,7 @@ import { BaseEdge, EdgeLabelRenderer, EdgeProps, getSmoothStepPath, useStore } f
 import { MediumType, RouteState } from '../../domain/schemas/types';
 import { mediumPalette, routeTone } from '../tokens/tokens';
 import { useAppStore } from '../../store/useAppStore';
+import { intersectsAnyOverlayRect } from '../../features/editor/overlayPositioning';
 
 const routeStateLabel: Record<RouteState, string> = { idle: 'Ожидание', primed: 'Подготовлен', flowing: 'Поток', blocked: 'Блокировка', starved: 'Нет подпитки', draining: 'Слив', cip: 'CIP', alarm: 'Авария', maintenance: 'Ремонт', offline: 'Отключён' };
 const routeParticleMode: Record<RouteState, string> = { idle: 'idle', primed: 'waiting', flowing: 'flowing', blocked: 'blocked', starved: 'starved', draining: 'draining', cip: 'cip', alarm: 'alarm', maintenance: 'idle', offline: 'idle' };
@@ -55,6 +56,16 @@ const FlowEdgeComponent = ({ id, sourceX, sourceY, targetX, targetY, sourcePosit
   const secondaryBase = Math.max(0.6, 3.4 - velocity * 1.05);
   const directionMode = directionModeLabel[data?.directionMode ?? 'derived'] ?? 'Авто';
   const lineRole = lineRoleLabel[data?.lineRole ?? 'process'] ?? String(data?.lineRole ?? 'Технологическая');
+  const declutterRects = data?.declutterRects as Array<{ x: number; y: number; width: number; height: number }> | undefined;
+  const menuCollision = intersectsAnyOverlayRect({ x: labelX, y: labelY }, declutterRects, 14);
+  const badgeOffsets = [showToolbar ? -84 : -30, showToolbar ? -118 : -64, showToolbar ? 22 : 30];
+  const badgePoint = badgeOffsets
+    .map((offset) => ({ x: labelX, y: labelY + offset }))
+    .find((point) => !intersectsAnyOverlayRect(point, declutterRects, 16));
+  const shouldRenderBadge = shouldShowBadge && !menuCollision && Boolean(badgePoint);
+  const toolbarPoint = [{ x: labelX, y: labelY + 12 }, { x: labelX, y: labelY - 42 }, { x: labelX, y: labelY + 52 }]
+    .find((point) => !intersectsAnyOverlayRect(point, declutterRects, 20));
+  const shouldRenderToolbar = showToolbar && presentationMode === 'simulation' && Boolean(toolbarPoint);
 
   return <>
     <BaseEdge id={id} path={path} style={{ stroke: '#122131', strokeWidth: 14, opacity: emphasis ? 1 : 0.55 }} />
@@ -66,10 +77,10 @@ const FlowEdgeComponent = ({ id, sourceX, sourceY, targetX, targetY, sourcePosit
     <EdgeLabelRenderer>
       <button type="button" className={`edge-hitbox nodrag nopan ${isSelected ? 'is-selected' : ''}`} style={{ left: labelX, top: labelY, transform: 'translate(-50%, -50%)' }} onMouseDown={stopCanvasGesture} onClick={(event) => { stopCanvasGesture(event); selectEdge(id); }} />
     </EdgeLabelRenderer>
-    {shouldShowBadge ? <EdgeLabelRenderer><div style={{ left: labelX, top: labelY - (showToolbar ? 74 : 0), transform: 'translate(-50%, -50%)' }} className={`edge-badge sim-${simulationStatus} ${emphasis ? 'is-focus' : ''} ${active ? 'is-active' : ''} ${blocked ? 'is-warning' : ''} ${mixedFlow ? 'is-focus' : ''}`}><strong>{directionGlyph[direction]} {Math.round(Number(data?.flowRate ?? 0))} л/мин • {Number(data?.velocityMPerS ?? 0).toFixed(2)} м/с • {data?.nominalDiameter ?? 'DN50'}</strong><span>{routeStateLabel[routeKey]} • {mediumLabel[mediumKey]}</span>{data?.lineRole ? <span>{lineRole} • {directionMode}</span> : null}{warnings.length ? <span>{warnings.join(' · ')}</span> : null}</div></EdgeLabelRenderer> : null}
-    {showToolbar && presentationMode === 'simulation' ? (
+    {shouldRenderBadge && badgePoint ? <EdgeLabelRenderer><div style={{ left: badgePoint.x, top: badgePoint.y, transform: 'translate(-50%, -50%)' }} className={`edge-badge sim-${simulationStatus} ${emphasis ? 'is-focus' : ''} ${active ? 'is-active' : ''} ${blocked ? 'is-warning' : ''} ${mixedFlow ? 'is-focus' : ''}`}><strong>{directionGlyph[direction]} {Math.round(Number(data?.flowRate ?? 0))} л/мин • {Number(data?.velocityMPerS ?? 0).toFixed(2)} м/с • {data?.nominalDiameter ?? 'DN50'}</strong><span>{routeStateLabel[routeKey]} • {mediumLabel[mediumKey]}</span>{data?.lineRole ? <span>{lineRole} • {directionMode}</span> : null}{warnings.length ? <span>{warnings.join(' · ')}</span> : null}</div></EdgeLabelRenderer> : null}
+    {shouldRenderToolbar && toolbarPoint ? (
       <EdgeLabelRenderer>
-        <div className="edge-editor-popover nodrag nopan" style={{ left: labelX, top: labelY + 12, transform: 'translate(-50%, 0)' }} onPointerDown={stopCanvasGesture} onMouseDown={stopCanvasGesture} onClick={stopCanvasGesture}>
+        <div className="edge-editor-popover nodrag nopan" style={{ left: toolbarPoint.x, top: toolbarPoint.y, transform: 'translate(-50%, 0)' }} onPointerDown={stopCanvasGesture} onMouseDown={stopCanvasGesture} onClick={stopCanvasGesture}>
           {edgeEditorMode === 'insert' ? (
             <div className="edge-picker">
               <button type="button" className="nodrag nopan" onMouseDown={stopCanvasGesture} onClick={(event) => { stopCanvasGesture(event); openLibraryPicker('context-insert', { edgeId: id }); setEdgeEditorMode(undefined); }}>

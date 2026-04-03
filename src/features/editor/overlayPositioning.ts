@@ -1,4 +1,5 @@
 export type Rect = { left: number; top: number; right: number; bottom: number };
+export type OverlayRect = { x: number; y: number; width: number; height: number };
 
 export const clampOverlayToShell = (
   point: { x: number; y: number },
@@ -19,7 +20,11 @@ export const clampOverlayToShell = (
   };
 };
 
-export const intersectsOverlayRect = (point: { x: number; y: number }, rect?: { x: number; y: number; width: number; height: number }, pad = 10) => {
+export const intersectsOverlayRect = (point: { x: number; y: number }, rect?: OverlayRect, pad = 10) => {
   if (!rect) return false;
   return point.x >= rect.x - pad && point.x <= rect.x + rect.width + pad && point.y >= rect.y - pad && point.y <= rect.y + rect.height + pad;
 };
+
+export const intersectsAnyOverlayRect = (point: { x: number; y: number }, rects?: OverlayRect[], pad = 10) => (
+  Array.isArray(rects) && rects.some((rect) => intersectsOverlayRect(point, rect, pad))
+);
