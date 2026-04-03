@@ -60,12 +60,10 @@ export const TopToolbar = ({ focusMode, onToggleFocusMode, onOpenLibrary, onOpen
       <div className="toolbar-clusters toolbar-clusters-compact">
         <div className="toolbar-group toolbar-group-quick">
           <button className="primary" onClick={onOpenCommandPalette}>Команды</button>
-          <button onClick={() => void rf.fitView({ padding: 0.22, duration: 250 })}>Схема</button>
           <button className="primary" onClick={onOpenLibrary}>Библиотека</button>
-          <button onClick={onToggleFocusMode}>{focusMode ? 'Выйти из режима схемы' : 'Режим схемы'}</button>
         </div>
 
-        <div className="toolbar-group toolbar-group-mode-switch" role="tablist" aria-label="Режим отображения схемы">
+        <div className="toolbar-group toolbar-group-mode-switch" role="tablist" aria-label="Режим отображения">
           <button
             type="button"
             role="tab"
@@ -110,6 +108,8 @@ export const TopToolbar = ({ focusMode, onToggleFocusMode, onOpenLibrary, onOpen
           <details className="toolbar-menu">
             <summary>Вид</summary>
             <div className="toolbar-menu-sheet">
+              <button onClick={() => void rf.fitView({ padding: 0.18, duration: 250 })}>Центрировать схему</button>
+              <button onClick={onToggleFocusMode}>{focusMode ? 'Выйти из фокус-режима' : 'Фокус-режим'}</button>
               <label className="toolbar-select">
                 <span>Подписи линий</span>
                 <select value={edgeLabelMode} onChange={(e) => setEdgeLabelMode(e.target.value as EdgeLabelMode)}>

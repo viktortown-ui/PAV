@@ -31,10 +31,8 @@ export const SchematicNode = memo(({ data, selected }: NodeProps<SoapNodeData>) 
   const handles = getHandleSpecs(data);
   const symbol = getSchematicSymbol({ id: data.id, data, position: { x: 0, y: 0 } } as any);
   const primaryLabel = data.shortName || data.visibleName;
-  const secondaryLabel = data.technicalTag || data.visibleName;
-  const tertiaryLabel = `${data.kind}${symbol.variant ? ` • ${symbol.variant}` : ''}`;
-  const showSecondary = symbol.size.width >= 126;
-  const showTertiary = symbol.size.width >= 146 && symbol.size.height >= 78;
+  const secondaryLabel = data.technicalTag;
+  const showSecondary = Boolean(secondaryLabel) && symbol.size.width >= 124;
 
   return (
     <div
@@ -50,9 +48,8 @@ export const SchematicNode = memo(({ data, selected }: NodeProps<SoapNodeData>) 
         </svg>
       </div>
       <div className="schematic-node-labels">
-        <strong>{primaryLabel}</strong>
-        {showSecondary ? <span>{secondaryLabel}</span> : null}
-        {showTertiary ? <small>{tertiaryLabel}</small> : null}
+        <strong title={primaryLabel}>{primaryLabel}</strong>
+        {showSecondary ? <span title={secondaryLabel}>{secondaryLabel}</span> : null}
       </div>
       {handles.filter((handle) => handle.type === 'source').map((handle) => (
         <Handle key={handle.id} id={handle.id} type={handle.type} position={handle.position} className={handle.className} />

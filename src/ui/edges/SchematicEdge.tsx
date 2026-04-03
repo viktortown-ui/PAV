@@ -20,7 +20,8 @@ export const SchematicEdge = memo(({ id, sourceX, sourceY, targetX, targetY, dat
   const tag = typeof data?.serviceTag === 'string' ? data.serviceTag : '';
   const secondary = [medium, tag].filter(Boolean).join(' · ');
   const secondaryPoint = data?.schematicRoute?.secondaryLabelPoint as { x: number; y: number } | undefined;
-  const showSecondary = Boolean(data?.schematicRoute?.showSecondaryLabel ?? true) && !intersectsOverlayRect(secondaryPoint ?? adjustedLabelPoint, collisionRect);
+  const routeComplexEnough = (points?.length ?? 0) >= 4 || Math.hypot(targetX - sourceX, targetY - sourceY) > 220;
+  const showSecondary = Boolean(data?.schematicRoute?.showSecondaryLabel ?? true) && routeComplexEnough && !intersectsOverlayRect(secondaryPoint ?? adjustedLabelPoint, collisionRect);
 
   return (
     <>
