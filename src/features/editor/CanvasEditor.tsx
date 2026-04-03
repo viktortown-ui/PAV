@@ -11,7 +11,7 @@ import { instrumentCallsite } from '../../utils/instrumentation';
 import { LocalActionPanel } from './LocalActionPanel';
 import { SoapEdge, SoapNode } from '../../domain/schemas/types';
 import { buildSchematicLayout, buildSchematicLayoutElk, shouldUseElkLayout } from './schematicLayout';
-import { clampOverlayToShell } from './overlayPositioning';
+import { OverlayRect, clampOverlayToShell } from './overlayPositioning';
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const VIEWPORT_POSITION_EPSILON = 0.5;
@@ -197,11 +197,6 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
       ? nodes.map((node) => ({ ...node, position: schematicLayout.positions[node.id] ?? node.position }))
       : nodes
   ), [nodes, schematicLayout]);
-  const renderedEdges = useMemo(() => (
-    schematicLayout
-      ? edges.map((edge) => ({ ...edge, data: { ...edge.data, schematicRoute: schematicLayout.routes[edge.id] } }))
-      : edges
-  ), [edges, schematicLayout]);
   const rendererNodeTypes = view.presentationMode === 'schematic' ? schematicNodeTypes : simulationNodeTypes;
   const rendererEdgeTypes = view.presentationMode === 'schematic' ? schematicEdgeTypes : simulationEdgeTypes;
 
@@ -212,6 +207,33 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
   const selectedNode = useMemo(() => projectNodes.find((node) => node.id === selectedNodeId), [projectNodes, selectedNodeId]);
   const selectedEdge = useMemo(() => projectEdges.find((edge) => edge.id === selectedEdgeId), [projectEdges, selectedEdgeId]);
   const selectedMeasurementPoint = useMemo(() => measurementPoints.find((point) => point.id === selectedMeasurementPointId), [measurementPoints, selectedMeasurementPointId]);
+  const getNodeVisualSize = useCallback((className: string) => {
+    if (className === 'major') return { width: 230, height: 122 };
+    if (className === 'valve' || className === 'instrument' || className === 'topology') return { width: 138, height: 86 };
+    if (className === 'terminal') return { width: 150, height: 88 };
+    return { width: 180, height: 98 };
+  }, []);
+  const getFlowRectForNode = useCallback((node: SoapNode): OverlayRect => {
+    const size = getNodeVisualSize(node.data.className);
+    return { x: node.position.x, y: node.position.y, width: size.width, height: size.height };
+  }, [getNodeVisualSize]);
+  const contextTargetNode = useMemo(() => {
+    const target = contextMenu?.target;
+    if (!target || target.kind !== 'node') return undefined;
+    return projectNodes.find((node) => node.id === target.nodeId);
+  }, [contextMenu, projectNodes]);
+  const declutterRects = useMemo<OverlayRect[]>(() => {
+    const rects: OverlayRect[] = [];
+    if (menuOverlayRect) rects.push(menuOverlayRect);
+    if (selectedNode) rects.push(getFlowRectForNode(selectedNode));
+    if (contextTargetNode && contextTargetNode.id !== selectedNode?.id) rects.push(getFlowRectForNode(contextTargetNode));
+    return rects;
+  }, [contextTargetNode, getFlowRectForNode, menuOverlayRect, selectedNode]);
+  const renderedEdges = useMemo(() => (
+    schematicLayout
+      ? edges.map((edge) => ({ ...edge, data: { ...edge.data, schematicRoute: schematicLayout.routes[edge.id], declutterRects } }))
+      : edges.map((edge) => ({ ...edge, data: { ...edge.data, declutterRects } }))
+  ), [declutterRects, edges, schematicLayout]);
   const measurementToolType = activeTool === 'measure-pressure'
     ? 'pressure'
     : activeTool === 'measure-temperature'
@@ -221,13 +243,6 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
         : activeTool === 'measure-probe'
           ? 'probe'
           : undefined;
-
-  const getNodeVisualSize = useCallback((className: string) => {
-    if (className === 'major') return { width: 230, height: 122 };
-    if (className === 'valve' || className === 'instrument' || className === 'topology') return { width: 138, height: 86 };
-    if (className === 'terminal') return { width: 150, height: 88 };
-    return { width: 180, height: 98 };
-  }, []);
 
   const localPanelAnchor = useMemo(() => {
     const shell = shellRef.current;

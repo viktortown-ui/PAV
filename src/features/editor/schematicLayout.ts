@@ -15,8 +15,8 @@ export type SchematicRoute = {
   showSecondaryLabel?: boolean;
 };
 
-const X_STEP = 162;
-const Y_STEP = 94;
+const X_STEP = 154;
+const Y_STEP = 88;
 const ELK_ENGINE_ENABLED = false;
 const EDGE_LABEL_SIZE = { width: 90, height: 24 };
 const SECONDARY_LABEL_SIZE = { width: 120, height: 18 };

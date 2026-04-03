@@ -1,4 +1,4 @@
-:root { color-scheme: dark; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #07111c; color: #ecf3ff; --app-height: 100dvh; --simulation-dock-height: 0px; --simulation-dock-visible-height: 0px; --layer-shell-bg: 1; --layer-canvas: 2; --layer-canvas-content: 3; --layer-canvas-labels: 4; --layer-canvas-controls: 5; --layer-side-panels: 6; --layer-popovers: 7; --layer-context-menu: 8; --layer-dialogs: 9; --layer-tooltips: 10; }
+:root { color-scheme: dark; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #07111c; color: #ecf3ff; --app-height: 100dvh; --simulation-dock-height: 0px; --simulation-dock-visible-height: 0px; --layer-shell-bg: 1; --layer-canvas: 2; --layer-canvas-content: 3; --layer-canvas-labels: 4; --layer-canvas-controls: 5; --layer-side-panels: 6; --layer-panel-scrim: 6; --layer-dock: 7; --layer-popovers: 8; --layer-context-menu: 9; --layer-dialogs: 10; --layer-tooltips: 11; }
 * { box-sizing: border-box; }
 html, body, #root { height: var(--app-height); overflow: hidden; }
 body { margin: 0; background: radial-gradient(circle at top, rgba(51,94,137,0.24), transparent 35%), #07111c; color: #ecf3ff; }
@@ -56,7 +56,7 @@ button.primary, .toolbox-actions .primary { background: linear-gradient(180deg, 
 .tool-rail-glyph { font-size: 18px; color: #dce8f8; line-height: 1; }
 .tool-rail-footnote { padding: 10px 8px 14px; font-size: 10px; color: #6f87a4; writing-mode: vertical-rl; text-orientation: mixed; letter-spacing: 0.08em; text-transform: uppercase; }
 .toolbox-shell.is-collapsed { width: 68px; }
-.toolbox-overlay-scrim { position: fixed; inset: 72px 0 0 68px; background: linear-gradient(90deg, rgba(3, 9, 15, 0.12), rgba(3, 9, 15, 0.45)); border: 0; padding: 0; z-index: 19; }
+.toolbox-overlay-scrim { position: fixed; inset: 72px 0 0 68px; background: linear-gradient(90deg, rgba(3, 9, 15, 0.12), rgba(3, 9, 15, 0.45)); border: 0; padding: 0; z-index: var(--layer-panel-scrim); }
 .toolbox-drawer { position: fixed; left: 68px; top: 72px; bottom: 0; width: 360px; padding: 18px; border-right: 1px solid rgba(122, 150, 183, 0.14); border-radius: 0 22px 22px 0; box-shadow: 20px 0 44px rgba(0,0,0,0.34); z-index: var(--layer-side-panels); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 16px; background: linear-gradient(180deg, rgba(12, 22, 34, 0.96), rgba(9, 16, 26, 0.96)); }
 .shell-rail { display: flex; flex-direction: column; gap: 8px; padding: 10px 8px; background: rgba(7,14,23,0.96); }
 .shell-rail-left { position: relative; z-index: calc(var(--layer-side-panels) + 1); min-height: 100%; border-right: 1px solid rgba(122, 150, 183, 0.14); box-shadow: 10px 0 24px rgba(0,0,0,0.18); overflow: hidden; }
@@ -273,14 +273,15 @@ button.primary, .toolbox-actions .primary { background: linear-gradient(180deg, 
 .mode-schematic .canvas-shell .react-flow { background: radial-gradient(circle at 50% 20%, rgba(83, 103, 122, 0.1), transparent 30%), #0a131f; }
 .edge-hitbox { position: absolute; width: 26px; height: 26px; border-radius: 999px; border: 1px solid transparent; background: transparent; transform-origin: center; }
 .edge-hitbox.is-selected { border-color: rgba(143, 181, 226, 0.44); background: rgba(24, 45, 68, 0.4); }
-.edge-badge { position: absolute; display: grid; gap: 2px; min-width: 178px; max-width: 290px; padding: 7px 9px; border-radius: 10px; border: 1px solid rgba(143, 181, 226, 0.22); background: rgba(8, 16, 28, 0.9); backdrop-filter: blur(8px); box-shadow: 0 10px 22px rgba(0,0,0,0.3); }
+.react-flow__edgelabel-renderer { z-index: var(--layer-canvas-labels); }
+.edge-badge { position: absolute; z-index: var(--layer-canvas-labels); display: grid; gap: 2px; min-width: 178px; max-width: 290px; padding: 7px 9px; border-radius: 10px; border: 1px solid rgba(143, 181, 226, 0.22); background: rgba(8, 16, 28, 0.9); backdrop-filter: blur(8px); box-shadow: 0 10px 22px rgba(0,0,0,0.3); }
 .edge-badge strong { font-size: 12px; line-height: 1.25; color: #edf4ff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .edge-badge span { font-size: 11px; line-height: 1.3; color: #99afca; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .edge-badge.is-active { border-color: rgba(111, 228, 201, 0.34); }
 .edge-badge.is-warning { border-color: rgba(255, 176, 94, 0.4); }
 .edge-badge.sim-paused { filter: saturate(0.72) brightness(0.92); }
 .edge-badge.sim-idle { filter: saturate(0.6) brightness(0.85); }
-.edge-editor-popover { position: absolute; border-radius: 12px; padding: 8px; border: 1px solid rgba(143, 181, 226, 0.2); background: rgba(10, 18, 29, 0.96); box-shadow: 0 16px 28px rgba(0,0,0,0.32); }
+.edge-editor-popover { position: absolute; z-index: var(--layer-popovers); border-radius: 12px; padding: 8px; border: 1px solid rgba(143, 181, 226, 0.2); background: rgba(10, 18, 29, 0.96); box-shadow: 0 16px 28px rgba(0,0,0,0.32); }
 .edge-toolbar, .edge-picker { display: flex; flex-wrap: wrap; gap: 6px; max-width: 330px; }
 .edge-toolbar button, .edge-picker button { border: 1px solid rgba(143, 181, 226, 0.16); background: #102033; color: #edf4ff; border-radius: 8px; padding: 6px 8px; font-size: 11px; line-height: 1.2; }
 
@@ -334,7 +335,7 @@ button.primary, .toolbox-actions .primary { background: linear-gradient(180deg, 
   left: 10px;
   right: 10px;
   bottom: 0;
-  z-index: 70;
+  z-index: var(--layer-dock);
   pointer-events: none;
   width: auto;
   display: grid;
