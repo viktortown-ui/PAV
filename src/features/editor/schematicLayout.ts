@@ -15,9 +15,9 @@ export type SchematicRoute = {
   showSecondaryLabel?: boolean;
 };
 
-const X_STEP = 188;
-const Y_STEP = 112;
-const ELK_ENGINE_ENABLED = true;
+const X_STEP = 162;
+const Y_STEP = 94;
+const ELK_ENGINE_ENABLED = false;
 const EDGE_LABEL_SIZE = { width: 90, height: 24 };
 const SECONDARY_LABEL_SIZE = { width: 120, height: 18 };
 
@@ -95,7 +95,9 @@ const placeLabel = (
 };
 
 const buildOrthogonalRoute = (source: Point, target: Point, edgeOffset = 0): SchematicRoute => {
-  const middleX = source.x + Math.max(24, (target.x - source.x) * 0.5) + edgeOffset;
+  const deltaX = target.x - source.x;
+  const middleX = source.x + Math.max(18, deltaX * 0.5) + edgeOffset;
+  if (Math.abs(target.y - source.y) <= 14) return { points: [source, { x: middleX, y: source.y }, target] };
   return { points: [source, { x: middleX, y: source.y }, { x: middleX, y: target.y }, target] };
 };
 
@@ -121,7 +123,7 @@ const buildRoutes = (nodes: Node<SoapNodeData>[], edges: Edge[], positions: Reco
     const elkEdge = elkEdges?.get(edge.id);
     const points = elkEdge?.sections?.[0] ? mapElkSectionPoints(elkEdge.sections[0], source, target) : buildOrthogonalRoute(source, target, (edgeLaneCounter.get(`${edge.source}:${edge.target}`) ?? 0) * 10).points;
     const primary = placeLabel(points, nodeBoxes, usedLabelBoxes);
-    const secondary = primary ? { x: primary.x, y: primary.y + 16 } : undefined;
+    const secondary = primary ? { x: primary.x, y: primary.y + 14 } : undefined;
     const canShowSecondary = Boolean(secondary) && !nodeBoxes.some((n) => intersects({ x: secondary!.x - SECONDARY_LABEL_SIZE.width / 2, y: secondary!.y - SECONDARY_LABEL_SIZE.height / 2, width: SECONDARY_LABEL_SIZE.width, height: SECONDARY_LABEL_SIZE.height }, n, 6));
     routes[edge.id] = { points, labelPoint: primary, secondaryLabelPoint: secondary, showSecondaryLabel: canShowSecondary };
     edgeLaneCounter.set(`${edge.source}:${edge.target}`, (edgeLaneCounter.get(`${edge.source}:${edge.target}`) ?? 0) + 1);
@@ -138,8 +140,8 @@ export const buildElkGraphFromProcessModel = (nodes: Node<SoapNodeData>[], edges
     'org.eclipse.elk.portConstraints': 'FIXED_ORDER',
     'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
     'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
-    'elk.spacing.nodeNode': '28',
-    'elk.layered.spacing.nodeNodeBetweenLayers': '44',
+    'elk.spacing.nodeNode': '18',
+    'elk.layered.spacing.nodeNodeBetweenLayers': '30',
   },
   children: nodes.map((node) => {
     const symbol = getSchematicSymbol(node);
