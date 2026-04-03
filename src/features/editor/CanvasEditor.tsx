@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, WheelEvent as ReactWheelEvent, PointerEvent as ReactPointerEvent, MouseEvent as ReactMouseEvent } from 'react';
 import ReactFlow, { Background, ReactFlowInstance, SelectionMode, Viewport, getViewportForBounds } from 'reactflow';
+import { createPortal } from 'react-dom';
 import { shallow } from 'zustand/shallow';
 import { FlowEdge } from '../../ui/edges/FlowEdge';
 import { ProcessNode } from '../../ui/nodes/ProcessNode';
@@ -10,6 +11,7 @@ import { instrumentCallsite } from '../../utils/instrumentation';
 import { LocalActionPanel } from './LocalActionPanel';
 import { SoapEdge, SoapNode } from '../../domain/schemas/types';
 import { buildSchematicLayout, buildSchematicLayoutElk, shouldUseElkLayout } from './schematicLayout';
+import { clampOverlayToShell } from './overlayPositioning';
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const VIEWPORT_POSITION_EPSILON = 0.5;
@@ -21,6 +23,7 @@ const simulationEdgeTypes = { flowEdge: FlowEdge };
 const schematicNodeTypes = { processNode: SchematicNode };
 const schematicEdgeTypes = { flowEdge: SchematicEdge };
 const EDGE_ANCHOR_OFFSET = 26;
+const CONTEXT_MENU_SAFE_PADDING = 10;
 export type CanvasTool = 'select' | 'connect' | 'measure-pressure' | 'measure-temperature' | 'measure-flow' | 'measure-probe';
 type MarkerAnchor = { worldX: number; worldY: number; anchorText: string };
 type ContextTarget = { kind: 'node'; nodeId: string } | { kind: 'edge'; edgeId: string } | { kind: 'canvas' };
@@ -119,6 +122,7 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
   const [liveViewport, setLiveViewport] = useState<Viewport>(view.viewport);
   const [contextMenu, setContextMenu] = useState<ContextMenuState>();
   const [menuPosition, setMenuPosition] = useState<{ left: number; top: number }>();
+  const [menuOverlayRect, setMenuOverlayRect] = useState<{ x: number; y: number; width: number; height: number }>();
   const [legendOpen, setLegendOpen] = useState(false);
 
   useEffect(() => {
@@ -166,9 +170,9 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
   const edges = useMemo(() => projectEdges.map((edge) => ({
     ...edge,
     hidden: showProblematicOnly ? !problemEdgeIds.has(edge.id) : false,
-    data: { ...edge.data, selectedPath: pathSelection.edges.includes(edge.id), hovered: hoveredEdgeId === edge.id, labelMode: edgeLabelMode },
+    data: { ...edge.data, selectedPath: pathSelection.edges.includes(edge.id), hovered: hoveredEdgeId === edge.id, labelMode: edgeLabelMode, overlayCollision: menuOverlayRect },
     style: { opacity: pathSelection.edges.length ? (pathSelection.edges.includes(edge.id) ? 1 : 0.16) : 1 },
-  })), [edgeLabelMode, hoveredEdgeId, pathSelection.edges, problemEdgeIds, projectEdges, showProblematicOnly]);
+  })), [edgeLabelMode, hoveredEdgeId, menuOverlayRect, pathSelection.edges, problemEdgeIds, projectEdges, showProblematicOnly]);
   const lightweightSchematicLayout = useMemo(() => (
     view.presentationMode === 'schematic'
       ? buildSchematicLayout(nodes, edges, view.schematicLayout)
@@ -399,6 +403,7 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
   const closeContextMenu = useCallback(() => {
     setContextMenu(undefined);
     setMenuPosition(undefined);
+    setMenuOverlayRect(undefined);
   }, []);
 
   useEffect(() => {
@@ -424,11 +429,24 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
     if (!contextMenu || !contextMenuRef.current || !shellRef.current) return;
     const menuRect = contextMenuRef.current.getBoundingClientRect();
     const shellRect = shellRef.current.getBoundingClientRect();
-    const gap = 8;
-    const left = Math.max(gap, Math.min(shellRect.width - menuRect.width - gap, contextMenu.x));
-    const top = Math.max(gap, Math.min(shellRect.height - menuRect.height - gap, contextMenu.y));
+    const simulationDockHeightRaw = getComputedStyle(document.documentElement).getPropertyValue('--simulation-dock-visible-height').trim();
+    const simulationDockHeight = Number.parseFloat(simulationDockHeightRaw || '0') || 0;
+    const { left, top } = clampOverlayToShell(
+      contextMenu,
+      { width: menuRect.width, height: menuRect.height },
+      shellRect,
+      { padding: CONTEXT_MENU_SAFE_PADDING, bottomReserved: simulationDockHeight },
+    );
     setMenuPosition({ left, top });
-  }, [contextMenu]);
+
+    if (!flow) {
+      setMenuOverlayRect(undefined);
+      return;
+    }
+    const topLeft = flow.screenToFlowPosition({ x: left, y: top });
+    const bottomRight = flow.screenToFlowPosition({ x: left + menuRect.width, y: top + menuRect.height });
+    setMenuOverlayRect({ x: topLeft.x, y: topLeft.y, width: Math.max(1, bottomRight.x - topLeft.x), height: Math.max(1, bottomRight.y - topLeft.y) });
+  }, [contextMenu, flow]);
 
   const nodeById = useMemo(() => new Map(projectNodes.map((node) => [node.id, node])), [projectNodes]);
   const edgeById = useMemo(() => new Map(projectEdges.map((edge) => [edge.id, edge])), [projectEdges]);
@@ -586,10 +604,8 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
         }}
         onNodeContextMenu={(event, node) => {
           event.preventDefault();
-          const shellRect = shellRef.current?.getBoundingClientRect();
-          if (!shellRect) return;
           selectNode(node.id);
-          setContextMenu({ x: event.clientX - shellRect.left, y: event.clientY - shellRect.top, target: { kind: 'node', nodeId: node.id } });
+          setContextMenu({ x: event.clientX, y: event.clientY, target: { kind: 'node', nodeId: node.id } });
         }}
         onEdgeClick={(_, edge) => {
           closeContextMenu();
@@ -601,10 +617,8 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
         }}
         onEdgeContextMenu={(event, edge) => {
           event.preventDefault();
-          const shellRect = shellRef.current?.getBoundingClientRect();
-          if (!shellRect) return;
           selectEdge(edge.id);
-          setContextMenu({ x: event.clientX - shellRect.left, y: event.clientY - shellRect.top, target: { kind: 'edge', edgeId: edge.id } });
+          setContextMenu({ x: event.clientX, y: event.clientY, target: { kind: 'edge', edgeId: edge.id } });
         }}
         onEdgeMouseEnter={(_, edge) => hoverEdge(edge.id)}
         onEdgeMouseLeave={() => hoverEdge(undefined)}
@@ -622,9 +636,7 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
         }}
         onPaneContextMenu={(event) => {
           event.preventDefault();
-          const shellRect = shellRef.current?.getBoundingClientRect();
-          if (!shellRect) return;
-          setContextMenu({ x: event.clientX - shellRect.left, y: event.clientY - shellRect.top, target: { kind: 'canvas' } });
+          setContextMenu({ x: event.clientX, y: event.clientY, target: { kind: 'canvas' } });
         }}
         defaultViewport={view.viewport}
         onMoveEnd={(_, viewport) => {
@@ -682,7 +694,7 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
         })}
       </div>
       <LocalActionPanel selectedNode={selectedNode} selectedEdge={selectedEdge} selectedMeasurementPoint={selectedMeasurementPoint} anchor={selectedMeasurementPoint ? measurementPanelAnchor : localPanelAnchor} presentationMode={view.presentationMode} />
-      {contextMenu ? (
+      {contextMenu ? createPortal((
         <div
           ref={contextMenuRef}
           className="context-menu"
@@ -703,7 +715,7 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
             </button>
           ))}
         </div>
-      ) : null}
+      ), document.body) : null}
       {!focusMode ? (
         <div className="canvas-navigation-cluster" aria-label="Управление видом" onWheel={stopCanvasViewportPropagation} onPointerDown={stopCanvasViewportPropagation} onMouseDown={stopCanvasViewportPropagation}>
           <div className="viewport-controls-card" aria-label="Управление видом">

@@ -1,5 +1,6 @@
 import { memo } from 'react';
 import { BaseEdge, EdgeLabelRenderer, EdgeProps } from 'reactflow';
+import { intersectsOverlayRect } from '../../features/editor/overlayPositioning';
 
 const buildPath = (points?: Array<{ x: number; y: number }>) => {
   if (!points || points.length < 2) return '';
@@ -12,19 +13,20 @@ export const SchematicEdge = memo(({ id, sourceX, sourceY, targetX, targetY, dat
   const preferredLabelPoint = data?.schematicRoute?.labelPoint as { x: number; y: number } | undefined;
   const fallbackPoint = points?.[Math.max(1, Math.floor((points.length - 1) / 2))] ?? { x: (sourceX + targetX) / 2, y: (sourceY + targetY) / 2 };
   const labelPoint = preferredLabelPoint ?? fallbackPoint;
+  const collisionRect = data?.overlayCollision as { x: number; y: number; width: number; height: number } | undefined;
+  const adjustedLabelPoint = intersectsOverlayRect(labelPoint, collisionRect) ? { x: labelPoint.x, y: labelPoint.y - 18 } : labelPoint;
   const dn = String(data?.nominalDiameter ?? 'DN50');
   const medium = typeof data?.medium === 'string' ? data.medium.toUpperCase() : '';
   const tag = typeof data?.serviceTag === 'string' ? data.serviceTag : '';
   const secondary = [medium, tag].filter(Boolean).join(' · ');
   const secondaryPoint = data?.schematicRoute?.secondaryLabelPoint as { x: number; y: number } | undefined;
-  const showSecondary = Boolean(data?.schematicRoute?.showSecondaryLabel ?? true);
+  const showSecondary = Boolean(data?.schematicRoute?.showSecondaryLabel ?? true) && !intersectsOverlayRect(secondaryPoint ?? adjustedLabelPoint, collisionRect);
 
   return (
     <>
-      <BaseEdge id={`${id}-base`} path={path} style={{ stroke: '#5a6d87', strokeWidth: 2.2, opacity: selected ? 1 : 0.88 }} />
-      <path d={path} className="schematic-edge-arrow" />
+      <BaseEdge id={`${id}-base`} path={path} style={{ stroke: '#4a5c74', strokeWidth: selected ? 2.4 : 2, opacity: 0.96 }} />
       <EdgeLabelRenderer>
-        <div className="schematic-edge-label" style={{ left: labelPoint.x, top: labelPoint.y, transform: 'translate(-50%, -50%)' }}>
+        <div className="schematic-edge-label" style={{ left: adjustedLabelPoint.x, top: adjustedLabelPoint.y, transform: 'translate(-50%, -50%)' }}>
           <strong>{dn}</strong>
         </div>
         {secondary && showSecondary && secondaryPoint ? <div className="schematic-edge-label schematic-edge-label-secondary" style={{ left: secondaryPoint.x, top: secondaryPoint.y, transform: 'translate(-50%, -50%)' }}><span>{secondary}</span></div> : null}

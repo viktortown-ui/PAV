@@ -15,8 +15,8 @@ export type SchematicRoute = {
   showSecondaryLabel?: boolean;
 };
 
-const X_STEP = 260;
-const Y_STEP = 148;
+const X_STEP = 188;
+const Y_STEP = 112;
 const ELK_ENGINE_ENABLED = true;
 const EDGE_LABEL_SIZE = { width: 90, height: 24 };
 const SECONDARY_LABEL_SIZE = { width: 120, height: 18 };
@@ -95,7 +95,7 @@ const placeLabel = (
 };
 
 const buildOrthogonalRoute = (source: Point, target: Point, edgeOffset = 0): SchematicRoute => {
-  const middleX = source.x + Math.max(36, (target.x - source.x) * 0.5) + edgeOffset;
+  const middleX = source.x + Math.max(24, (target.x - source.x) * 0.5) + edgeOffset;
   return { points: [source, { x: middleX, y: source.y }, { x: middleX, y: target.y }, target] };
 };
 
@@ -119,7 +119,7 @@ const buildRoutes = (nodes: Node<SoapNodeData>[], edges: Edge[], positions: Reco
     if (!sourceNode || !targetNode) return;
     const { source, target } = resolveEdgeAnchors(edge, sourceNode, targetNode);
     const elkEdge = elkEdges?.get(edge.id);
-    const points = elkEdge?.sections?.[0] ? mapElkSectionPoints(elkEdge.sections[0], source, target) : buildOrthogonalRoute(source, target, (edgeLaneCounter.get(`${edge.source}:${edge.target}`) ?? 0) * 16).points;
+    const points = elkEdge?.sections?.[0] ? mapElkSectionPoints(elkEdge.sections[0], source, target) : buildOrthogonalRoute(source, target, (edgeLaneCounter.get(`${edge.source}:${edge.target}`) ?? 0) * 10).points;
     const primary = placeLabel(points, nodeBoxes, usedLabelBoxes);
     const secondary = primary ? { x: primary.x, y: primary.y + 16 } : undefined;
     const canShowSecondary = Boolean(secondary) && !nodeBoxes.some((n) => intersects({ x: secondary!.x - SECONDARY_LABEL_SIZE.width / 2, y: secondary!.y - SECONDARY_LABEL_SIZE.height / 2, width: SECONDARY_LABEL_SIZE.width, height: SECONDARY_LABEL_SIZE.height }, n, 6));
@@ -138,8 +138,8 @@ export const buildElkGraphFromProcessModel = (nodes: Node<SoapNodeData>[], edges
     'org.eclipse.elk.portConstraints': 'FIXED_ORDER',
     'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
     'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
-    'elk.spacing.nodeNode': '54',
-    'elk.layered.spacing.nodeNodeBetweenLayers': '84',
+    'elk.spacing.nodeNode': '28',
+    'elk.layered.spacing.nodeNodeBetweenLayers': '44',
   },
   children: nodes.map((node) => {
     const symbol = getSchematicSymbol(node);
