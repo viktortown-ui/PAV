@@ -31,6 +31,18 @@ describe('schematic layout', () => {
     expect(result.routes[edge.id]?.points.length).toBeGreaterThanOrEqual(3);
   });
 
+  it('uses compact horizontal spacing for engineering schematic mode', () => {
+    const source = buildNode('source', { x: 0, y: 0 }, project);
+    const pump = buildNode('pump', { x: 0, y: 0 }, project);
+    const sink = buildNode('consumer', { x: 0, y: 0 }, project);
+    const e1 = buildEdge(source.id, pump.id, 'water', 'DN50', { sourceHandle: 'out-right', targetHandle: 'in-left' }, project);
+    const e2 = buildEdge(pump.id, sink.id, 'water', 'DN50', { sourceHandle: 'out-right', targetHandle: 'in-left' }, project);
+    const layout = buildSchematicLayoutLightweight([source, pump, sink], [e1, e2], { autoNodePositions: {}, manualNodePositions: {} });
+
+    expect(layout.positions[pump.id].x - layout.positions[source.id].x).toBeLessThanOrEqual(200);
+    expect(layout.positions[sink.id].x - layout.positions[pump.id].x).toBeLessThanOrEqual(200);
+  });
+
   it('builds ELK graph with explicit ports and bound source/target ports', () => {
     const source = buildNode('pump', { x: 10, y: 10 }, project);
     const target = buildNode('tank', { x: 240, y: 100 }, project);
