@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { buildEdge, buildNode } from '../../domain/entities/projectFactory';
-import { makeProject } from '../../domain/entities/projectFactory';
-import { buildElkGraphFromProcessModel, buildSchematicLayoutLightweight, resolveEdgeAnchors } from '../../features/editor/schematicLayout';
+import { buildEdge, buildNode, makeProject } from '../../domain/entities/projectFactory';
+import { buildCanonicalProcessGraph, buildElkGraphFromProcessModel, buildSchematicLayoutLightweight, resolveEdgeAnchors } from '../../features/editor/schematicLayout';
 
 const project = makeProject();
+
+const mapPositions = (layout: ReturnType<typeof buildSchematicLayoutLightweight>) => Object.values(layout.positions).map(({ x, y }) => `${x}:${y}`).sort();
 
 describe('schematic layout', () => {
   it('routes using port anchors instead of node centers', () => {
@@ -16,50 +17,61 @@ describe('schematic layout', () => {
     expect(anchors.target.x).toBe(target.position.x);
   });
 
-  it('keeps manual override position priority over auto layout', () => {
-    const left = buildNode('source', { x: 10, y: 10 }, project);
-    const right = buildNode('consumer', { x: 40, y: 40 }, project);
-    const edge = buildEdge(left.id, right.id, 'water', 'DN50', { sourceHandle: 'out-right', targetHandle: 'in-left' }, project);
+  it('builds identical schematic for same topology with different simulation coordinates', () => {
+    const sourceA = buildNode('source', { x: 10, y: 20 }, project);
+    const pumpA = buildNode('pump', { x: 1200, y: 700 }, project);
+    const sinkA = buildNode('consumer', { x: 40, y: 300 }, project);
+    const edgeA1 = buildEdge(sourceA.id, pumpA.id, 'water', 'DN50', { sourceHandle: 'out-right', targetHandle: 'in-left' }, project);
+    const edgeA2 = buildEdge(pumpA.id, sinkA.id, 'water', 'DN50', { sourceHandle: 'out-right', targetHandle: 'in-left' }, project);
 
-    const result = buildSchematicLayoutLightweight(
-      [left, right],
-      [edge],
-      { manualNodePositions: { [right.id]: { x: 999, y: 444 } }, autoNodePositions: {} },
-    );
+    const sourceB = { ...sourceA, position: { x: 2000, y: 2000 } };
+    const pumpB = { ...pumpA, position: { x: -800, y: 120 } };
+    const sinkB = { ...sinkA, position: { x: 88, y: -440 } };
 
-    expect(result.positions[right.id]).toEqual({ x: 999, y: 444 });
-    expect(result.routes[edge.id]?.points.length).toBeGreaterThanOrEqual(3);
+    const layoutA = buildSchematicLayoutLightweight([sourceA, pumpA, sinkA], [edgeA1, edgeA2]);
+    const layoutB = buildSchematicLayoutLightweight([sourceB, pumpB, sinkB], [edgeA1, edgeA2]);
+
+    expect(mapPositions(layoutA)).toEqual(mapPositions(layoutB));
   });
 
-  it('uses compact horizontal spacing for engineering schematic mode', () => {
+  it('changes schematic when process topology changes', () => {
     const source = buildNode('source', { x: 0, y: 0 }, project);
     const pump = buildNode('pump', { x: 0, y: 0 }, project);
     const sink = buildNode('consumer', { x: 0, y: 0 }, project);
     const e1 = buildEdge(source.id, pump.id, 'water', 'DN50', { sourceHandle: 'out-right', targetHandle: 'in-left' }, project);
     const e2 = buildEdge(pump.id, sink.id, 'water', 'DN50', { sourceHandle: 'out-right', targetHandle: 'in-left' }, project);
-    const layout = buildSchematicLayoutLightweight([source, pump, sink], [e1, e2], { autoNodePositions: {}, manualNodePositions: {} });
+    const baseLayout = buildSchematicLayoutLightweight([source, pump, sink], [e1, e2]);
 
-    expect(layout.positions[pump.id].x - layout.positions[source.id].x).toBeLessThanOrEqual(200);
-    expect(layout.positions[sink.id].x - layout.positions[pump.id].x).toBeLessThanOrEqual(200);
+    const meter = buildNode('flowMeter', { x: 1400, y: -900 }, project);
+    const e1a = buildEdge(source.id, meter.id, 'water', 'DN50', { sourceHandle: 'out-right', targetHandle: 'in-left' }, project);
+    const e1b = buildEdge(meter.id, pump.id, 'water', 'DN50', { sourceHandle: 'out-right', targetHandle: 'in-left' }, project);
+    const changedLayout = buildSchematicLayoutLightweight([source, meter, pump, sink], [e1a, e1b, e2]);
+
+    expect(mapPositions(baseLayout)).not.toEqual(mapPositions(changedLayout));
   });
 
-  it('builds connected orthogonal routes without diagonal fragments', () => {
+  it('keeps inline devices on process line', () => {
     const source = buildNode('source', { x: 0, y: 0 }, project);
-    const branch = buildNode('tee', { x: 0, y: 0 }, project);
+    const valve = buildNode('shutoffValve', { x: 0, y: 0 }, project);
     const sink = buildNode('consumer', { x: 0, y: 0 }, project);
-    const edge = buildEdge(source.id, branch.id, 'water', 'DN50', { sourceHandle: 'out-right', targetHandle: 'in-left' }, project);
-    const edge2 = buildEdge(branch.id, sink.id, 'water', 'DN40', { sourceHandle: 'out-right', targetHandle: 'in-left' }, project);
-    const layout = buildSchematicLayoutLightweight([source, branch, sink], [edge, edge2], { autoNodePositions: {}, manualNodePositions: {} });
-    const route = layout.routes[edge.id];
+    const e1 = buildEdge(source.id, valve.id, 'water', 'DN40', { sourceHandle: 'out-right', targetHandle: 'in-left' }, project);
+    const e2 = buildEdge(valve.id, sink.id, 'water', 'DN40', { sourceHandle: 'out-right', targetHandle: 'in-left' }, project);
+    const layout = buildSchematicLayoutLightweight([source, valve, sink], [e1, e2]);
 
-    expect(route.points.length).toBeGreaterThanOrEqual(4);
-    expect(route.points[0]).toEqual(resolveEdgeAnchors(edge, { ...source, position: layout.positions[source.id] }, { ...branch, position: layout.positions[branch.id] }).source);
-    expect(route.points[route.points.length - 1]).toEqual(resolveEdgeAnchors(edge, { ...source, position: layout.positions[source.id] }, { ...branch, position: layout.positions[branch.id] }).target);
-    for (let i = 1; i < route.points.length; i += 1) {
-      const prev = route.points[i - 1];
-      const point = route.points[i];
-      expect(Math.hypot(point.x - prev.x, point.y - prev.y)).toBeGreaterThan(0);
-    }
+    expect(layout.positions[source.id].y).toBe(layout.positions[valve.id].y);
+    expect(layout.positions[valve.id].y).toBe(layout.positions[sink.id].y);
+  });
+
+  it('builds canonical process graph classes for renderer pipeline', () => {
+    const source = buildNode('source', { x: 10, y: 10 }, project);
+    const reactor = buildNode('reactor', { x: 20, y: 20 }, project);
+    const sensor = buildNode('pressureSensor', { x: 30, y: 30 }, project);
+    const edge = buildEdge(source.id, reactor.id, 'product', 'DN65', { sourceHandle: 'out-right', targetHandle: 'in-left' }, project);
+    const graph = buildCanonicalProcessGraph([source, reactor, sensor], [edge]);
+
+    expect(graph.nodes.find((node) => node.id === source.id)?.class).toBe('terminal');
+    expect(graph.nodes.find((node) => node.id === reactor.id)?.class).toBe('apparatus');
+    expect(graph.nodes.find((node) => node.id === sensor.id)?.class).toBe('instrument');
   });
 
   it('builds ELK graph with explicit ports and bound source/target ports', () => {

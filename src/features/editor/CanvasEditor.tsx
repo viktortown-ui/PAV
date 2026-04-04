@@ -36,6 +36,8 @@ const sameViewport = (a: Viewport, b: Viewport) => (
   && Math.abs(a.zoom - b.zoom) < VIEWPORT_ZOOM_EPSILON
 );
 
+const canDragNodes = (presentationMode: 'schematic' | 'simulation', activeTool: CanvasTool) => presentationMode === 'simulation' && activeTool === 'select';
+
 const debugLog = (scope: string, message: string, payload?: unknown) => {
   if (!isDev) return;
   if (payload === undefined) console.debug(`[perf:${scope}] ${message}`);
@@ -74,7 +76,6 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
     selectedMeasurementPointId,
     tickSimulation,
     hoverEdge,
-    setSchematicManualNodePosition,
     setSchematicAutoNodePositions,
   } = useAppStore((state) => ({
     nodes: state.project.nodes,
@@ -107,7 +108,6 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
     selectedMeasurementPointId: state.selectedMeasurementPointId,
     tickSimulation: state.tickSimulation,
     hoverEdge: state.hoverEdge,
-    setSchematicManualNodePosition: state.setSchematicManualNodePosition,
     setSchematicAutoNodePositions: state.setSchematicAutoNodePositions,
   }), shallow);
   const frameRef = useRef<number>();
@@ -175,9 +175,9 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
   })), [edgeLabelMode, hoveredEdgeId, menuOverlayRect, pathSelection.edges, problemEdgeIds, projectEdges, showProblematicOnly]);
   const lightweightSchematicLayout = useMemo(() => (
     view.presentationMode === 'schematic'
-      ? buildSchematicLayout(nodes, edges, view.schematicLayout)
+      ? buildSchematicLayout(nodes, edges)
       : undefined
-  ), [edges, nodes, view.presentationMode, view.schematicLayout]);
+  ), [edges, nodes, view.presentationMode]);
   const [schematicLayout, setSchematicLayout] = useState(lightweightSchematicLayout);
 
   useEffect(() => {
@@ -185,13 +185,13 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
     if (!lightweightSchematicLayout) return;
     if (!shouldUseElkLayout()) return;
     let cancelled = false;
-    void buildSchematicLayoutElk(nodes, edges, view.schematicLayout).then((elkLayout) => {
+    void buildSchematicLayoutElk(nodes, edges).then((elkLayout) => {
       if (cancelled) return;
       setSchematicLayout(elkLayout);
       setSchematicAutoNodePositions(elkLayout.autoPositions);
     }).catch(() => undefined);
     return () => { cancelled = true; };
-  }, [edges, lightweightSchematicLayout, nodes, setSchematicAutoNodePositions, view.schematicLayout]);
+  }, [edges, lightweightSchematicLayout, nodes, setSchematicAutoNodePositions]);
   const renderedNodes = useMemo(() => (
     schematicLayout
       ? nodes.map((node) => ({ ...node, position: schematicLayout.positions[node.id] ?? node.position }))
@@ -199,11 +199,6 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
   ), [nodes, schematicLayout]);
   const rendererNodeTypes = view.presentationMode === 'schematic' ? schematicNodeTypes : simulationNodeTypes;
   const rendererEdgeTypes = view.presentationMode === 'schematic' ? schematicEdgeTypes : simulationEdgeTypes;
-
-  const onNodeDragStop = useCallback((_: unknown, node: SoapNode) => {
-    if (view.presentationMode !== 'schematic') return;
-    setSchematicManualNodePosition(node.id, node.position);
-  }, [setSchematicManualNodePosition, view.presentationMode]);
   const selectedNode = useMemo(() => projectNodes.find((node) => node.id === selectedNodeId), [projectNodes, selectedNodeId]);
   const selectedEdge = useMemo(() => projectEdges.find((edge) => edge.id === selectedEdgeId), [projectEdges, selectedEdgeId]);
   const selectedMeasurementPoint = useMemo(() => measurementPoints.find((point) => point.id === selectedMeasurementPointId), [measurementPoints, selectedMeasurementPointId]);
@@ -593,7 +588,7 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
         zoomOnPinch={!isViewportLocked}
         zoomOnDoubleClick={!isViewportLocked}
         panOnScroll={!isViewportLocked}
-        nodesDraggable={activeTool === 'select'}
+        nodesDraggable={canDragNodes(view.presentationMode, activeTool)}
         elementsSelectable={activeTool === 'select'}
         nodesConnectable={activeTool === 'connect'}
         selectionOnDrag={activeTool === 'select'}
@@ -606,7 +601,6 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
           setFlow(instance);
         }}
         onNodesChange={onNodesChange}
-        onNodeDragStop={onNodeDragStop}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         onNodeClick={(_, node) => {
@@ -756,4 +750,5 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
   );
 };
 
+export { canDragNodes };
 export const CanvasEditor = memo(CanvasEditorComponent);

@@ -191,7 +191,7 @@ const sanitizeProjectState = (project: ProjectDocument, revision = 0, persistedR
   normalizedProject.view = {
     ...normalizedProject.view,
     presentationMode: normalizedProject.view.presentationMode ?? 'schematic',
-    schematicLayout: normalizedProject.view.schematicLayout ?? { autoNodePositions: {}, manualNodePositions: {} },
+    schematicLayout: normalizedProject.view.schematicLayout ?? { autoNodePositions: {} },
   };
   normalizedProject.simulation = {
     ...normalizedProject.simulation,
@@ -285,7 +285,7 @@ const toSimulationStatus = (running: boolean): SimulationSettings['status'] => (
 interface AppState {
   project: ProjectDocument; projectRevision: number; persistedRevision: number; viewportNonce: number; selectedNodeId?: string; selectedEdgeId?: string; selectedMeasurementPointId?: string; search: string; inspectorTab: InspectorTab; showProblematicOnly: boolean; hoveredEdgeId?: string; edgeLabelMode: EdgeLabelMode; edgeEditorMode?: EdgeEditorMode; issues: ValidationIssue[]; pathSelection: { upstream: string[]; downstream: string[]; edges: string[] }; startupState: StartupState; startupNotice?: StartupNotice; startupError?: string; persistenceStatus: PersistenceStatus; lastSavedAt?: string; persistenceError?: string; lastCommand?: string; wizard: { open: boolean; groupId?: EquipmentWizardGroupId; kind?: SoapNodeKind; values: Record<string, string | number | boolean>; namingRule: string; }; libraryPicker: { open: boolean; mode: LibraryPickerMode; context?: LibraryPickerContext };
   onNodesChange: (changes: NodeChange[]) => void; onEdgesChange: (changes: EdgeChange[]) => void; onConnect: (connection: Connection) => void; setViewport: (viewport: Viewport, options?: { manual?: boolean }) => void; addNode: (type: SoapNodeKind, position?: { x: number; y: number }) => void; selectNode: (nodeId?: string) => void; selectEdge: (edgeId?: string) => void; selectMeasurementPoint: (pointId?: string) => void; addMeasurementPoint: (type: MeasurementPointType, anchor: { nodeId?: string; edgeId?: string; x?: number; y?: number; ratio?: number }) => void; updateMeasurementPoint: (id: string, patch: Partial<Pick<MeasurementPoint, 'shortTag' | 'label' | 'visible' | 'enabled' | 'notes'>>) => void; deleteMeasurementPoint: (id: string) => void; updateNodeField: (nodeId: string, path: string, value: string | number | boolean) => void; setSearch: (search: string) => void; setInspectorTab: (tab: InspectorTab) => void; setSimulationRunning: (running: boolean) => void; setSimulationSpeed: (speed: number) => void; setSimulationFluid: (fluid: SimulationSettings['fluid']) => void; runFluidScenario: () => void; resetSimulation: () => void; tickSimulation: (dt: number) => void;
-  resetProject: () => Promise<void>; resetUserData: () => Promise<void>; clearLocalDataAndLoadDemo: () => Promise<void>; newProject: () => void; loadTemplate: (templateId: TemplateId) => Promise<void>; saveProject: (reason?: 'autosave' | 'manual') => Promise<void>; loadProject: (id?: string) => Promise<void>; exportProject: () => string; importProject: (json: string) => void; runValidation: () => void; toggleProblematicOnly: () => void; hoverEdge: (edgeId?: string) => void; setEdgeLabelMode: (mode: EdgeLabelMode) => void; setPresentationMode: (mode: PresentationMode) => void; setSchematicManualNodePosition: (nodeId: string, position: { x: number; y: number }) => void; resetSchematicNodeOverride: (nodeId: string) => void; resetAllSchematicOverrides: () => void; setSchematicAutoNodePositions: (positions: Record<string, { x: number; y: number }>) => void; loadSafeDemo: () => Promise<void>; dismissStartupNotice: () => void; setStartupError: (message?: string) => void; openEquipmentWizard: (options?: { groupId?: EquipmentWizardGroupId; kind?: SoapNodeKind }) => void; closeEquipmentWizard: () => void; setWizardGroup: (groupId: EquipmentWizardGroupId) => void; setWizardKind: (kind: SoapNodeKind) => void; updateWizardValue: (key: string, value: string | number | boolean) => void; regenerateWizardTag: () => void; createEquipmentFromWizard: () => void;
+  resetProject: () => Promise<void>; resetUserData: () => Promise<void>; clearLocalDataAndLoadDemo: () => Promise<void>; newProject: () => void; loadTemplate: (templateId: TemplateId) => Promise<void>; saveProject: (reason?: 'autosave' | 'manual') => Promise<void>; loadProject: (id?: string) => Promise<void>; exportProject: () => string; importProject: (json: string) => void; runValidation: () => void; toggleProblematicOnly: () => void; hoverEdge: (edgeId?: string) => void; setEdgeLabelMode: (mode: EdgeLabelMode) => void; setPresentationMode: (mode: PresentationMode) => void; setSchematicAutoNodePositions: (positions: Record<string, { x: number; y: number }>) => void; loadSafeDemo: () => Promise<void>; dismissStartupNotice: () => void; setStartupError: (message?: string) => void; openEquipmentWizard: (options?: { groupId?: EquipmentWizardGroupId; kind?: SoapNodeKind }) => void; closeEquipmentWizard: () => void; setWizardGroup: (groupId: EquipmentWizardGroupId) => void; setWizardKind: (kind: SoapNodeKind) => void; updateWizardValue: (key: string, value: string | number | boolean) => void; regenerateWizardTag: () => void; createEquipmentFromWizard: () => void;
   updateEdgeField: (edgeId: string, field: string, value: string | number | boolean) => void; executeNodeAction: (nodeId: string, action: string) => void;
   setEdgeEditorMode: (mode?: EdgeEditorMode) => void; executeEdgeAction: (action: EdgeActionKind, edgeId?: string) => void; insertNodeIntoEdge: (kind: SoapNodeKind, edgeId?: string) => void; createBranchFromEdge: (kind?: SoapNodeKind, edgeId?: string) => void; removeSelectedSegment: (edgeId?: string) => void; reconnectSelectedEdge: (edgeId?: string) => void;
   openLibraryPicker: (mode: LibraryPickerMode, context?: LibraryPickerContext) => void; closeLibraryPicker: () => void; insertFromLibrary: (kind: SoapNodeKind) => void;
@@ -398,44 +398,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       projectRevision: state.projectRevision + 1,
     };
   }),
-  setSchematicManualNodePosition: (nodeId: string, position: { x: number; y: number }) => set((state) => {
-    if (state.project.view.presentationMode !== 'schematic') return state;
-    const schematicLayout = state.project.view.schematicLayout ?? { autoNodePositions: {}, manualNodePositions: {} };
-    return {
-      project: {
-        ...state.project,
-        view: {
-          ...state.project.view,
-          schematicLayout: {
-            ...schematicLayout,
-            manualNodePositions: { ...schematicLayout.manualNodePositions, [nodeId]: position },
-          },
-        },
-      },
-      projectRevision: state.projectRevision + 1,
-    };
-  }),
-  resetSchematicNodeOverride: (nodeId: string) => set((state) => {
-    const schematicLayout = state.project.view.schematicLayout ?? { autoNodePositions: {}, manualNodePositions: {} };
-    if (!schematicLayout.manualNodePositions[nodeId]) return state;
-    const nextManual = { ...schematicLayout.manualNodePositions };
-    delete nextManual[nodeId];
-    return {
-      project: { ...state.project, view: { ...state.project.view, schematicLayout: { ...schematicLayout, manualNodePositions: nextManual } } },
-      projectRevision: state.projectRevision + 1,
-    };
-  }),
-  resetAllSchematicOverrides: () => set((state) => {
-    const schematicLayout = state.project.view.schematicLayout ?? { autoNodePositions: {}, manualNodePositions: {} };
-    if (!Object.keys(schematicLayout.manualNodePositions).length) return state;
-    return {
-      project: { ...state.project, view: { ...state.project.view, schematicLayout: { ...schematicLayout, manualNodePositions: {} } } },
-      projectRevision: state.projectRevision + 1,
-    };
-  }),
   setSchematicAutoNodePositions: (positions: Record<string, { x: number; y: number }>) => set((state) => {
     if (state.project.view.presentationMode !== 'schematic') return state;
-    const schematicLayout = state.project.view.schematicLayout ?? { autoNodePositions: {}, manualNodePositions: {} };
+    const schematicLayout = state.project.view.schematicLayout ?? { autoNodePositions: {} };
     const current = schematicLayout.autoNodePositions;
     const keys = Object.keys(positions);
     const unchanged = keys.length === Object.keys(current).length && keys.every((key) => current[key]?.x === positions[key]?.x && current[key]?.y === positions[key]?.y);
