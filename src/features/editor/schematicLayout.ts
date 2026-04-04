@@ -1,4 +1,3 @@
-import ELK from 'elkjs/lib/elk.bundled';
 import { Edge, Node } from 'reactflow';
 import { SoapNodeData } from '../../domain/schemas/types';
 import { getPortPoint, getSchematicPorts, getSchematicSymbol, Point } from './schematicSymbols';
@@ -15,8 +14,8 @@ export type SchematicRoute = {
   showSecondaryLabel?: boolean;
 };
 
-const X_STEP = 154;
-const Y_STEP = 88;
+const X_STEP = 138;
+const Y_STEP = 74;
 const ELK_ENGINE_ENABLED = false;
 const EDGE_LABEL_SIZE = { width: 90, height: 24 };
 const SECONDARY_LABEL_SIZE = { width: 120, height: 18 };
@@ -95,10 +94,27 @@ const placeLabel = (
 };
 
 const buildOrthogonalRoute = (source: Point, target: Point, edgeOffset = 0): SchematicRoute => {
-  const deltaX = target.x - source.x;
-  const middleX = source.x + Math.max(18, deltaX * 0.5) + edgeOffset;
-  if (Math.abs(target.y - source.y) <= 14) return { points: [source, { x: middleX, y: source.y }, target] };
-  return { points: [source, { x: middleX, y: source.y }, { x: middleX, y: target.y }, target] };
+  const horizontalGap = target.x - source.x;
+  const laneNudge = edgeOffset * 8;
+  const sourceStub = Math.max(16, Math.min(30, Math.abs(horizontalGap) * 0.18));
+  const targetStub = Math.max(14, Math.min(26, Math.abs(horizontalGap) * 0.16));
+  const sourceStubPoint = { x: source.x + sourceStub, y: source.y };
+  const targetStubPoint = { x: target.x - targetStub, y: target.y };
+  const middleX = Math.max(sourceStubPoint.x + 10, (sourceStubPoint.x + targetStubPoint.x) / 2 + laneNudge);
+
+  if (Math.abs(target.y - source.y) <= 10) {
+    return { points: [source, sourceStubPoint, { x: targetStubPoint.x, y: source.y }, target] };
+  }
+  return {
+    points: [
+      source,
+      sourceStubPoint,
+      { x: middleX, y: source.y },
+      { x: middleX, y: target.y },
+      targetStubPoint,
+      target,
+    ],
+  };
 };
 
 const mapElkSectionPoints = (section: any, source: Point, target: Point): Point[] => [source, ...(section?.bendPoints ?? []).map((p: any) => ({ x: p.x, y: p.y })), target];
@@ -197,10 +213,7 @@ export const buildSchematicLayoutLightweight = (nodes: Node<SoapNodeData>[], edg
 };
 
 export const buildSchematicLayoutElk = async (nodes: Node<SoapNodeData>[], edges: Edge[], layoutState?: Partial<SchematicLayoutState>) => {
-  const elk = new ELK();
-  const graph = buildElkGraphFromProcessModel(nodes, edges);
-  const elkResult = await elk.layout(graph as any);
-  return mapElkResultToSchematicLayout(elkResult, nodes, edges, layoutState);
+  return Promise.resolve(buildSchematicLayoutLightweight(nodes, edges, layoutState));
 };
 
 export const buildSchematicLayout = (nodes: Node<SoapNodeData>[], edges: Edge[], layoutState?: Partial<SchematicLayoutState>) => buildSchematicLayoutLightweight(nodes, edges, layoutState);
