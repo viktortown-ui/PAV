@@ -21,15 +21,21 @@ export const SchematicEdge = memo(({ id, sourceX, sourceY, targetX, targetY, dat
   const secondary = [medium, tag].filter(Boolean).join(' · ');
   const secondaryPoint = data?.schematicRoute?.secondaryLabelPoint as { x: number; y: number } | undefined;
   const routeComplexEnough = (points?.length ?? 0) >= 4 || Math.hypot(targetX - sourceX, targetY - sourceY) > 220;
-  const showSecondary = Boolean(data?.schematicRoute?.showSecondaryLabel ?? true) && routeComplexEnough && !intersectsAnyOverlayRect(secondaryPoint ?? adjustedLabelPoint, declutterRects, 12);
+  const routeLength = (points ?? []).slice(1).reduce((sum, point, index) => sum + Math.hypot(point.x - (points?.[index].x ?? sourceX), point.y - (points?.[index].y ?? sourceY)), 0);
+  const hidePrimary = routeLength < 92 || intersectsAnyOverlayRect(adjustedLabelPoint, declutterRects, 16);
+  const showSecondary = !hidePrimary
+    && Boolean(data?.schematicRoute?.showSecondaryLabel ?? true)
+    && routeComplexEnough
+    && routeLength > 200
+    && !intersectsAnyOverlayRect(secondaryPoint ?? adjustedLabelPoint, declutterRects, 12);
 
   return (
     <>
       <BaseEdge id={`${id}-base`} path={path} style={{ stroke: '#4a5c74', strokeWidth: selected ? 2.4 : 2, opacity: 0.96 }} />
       <EdgeLabelRenderer>
-        <div className="schematic-edge-label" style={{ left: adjustedLabelPoint.x, top: adjustedLabelPoint.y, transform: 'translate(-50%, -50%)' }}>
+        {!hidePrimary ? <div className="schematic-edge-label" style={{ left: adjustedLabelPoint.x, top: adjustedLabelPoint.y, transform: 'translate(-50%, -50%)' }}>
           <strong>{dn}</strong>
-        </div>
+        </div> : null}
         {secondary && showSecondary && secondaryPoint ? <div className="schematic-edge-label schematic-edge-label-secondary" style={{ left: secondaryPoint.x, top: secondaryPoint.y, transform: 'translate(-50%, -50%)' }}><span>{secondary}</span></div> : null}
       </EdgeLabelRenderer>
     </>

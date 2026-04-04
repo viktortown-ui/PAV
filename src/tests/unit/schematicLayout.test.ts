@@ -43,6 +43,25 @@ describe('schematic layout', () => {
     expect(layout.positions[sink.id].x - layout.positions[pump.id].x).toBeLessThanOrEqual(200);
   });
 
+  it('builds connected orthogonal routes without diagonal fragments', () => {
+    const source = buildNode('source', { x: 0, y: 0 }, project);
+    const branch = buildNode('tee', { x: 0, y: 0 }, project);
+    const sink = buildNode('consumer', { x: 0, y: 0 }, project);
+    const edge = buildEdge(source.id, branch.id, 'water', 'DN50', { sourceHandle: 'out-right', targetHandle: 'in-left' }, project);
+    const edge2 = buildEdge(branch.id, sink.id, 'water', 'DN40', { sourceHandle: 'out-right', targetHandle: 'in-left' }, project);
+    const layout = buildSchematicLayoutLightweight([source, branch, sink], [edge, edge2], { autoNodePositions: {}, manualNodePositions: {} });
+    const route = layout.routes[edge.id];
+
+    expect(route.points.length).toBeGreaterThanOrEqual(4);
+    expect(route.points[0]).toEqual(resolveEdgeAnchors(edge, { ...source, position: layout.positions[source.id] }, { ...branch, position: layout.positions[branch.id] }).source);
+    expect(route.points[route.points.length - 1]).toEqual(resolveEdgeAnchors(edge, { ...source, position: layout.positions[source.id] }, { ...branch, position: layout.positions[branch.id] }).target);
+    for (let i = 1; i < route.points.length; i += 1) {
+      const prev = route.points[i - 1];
+      const point = route.points[i];
+      expect(Math.hypot(point.x - prev.x, point.y - prev.y)).toBeGreaterThan(0);
+    }
+  });
+
   it('builds ELK graph with explicit ports and bound source/target ports', () => {
     const source = buildNode('pump', { x: 10, y: 10 }, project);
     const target = buildNode('tank', { x: 240, y: 100 }, project);
