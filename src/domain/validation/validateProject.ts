@@ -66,12 +66,6 @@ const sanitizeView = (value: unknown, fallback: ProjectViewState): ProjectViewSt
         return [id, { x: asNumber(safePoint.x, 0), y: asNumber(safePoint.y, 0) }];
       }))
       : fallback.schematicLayout?.autoNodePositions ?? {},
-    manualNodePositions: isObject(value) && isObject(value.schematicLayout) && isObject(value.schematicLayout.manualNodePositions)
-      ? Object.fromEntries(Object.entries(value.schematicLayout.manualNodePositions).filter(([, point]) => isObject(point)).map(([id, point]) => {
-        const safePoint = point as Record<string, unknown>;
-        return [id, { x: asNumber(safePoint.x, 0), y: asNumber(safePoint.y, 0) }];
-      }))
-      : fallback.schematicLayout?.manualNodePositions ?? {},
   },
 });
 const sanitizeSimulation = (value: unknown, fallback: SimulationSettings): SimulationSettings => {

@@ -48,7 +48,7 @@ describe('schematic renderer contract', () => {
     const e1 = buildEdge(left.id, middle.id, 'water', 'DN40', { sourceHandle: 'out-right', targetHandle: 'in-left' }, project);
     const e2 = buildEdge(middle.id, right.id, 'water', 'DN40', { sourceHandle: 'out-right', targetHandle: 'in-left' }, project);
 
-    const layout = buildSchematicLayoutLightweight([left, middle, right], [e1, e2], { autoNodePositions: {}, manualNodePositions: {} });
+    const layout = buildSchematicLayoutLightweight([left, middle, right], [e1, e2]);
 
     expect(layout.routes[e1.id]?.showSecondaryLabel).toBe(false);
     expect(layout.routes[e2.id]?.showSecondaryLabel).toBe(false);

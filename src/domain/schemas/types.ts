@@ -134,7 +134,6 @@ export interface ProjectViewState {
   presentationMode: PresentationMode;
   schematicLayout?: {
     autoNodePositions: Record<string, { x: number; y: number }>;
-    manualNodePositions: Record<string, { x: number; y: number }>;
   };
 }
 

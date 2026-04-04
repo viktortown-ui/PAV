@@ -35,17 +35,17 @@ describe('presentation mode', () => {
     expect(restored.view.presentationMode).toBe('schematic');
   });
 
+  it('strips legacy manual schematic overrides on restore', () => {
+    const legacy = cloneProject(demoProject) as any;
+    legacy.view.schematicLayout = {
+      autoNodePositions: { n1: { x: 12, y: 30 } },
+      manualNodePositions: { n1: { x: 999, y: 777 } },
+    };
 
-  it('stores and resets schematic manual overrides', () => {
-    resetStore();
-    const store = useAppStore.getState();
-    const nodeId = store.project.nodes[0]!.id;
+    const restored = restoreProjectDocument(legacy);
 
-    store.setSchematicManualNodePosition(nodeId, { x: 333, y: 222 });
-    expect(useAppStore.getState().project.view.schematicLayout?.manualNodePositions[nodeId]).toEqual({ x: 333, y: 222 });
-
-    store.resetSchematicNodeOverride(nodeId);
-    expect(useAppStore.getState().project.view.schematicLayout?.manualNodePositions[nodeId]).toBeUndefined();
+    expect(restored.view.schematicLayout?.autoNodePositions.n1).toEqual({ x: 12, y: 30 });
+    expect((restored.view.schematicLayout as any).manualNodePositions).toBeUndefined();
   });
 
   it('switches between schematic and simulation without dropping selection', () => {

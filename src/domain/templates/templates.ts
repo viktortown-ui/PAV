@@ -100,7 +100,7 @@ const makeProject = (id: TemplateId, name: string, nodes: SoapNode[], edges: Soa
     viewport: createInitialViewport(metadata),
     hasManualViewport: false,
     presentationMode: 'schematic',
-    schematicLayout: { autoNodePositions: {}, manualNodePositions: {} },
+    schematicLayout: { autoNodePositions: {} },
   },
   simulation: { status: 'idle', running: false, speed: 1, tick: 0, warnings: [], activeMedium: 'none', totalActiveFlow: 0, lastEvent: 'Проект загружен', fluid: { id: 'water', kind: 'water', name: 'Вода', densityKgPerM3: 998, dynamicViscosityPaS: 0.001002 }, scenarioRevision: 0 },
   eventLog: [{ id: crypto.randomUUID(), timestamp: new Date().toISOString(), type: 'template', message: `Загружен шаблон: ${name}`, severity: 'info' }],

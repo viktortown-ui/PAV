@@ -4,7 +4,34 @@ import { getPortPoint, getSchematicPorts, getSchematicSymbol, Point } from './sc
 
 export type SchematicLayoutState = {
   autoNodePositions: Record<string, Point>;
-  manualNodePositions: Record<string, Point>;
+};
+
+export type CanonicalNodeClass = 'apparatus' | 'inline_device' | 'instrument' | 'terminal';
+
+export type CanonicalProcessNode = {
+  id: string;
+  type: SoapNodeData['kind'];
+  subtype?: string;
+  displayName: string;
+  tag: string;
+  class: CanonicalNodeClass;
+  ports: ReturnType<typeof getSchematicPorts>;
+};
+
+export type CanonicalProcessEdge = {
+  id: string;
+  sourceId: string;
+  targetId: string;
+  medium: string;
+  dn?: string;
+  serviceTag?: string;
+  flowDirection: string;
+  lineClass?: string;
+};
+
+export type CanonicalProcessGraph = {
+  nodes: CanonicalProcessNode[];
+  edges: CanonicalProcessEdge[];
 };
 
 export type SchematicRoute = {
@@ -14,57 +41,45 @@ export type SchematicRoute = {
   showSecondaryLabel?: boolean;
 };
 
-const X_STEP = 138;
-const Y_STEP = 74;
-const ELK_ENGINE_ENABLED = false;
+const X_STEP = 170;
+const Y_STEP = 92;
 const EDGE_LABEL_SIZE = { width: 90, height: 24 };
 const SECONDARY_LABEL_SIZE = { width: 120, height: 18 };
+const ELK_ENGINE_ENABLED = false;
 
-const isInlineEquipment = (node: Node<SoapNodeData>) => node.data.className === 'valve' || node.data.className === 'instrument' || node.data.ports.inline;
-const fallbackPoint = (node: Node<SoapNodeData>): Point => ({ x: node.position.x, y: node.position.y });
-const classifyWeight = (node: Node<SoapNodeData>) => {
-  if (node.data.className === 'terminal' || node.data.kind === 'source') return -2;
-  if (node.data.className === 'line' || isInlineEquipment(node)) return -1;
-  if (node.data.className === 'major') return 2;
-  return 0;
+const canonicalClassOrder: Record<CanonicalNodeClass, number> = {
+  terminal: 0,
+  apparatus: 1,
+  inline_device: 2,
+  instrument: 3,
 };
 
-const withManualOverrides = (nodes: Node<SoapNodeData>[], autoNodePositions: Record<string, Point>, layoutState?: Partial<SchematicLayoutState>) => {
-  const manualNodePositions = layoutState?.manualNodePositions ?? {};
-  const persistedAuto = layoutState?.autoNodePositions ?? {};
-  return Object.fromEntries(nodes.map((node) => [node.id, manualNodePositions[node.id] ?? autoNodePositions[node.id] ?? persistedAuto[node.id] ?? fallbackPoint(node)]));
+const toCanonicalClass = (node: Node<SoapNodeData>): CanonicalNodeClass => {
+  if (node.data.className === 'instrument') return 'instrument';
+  if (node.data.className === 'terminal' || node.data.kind === 'source' || node.data.kind === 'consumer' || node.data.kind === 'utilityDrain' || node.data.kind === 'serviceTerminal') return 'terminal';
+  if (node.data.className === 'major') return 'apparatus';
+  return 'inline_device';
 };
 
-const rankNodes = (nodes: Node<SoapNodeData>[], edges: Edge[]) => {
-  const indegree = new Map(nodes.map((node) => [node.id, 0]));
-  const outgoing = new Map(nodes.map((node) => [node.id, [] as string[]]));
-  const rank = new Map(nodes.map((node) => [node.id, 0]));
-  edges.forEach((edge) => {
-    indegree.set(edge.target, (indegree.get(edge.target) ?? 0) + 1);
-    outgoing.set(edge.source, [...(outgoing.get(edge.source) ?? []), edge.target]);
-  });
-  const queue = nodes.filter((n) => (indegree.get(n.id) ?? 0) === 0).map((n) => n.id);
-  while (queue.length) {
-    const id = queue.shift()!;
-    for (const targetId of outgoing.get(id) ?? []) {
-      rank.set(targetId, Math.max(rank.get(targetId) ?? 0, (rank.get(id) ?? 0) + 1));
-      indegree.set(targetId, (indegree.get(targetId) ?? 0) - 1);
-      if ((indegree.get(targetId) ?? 0) <= 0) queue.push(targetId);
-    }
-  }
-  return rank;
-};
+const nodeStableKey = (node: Node<SoapNodeData>) => [
+  String(canonicalClassOrder[toCanonicalClass(node)]),
+  node.data.technicalTag || '',
+  node.data.shortName || node.data.visibleName || '',
+  node.id,
+].join('|');
 
-const nodeBox = (node: Node<SoapNodeData>, pos: Point) => {
-  const symbol = getSchematicSymbol({ ...node, position: pos });
-  return { x: pos.x, y: pos.y, width: symbol.size.width, height: symbol.size.height };
-};
+const sortNodesCanonically = (nodes: Node<SoapNodeData>[]) => [...nodes].sort((a, b) => nodeStableKey(a).localeCompare(nodeStableKey(b)));
+
+const pointNear = (a: Point, b: Point, threshold = 20) => Math.hypot(a.x - b.x, a.y - b.y) <= threshold;
 
 const intersects = (a: { x: number; y: number; width: number; height: number }, b: { x: number; y: number; width: number; height: number }, pad = 0) => (
   a.x - pad < b.x + b.width && a.x + a.width + pad > b.x && a.y - pad < b.y + b.height && a.y + a.height + pad > b.y
 );
 
-const pointNear = (a: Point, b: Point, threshold = 20) => Math.hypot(a.x - b.x, a.y - b.y) <= threshold;
+const nodeBox = (node: Node<SoapNodeData>, pos: Point) => {
+  const symbol = getSchematicSymbol({ ...node, position: pos });
+  return { x: pos.x, y: pos.y, width: symbol.size.width, height: symbol.size.height };
+};
 
 const placeLabel = (
   routePoints: Point[],
@@ -77,7 +92,6 @@ const placeLabel = (
     const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
     candidates.push(mid, { x: mid.x, y: mid.y - 18 }, { x: mid.x, y: mid.y + 18 });
   });
-  segments.forEach(([a, b]) => candidates.push({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }));
 
   for (const point of candidates) {
     const box = { x: point.x - EDGE_LABEL_SIZE.width / 2, y: point.y - EDGE_LABEL_SIZE.height / 2, width: EDGE_LABEL_SIZE.width, height: EDGE_LABEL_SIZE.height };
@@ -117,17 +131,123 @@ const buildOrthogonalRoute = (source: Point, target: Point, edgeOffset = 0): Sch
   };
 };
 
-const mapElkSectionPoints = (section: any, source: Point, target: Point): Point[] => [source, ...(section?.bendPoints ?? []).map((p: any) => ({ x: p.x, y: p.y })), target];
+const findNearestFreeLane = (preferred: number, used: Set<number>) => {
+  const base = Math.round(preferred);
+  if (!used.has(base)) return base;
+  for (let delta = 1; delta < 50; delta += 1) {
+    const up = base - delta;
+    if (!used.has(up)) return up;
+    const down = base + delta;
+    if (!used.has(down)) return down;
+  }
+  return base;
+};
 
-export const resolveEdgeAnchors = (edge: Edge, sourceNode: Node<SoapNodeData>, targetNode: Node<SoapNodeData>) => ({
-  source: getPortPoint(sourceNode, edge.sourceHandle),
-  target: getPortPoint(targetNode, edge.targetHandle),
-});
+const buildTopologyMetadata = (nodes: Node<SoapNodeData>[], edges: Edge[]) => {
+  const inMap = new Map(nodes.map((n) => [n.id, [] as string[]]));
+  const outMap = new Map(nodes.map((n) => [n.id, [] as string[]]));
+  edges.forEach((edge) => {
+    inMap.get(edge.target)?.push(edge.source);
+    outMap.get(edge.source)?.push(edge.target);
+  });
+  nodes.forEach((node) => {
+    inMap.set(node.id, (inMap.get(node.id) ?? []).sort());
+    outMap.set(node.id, (outMap.get(node.id) ?? []).sort());
+  });
+  return { inMap, outMap };
+};
 
-const buildRoutes = (nodes: Node<SoapNodeData>[], edges: Edge[], positions: Record<string, Point>, elkEdges?: Map<string, any>) => {
-  const nodeById = new Map(nodes.map((node) => [node.id, { ...node, position: positions[node.id] ?? node.position }]));
+const buildTopologicalOrder = (nodes: Node<SoapNodeData>[], edges: Edge[]) => {
+  const indegree = new Map(nodes.map((node) => [node.id, 0]));
+  const { outMap } = buildTopologyMetadata(nodes, edges);
+  edges.forEach((edge) => indegree.set(edge.target, (indegree.get(edge.target) ?? 0) + 1));
+
+  const nodeById = new Map(nodes.map((n) => [n.id, n]));
+  const queue = sortNodesCanonically(nodes.filter((n) => (indegree.get(n.id) ?? 0) === 0)).map((n) => n.id);
+  const orderedIds: string[] = [];
+
+  while (queue.length) {
+    const id = queue.shift()!;
+    orderedIds.push(id);
+    const outgoing = [...(outMap.get(id) ?? [])].sort((a, b) => nodeStableKey(nodeById.get(a)!).localeCompare(nodeStableKey(nodeById.get(b)!)));
+    outgoing.forEach((targetId) => {
+      indegree.set(targetId, (indegree.get(targetId) ?? 0) - 1);
+      if ((indegree.get(targetId) ?? 0) === 0) {
+        queue.push(targetId);
+        queue.sort((a, b) => nodeStableKey(nodeById.get(a)!).localeCompare(nodeStableKey(nodeById.get(b)!)));
+      }
+    });
+  }
+
+  if (orderedIds.length !== nodes.length) {
+    const rest = nodes.filter((n) => !orderedIds.includes(n.id)).map((n) => n.id).sort();
+    orderedIds.push(...rest);
+  }
+  return orderedIds;
+};
+
+const buildCanonicalLaneLayout = (nodes: Node<SoapNodeData>[], edges: Edge[]) => {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const order = buildTopologicalOrder(nodes, edges);
+  const { inMap, outMap } = buildTopologyMetadata(nodes, edges);
+  const rank = new Map(nodes.map((node) => [node.id, 0]));
+
+  order.forEach((id) => {
+    const parents = inMap.get(id) ?? [];
+    const nodeRank = parents.length
+      ? Math.max(...parents.map((p) => (rank.get(p) ?? 0) + 1))
+      : 0;
+    rank.set(id, nodeRank);
+  });
+
+  const lane = new Map<string, number>();
+  const usedByRank = new Map<number, Set<number>>();
+
+  order.forEach((id) => {
+    const node = nodeById.get(id)!;
+    const parents = inMap.get(id) ?? [];
+    const myRank = rank.get(id) ?? 0;
+    const used = usedByRank.get(myRank) ?? new Set<number>();
+
+    let preferredLane = 0;
+    if (parents.length) {
+      const parentLanes = parents.map((p) => lane.get(p) ?? 0);
+      preferredLane = parentLanes.reduce((sum, value) => sum + value, 0) / parentLanes.length;
+      if (parents.length === 1) {
+        const parentId = parents[0]!;
+        const siblings = (outMap.get(parentId) ?? []).map((childId) => nodeById.get(childId)!).sort((a, b) => nodeStableKey(a).localeCompare(nodeStableKey(b)));
+        const parentLane = lane.get(parentId) ?? 0;
+        const siblingIndex = siblings.findIndex((child) => child.id === id);
+        const branchOffset = siblingIndex - (siblings.length - 1) / 2;
+        preferredLane = parentLane + branchOffset;
+        const inline = toCanonicalClass(node) === 'inline_device' || toCanonicalClass(node) === 'instrument';
+        if (inline && siblings.length === 1) preferredLane = parentLane;
+      }
+    }
+
+    const finalLane = findNearestFreeLane(preferredLane, used);
+    lane.set(id, finalLane);
+    used.add(finalLane);
+    usedByRank.set(myRank, used);
+  });
+
+  const laneValues = [...lane.values()];
+  const laneShift = laneValues.length ? Math.min(...laneValues) : 0;
+  const autoNodePositions: Record<string, Point> = {};
+
+  nodes.forEach((node) => {
+    const xRank = rank.get(node.id) ?? 0;
+    const yLane = (lane.get(node.id) ?? 0) - laneShift;
+    autoNodePositions[node.id] = { x: 80 + xRank * X_STEP, y: 90 + yLane * Y_STEP };
+  });
+
+  return autoNodePositions;
+};
+
+const buildRoutes = (nodes: Node<SoapNodeData>[], edges: Edge[], positions: Record<string, Point>) => {
+  const nodeById = new Map(nodes.map((node) => [node.id, { ...node, position: positions[node.id] } as Node<SoapNodeData>]));
   const edgeLaneCounter = new Map<string, number>();
-  const nodeBoxes = nodes.map((node) => nodeBox(node, positions[node.id] ?? node.position));
+  const nodeBoxes = nodes.map((node) => nodeBox(node, positions[node.id]));
   const usedLabelBoxes: Array<{ x: number; y: number; width: number; height: number }> = [];
   const routes: Record<string, SchematicRoute> = {};
 
@@ -135,16 +255,51 @@ const buildRoutes = (nodes: Node<SoapNodeData>[], edges: Edge[], positions: Reco
     const sourceNode = nodeById.get(edge.source);
     const targetNode = nodeById.get(edge.target);
     if (!sourceNode || !targetNode) return;
-    const { source, target } = resolveEdgeAnchors(edge, sourceNode, targetNode);
-    const elkEdge = elkEdges?.get(edge.id);
-    const points = elkEdge?.sections?.[0] ? mapElkSectionPoints(elkEdge.sections[0], source, target) : buildOrthogonalRoute(source, target, (edgeLaneCounter.get(`${edge.source}:${edge.target}`) ?? 0) * 10).points;
+    const source = getPortPoint(sourceNode, edge.sourceHandle);
+    const target = getPortPoint(targetNode, edge.targetHandle);
+    const points = buildOrthogonalRoute(source, target, (edgeLaneCounter.get(`${edge.source}:${edge.target}`) ?? 0) * 10).points;
     const primary = placeLabel(points, nodeBoxes, usedLabelBoxes);
     const secondary = primary ? { x: primary.x, y: primary.y + 14 } : undefined;
     const canShowSecondary = Boolean(secondary) && !nodeBoxes.some((n) => intersects({ x: secondary!.x - SECONDARY_LABEL_SIZE.width / 2, y: secondary!.y - SECONDARY_LABEL_SIZE.height / 2, width: SECONDARY_LABEL_SIZE.width, height: SECONDARY_LABEL_SIZE.height }, n, 6));
     routes[edge.id] = { points, labelPoint: primary, secondaryLabelPoint: secondary, showSecondaryLabel: canShowSecondary };
     edgeLaneCounter.set(`${edge.source}:${edge.target}`, (edgeLaneCounter.get(`${edge.source}:${edge.target}`) ?? 0) + 1);
   });
+
   return routes;
+};
+
+export const buildCanonicalProcessGraph = (nodes: Node<SoapNodeData>[], edges: Edge[]): CanonicalProcessGraph => ({
+  nodes: sortNodesCanonically(nodes).map((node) => ({
+    id: node.id,
+    type: node.data.kind,
+    subtype: node.data.subtype,
+    displayName: node.data.visibleName,
+    tag: node.data.shortName || node.data.technicalTag,
+    class: toCanonicalClass(node),
+    ports: getSchematicPorts(node),
+  })),
+  edges: edges.map((edge) => ({
+    id: edge.id,
+    sourceId: edge.source,
+    targetId: edge.target,
+    medium: edge.data?.mediumType ?? edge.data?.medium ?? 'unknown',
+    dn: edge.data?.nominalDiameter,
+    serviceTag: edge.data?.serviceTag,
+    flowDirection: edge.data?.flowDirection ?? 'forward',
+    lineClass: edge.data?.lineRole,
+  })),
+});
+
+export const buildCanonicalSchematic = (nodes: Node<SoapNodeData>[], edges: Edge[]) => {
+  const canonicalGraph = buildCanonicalProcessGraph(nodes, edges);
+  const autoPositions = buildCanonicalLaneLayout(nodes, edges);
+  const routes = buildRoutes(nodes, edges, autoPositions);
+  return {
+    canonicalGraph,
+    positions: autoPositions,
+    routes,
+    autoPositions,
+  };
 };
 
 export const buildElkGraphFromProcessModel = (nodes: Node<SoapNodeData>[], edges: Edge[]) => ({
@@ -153,11 +308,6 @@ export const buildElkGraphFromProcessModel = (nodes: Node<SoapNodeData>[], edges
     'elk.algorithm': 'layered',
     'elk.direction': 'RIGHT',
     'elk.edgeRouting': 'ORTHOGONAL',
-    'org.eclipse.elk.portConstraints': 'FIXED_ORDER',
-    'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
-    'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
-    'elk.spacing.nodeNode': '18',
-    'elk.layered.spacing.nodeNodeBetweenLayers': '30',
   },
   children: nodes.map((node) => {
     const symbol = getSchematicSymbol(node);
@@ -165,13 +315,10 @@ export const buildElkGraphFromProcessModel = (nodes: Node<SoapNodeData>[], edges
       id: node.id,
       width: symbol.size.width,
       height: symbol.size.height,
-      layoutOptions: { 'org.eclipse.elk.portConstraints': 'FIXED_ORDER' },
       ports: getSchematicPorts(node).map((port) => ({
         id: `${node.id}:${port.id}`,
         width: 6,
         height: 6,
-        properties: { side: port.side, role: port.role },
-        layoutOptions: { 'org.eclipse.elk.port.side': port.side.toUpperCase() },
       })),
     };
   }),
@@ -184,37 +331,17 @@ export const buildElkGraphFromProcessModel = (nodes: Node<SoapNodeData>[], edges
   })),
 });
 
-export const mapElkResultToSchematicLayout = (
-  elkResult: any,
-  nodes: Node<SoapNodeData>[],
-  edges: Edge[],
-  layoutState?: Partial<SchematicLayoutState>,
-) => {
-  const autoNodePositions: Record<string, Point> = {};
-  elkResult.children?.forEach((node: any) => { autoNodePositions[node.id] = { x: node.x ?? 0, y: node.y ?? 0 }; });
-  const positions = withManualOverrides(nodes, autoNodePositions, layoutState);
-  const edgeMap = new Map<string, any>((elkResult.edges ?? []).map((edge: any) => [String(edge.id), edge] as [string, any]));
-  return { positions, routes: buildRoutes(nodes, edges, positions, edgeMap), autoPositions: autoNodePositions };
+export const resolveEdgeAnchors = (edge: Edge, sourceNode: Node<SoapNodeData>, targetNode: Node<SoapNodeData>) => ({
+  source: getPortPoint(sourceNode, edge.sourceHandle),
+  target: getPortPoint(targetNode, edge.targetHandle),
+});
+
+export const buildSchematicLayoutLightweight = (nodes: Node<SoapNodeData>[], edges: Edge[]) => {
+  const result = buildCanonicalSchematic(nodes, edges);
+  return { positions: result.positions, routes: result.routes, autoPositions: result.autoPositions, canonicalGraph: result.canonicalGraph };
 };
 
-export const buildSchematicLayoutLightweight = (nodes: Node<SoapNodeData>[], edges: Edge[], layoutState?: Partial<SchematicLayoutState>) => {
-  const rank = rankNodes(nodes, edges);
-  const laneCursor = new Map<number, number>();
-  const sortedNodes = [...nodes].sort((a, b) => ((rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0)) || (classifyWeight(a) - classifyWeight(b)) || (a.position.y - b.position.y));
-  const autoNodePositions: Record<string, Point> = {};
-  sortedNodes.forEach((node) => {
-    const xRank = rank.get(node.id) ?? 0;
-    const lane = laneCursor.get(xRank) ?? 0;
-    laneCursor.set(xRank, lane + 1);
-    autoNodePositions[node.id] = { x: 80 + xRank * X_STEP, y: 90 + lane * Y_STEP };
-  });
-  const positions = withManualOverrides(nodes, autoNodePositions, layoutState);
-  return { positions, routes: buildRoutes(nodes, edges, positions), autoPositions: autoNodePositions };
-};
+export const buildSchematicLayoutElk = async (nodes: Node<SoapNodeData>[], edges: Edge[]) => Promise.resolve(buildSchematicLayoutLightweight(nodes, edges));
 
-export const buildSchematicLayoutElk = async (nodes: Node<SoapNodeData>[], edges: Edge[], layoutState?: Partial<SchematicLayoutState>) => {
-  return Promise.resolve(buildSchematicLayoutLightweight(nodes, edges, layoutState));
-};
-
-export const buildSchematicLayout = (nodes: Node<SoapNodeData>[], edges: Edge[], layoutState?: Partial<SchematicLayoutState>) => buildSchematicLayoutLightweight(nodes, edges, layoutState);
+export const buildSchematicLayout = (nodes: Node<SoapNodeData>[], edges: Edge[]) => buildSchematicLayoutLightweight(nodes, edges);
 export const shouldUseElkLayout = () => ELK_ENGINE_ENABLED;
