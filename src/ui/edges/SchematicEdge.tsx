@@ -20,13 +20,13 @@ export const SchematicEdge = memo(({ id, sourceX, sourceY, targetX, targetY, dat
   const tag = typeof data?.serviceTag === 'string' ? data.serviceTag : '';
   const secondary = [medium, tag].filter(Boolean).join(' · ');
   const secondaryPoint = data?.schematicRoute?.secondaryLabelPoint as { x: number; y: number } | undefined;
-  const routeComplexEnough = (points?.length ?? 0) >= 4 || Math.hypot(targetX - sourceX, targetY - sourceY) > 220;
+  const routeComplexEnough = (points?.length ?? 0) >= 4 || Math.hypot(targetX - sourceX, targetY - sourceY) > 260;
   const routeLength = (points ?? []).slice(1).reduce((sum, point, index) => sum + Math.hypot(point.x - (points?.[index].x ?? sourceX), point.y - (points?.[index].y ?? sourceY)), 0);
-  const hidePrimary = routeLength < 92 || intersectsAnyOverlayRect(adjustedLabelPoint, declutterRects, 16);
+  const hidePrimary = routeLength < 150 || intersectsAnyOverlayRect(adjustedLabelPoint, declutterRects, 16);
   const showSecondary = !hidePrimary
     && Boolean(data?.schematicRoute?.showSecondaryLabel ?? true)
     && routeComplexEnough
-    && routeLength > 200
+    && routeLength > 280
     && !intersectsAnyOverlayRect(secondaryPoint ?? adjustedLabelPoint, declutterRects, 12);
 
   return (
