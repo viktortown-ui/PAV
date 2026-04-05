@@ -41,10 +41,52 @@ export type SchematicRoute = {
   showSecondaryLabel?: boolean;
 };
 
-const X_STEP = 170;
-const Y_STEP = 92;
-const EDGE_LABEL_SIZE = { width: 90, height: 24 };
-const SECONDARY_LABEL_SIZE = { width: 120, height: 18 };
+export type SchematicSpine = {
+  y: number;
+  nodeIds: string[];
+  segments: Array<{ from: Point; to: Point }>;
+};
+
+export type SchematicInlinePlacement = {
+  nodeId: string;
+  x: number;
+  y: number;
+  order: number;
+};
+
+export type SchematicApparatusPlacement = {
+  nodeId: string;
+  x: number;
+  y: number;
+  attachedToSpine: boolean;
+  attachmentX: number;
+  attachmentY: number;
+};
+
+export type SchematicBranchPlacement = {
+  edgeId: string;
+  sourceId: string;
+  targetId: string;
+  junction: Point;
+  targetPoint: Point;
+  points: Point[];
+};
+
+export type SchematicComposerModel = {
+  spine: SchematicSpine;
+  inlinePlacements: SchematicInlinePlacement[];
+  apparatusPlacements: SchematicApparatusPlacement[];
+  branchPlacements: SchematicBranchPlacement[];
+  routes: Record<string, SchematicRoute>;
+};
+
+const X_GAP = 76;
+const MAIN_SPINE_Y = 240;
+const BASE_X = 120;
+const LABEL_W = 90;
+const LABEL_H = 24;
+const SECONDARY_W = 120;
+const SECONDARY_H = 18;
 const ELK_ENGINE_ENABLED = false;
 
 const canonicalClassOrder: Record<CanonicalNodeClass, number> = {
@@ -60,6 +102,9 @@ const toCanonicalClass = (node: Node<SoapNodeData>): CanonicalNodeClass => {
   if (node.data.className === 'major') return 'apparatus';
   return 'inline_device';
 };
+
+const isInlineClass = (klass: CanonicalNodeClass) => klass === 'inline_device' || klass === 'instrument';
+const isApparatusClass = (klass: CanonicalNodeClass) => klass === 'apparatus' || klass === 'terminal';
 
 const nodeStableKey = (node: Node<SoapNodeData>) => [
   String(canonicalClassOrder[toCanonicalClass(node)]),
@@ -94,7 +139,7 @@ const placeLabel = (
   });
 
   for (const point of candidates) {
-    const box = { x: point.x - EDGE_LABEL_SIZE.width / 2, y: point.y - EDGE_LABEL_SIZE.height / 2, width: EDGE_LABEL_SIZE.width, height: EDGE_LABEL_SIZE.height };
+    const box = { x: point.x - LABEL_W / 2, y: point.y - LABEL_H / 2, width: LABEL_W, height: LABEL_H };
     const hitsNode = nodeBoxes.some((n) => intersects(box, n, 6));
     const hitsLabel = usedLabels.some((used) => intersects(box, used, 6));
     const nearBend = routePoints.slice(1, -1).some((bend) => pointNear(point, bend, 20));
@@ -105,42 +150,6 @@ const placeLabel = (
     }
   }
   return undefined;
-};
-
-const buildOrthogonalRoute = (source: Point, target: Point, edgeOffset = 0): SchematicRoute => {
-  const horizontalGap = target.x - source.x;
-  const laneNudge = edgeOffset * 8;
-  const sourceStub = Math.max(16, Math.min(30, Math.abs(horizontalGap) * 0.18));
-  const targetStub = Math.max(14, Math.min(26, Math.abs(horizontalGap) * 0.16));
-  const sourceStubPoint = { x: source.x + sourceStub, y: source.y };
-  const targetStubPoint = { x: target.x - targetStub, y: target.y };
-  const middleX = Math.max(sourceStubPoint.x + 10, (sourceStubPoint.x + targetStubPoint.x) / 2 + laneNudge);
-
-  if (Math.abs(target.y - source.y) <= 10) {
-    return { points: [source, sourceStubPoint, { x: targetStubPoint.x, y: source.y }, target] };
-  }
-  return {
-    points: [
-      source,
-      sourceStubPoint,
-      { x: middleX, y: source.y },
-      { x: middleX, y: target.y },
-      targetStubPoint,
-      target,
-    ],
-  };
-};
-
-const findNearestFreeLane = (preferred: number, used: Set<number>) => {
-  const base = Math.round(preferred);
-  if (!used.has(base)) return base;
-  for (let delta = 1; delta < 50; delta += 1) {
-    const up = base - delta;
-    if (!used.has(up)) return up;
-    const down = base + delta;
-    if (!used.has(down)) return down;
-  }
-  return base;
 };
 
 const buildTopologyMetadata = (nodes: Node<SoapNodeData>[], edges: Edge[]) => {
@@ -186,83 +195,176 @@ const buildTopologicalOrder = (nodes: Node<SoapNodeData>[], edges: Edge[]) => {
   return orderedIds;
 };
 
-const buildCanonicalLaneLayout = (nodes: Node<SoapNodeData>[], edges: Edge[]) => {
-  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+const edgeByKey = (edges: Edge[]) => new Map(edges.map((edge) => [`${edge.source}->${edge.target}`, edge]));
+
+const findMainSpinePath = (nodes: Node<SoapNodeData>[], edges: Edge[]) => {
+  if (!nodes.length) return [] as string[];
   const order = buildTopologicalOrder(nodes, edges);
   const { inMap, outMap } = buildTopologyMetadata(nodes, edges);
-  const rank = new Map(nodes.map((node) => [node.id, 0]));
+  const score = new Map<string, number>();
+  const prev = new Map<string, string | null>();
 
   order.forEach((id) => {
     const parents = inMap.get(id) ?? [];
-    const nodeRank = parents.length
-      ? Math.max(...parents.map((p) => (rank.get(p) ?? 0) + 1))
-      : 0;
-    rank.set(id, nodeRank);
-  });
-
-  const lane = new Map<string, number>();
-  const usedByRank = new Map<number, Set<number>>();
-
-  order.forEach((id) => {
-    const node = nodeById.get(id)!;
-    const parents = inMap.get(id) ?? [];
-    const myRank = rank.get(id) ?? 0;
-    const used = usedByRank.get(myRank) ?? new Set<number>();
-
-    let preferredLane = 0;
-    if (parents.length) {
-      const parentLanes = parents.map((p) => lane.get(p) ?? 0);
-      preferredLane = parentLanes.reduce((sum, value) => sum + value, 0) / parentLanes.length;
-      if (parents.length === 1) {
-        const parentId = parents[0]!;
-        const siblings = (outMap.get(parentId) ?? []).map((childId) => nodeById.get(childId)!).sort((a, b) => nodeStableKey(a).localeCompare(nodeStableKey(b)));
-        const parentLane = lane.get(parentId) ?? 0;
-        const siblingIndex = siblings.findIndex((child) => child.id === id);
-        const branchOffset = siblingIndex - (siblings.length - 1) / 2;
-        preferredLane = parentLane + branchOffset;
-        const inline = toCanonicalClass(node) === 'inline_device' || toCanonicalClass(node) === 'instrument';
-        if (inline && siblings.length === 1) preferredLane = parentLane;
-      }
+    if (!parents.length) {
+      score.set(id, 1);
+      prev.set(id, null);
+      return;
     }
-
-    const finalLane = findNearestFreeLane(preferredLane, used);
-    lane.set(id, finalLane);
-    used.add(finalLane);
-    usedByRank.set(myRank, used);
+    const ranked = [...parents].sort((a, b) => (score.get(b) ?? 0) - (score.get(a) ?? 0) || a.localeCompare(b));
+    const best = ranked[0]!;
+    score.set(id, (score.get(best) ?? 0) + 1);
+    prev.set(id, best);
   });
 
-  const laneValues = [...lane.values()];
-  const laneShift = laneValues.length ? Math.min(...laneValues) : 0;
-  const autoNodePositions: Record<string, Point> = {};
-
-  nodes.forEach((node) => {
-    const xRank = rank.get(node.id) ?? 0;
-    const yLane = (lane.get(node.id) ?? 0) - laneShift;
-    autoNodePositions[node.id] = { x: 80 + xRank * X_STEP, y: 90 + yLane * Y_STEP };
-  });
-
-  return autoNodePositions;
+  const sinks = order.filter((id) => (outMap.get(id)?.length ?? 0) === 0);
+  const end = [...(sinks.length ? sinks : order)].sort((a, b) => (score.get(b) ?? 0) - (score.get(a) ?? 0) || a.localeCompare(b))[0];
+  if (!end) return [order[0]!];
+  const path: string[] = [];
+  let cursor: string | null | undefined = end;
+  while (cursor) {
+    path.push(cursor);
+    cursor = prev.get(cursor);
+  }
+  return path.reverse();
 };
 
-const buildRoutes = (nodes: Node<SoapNodeData>[], edges: Edge[], positions: Record<string, Point>) => {
-  const nodeById = new Map(nodes.map((node) => [node.id, { ...node, position: positions[node.id] } as Node<SoapNodeData>]));
-  const edgeLaneCounter = new Map<string, number>();
-  const nodeBoxes = nodes.map((node) => nodeBox(node, positions[node.id]));
-  const usedLabelBoxes: Array<{ x: number; y: number; width: number; height: number }> = [];
+const centerNodeOnPortY = (node: Node<SoapNodeData>, desiredPortId: string, y: number) => {
+  const symbol = getSchematicSymbol(node);
+  const desired = symbol.ports.find((port) => port.id === desiredPortId)
+    ?? symbol.ports.find((port) => port.side === 'left')
+    ?? symbol.ports[0];
+  const ratio = desired?.side === 'left' || desired?.side === 'right'
+    ? desired.ratio
+    : 0.5;
+  return y - symbol.size.height * ratio;
+};
+
+const buildNodePositionsFromSpine = (nodes: Node<SoapNodeData>[], spineIds: string[]) => {
+  const nodeById = new Map(nodes.map((n) => [n.id, n]));
+  const positions: Record<string, Point> = {};
+  const inlinePlacements: SchematicInlinePlacement[] = [];
+  const apparatusPlacements: SchematicApparatusPlacement[] = [];
+
+  let cursorX = BASE_X;
+  spineIds.forEach((id, index) => {
+    const node = nodeById.get(id);
+    if (!node) return;
+    const symbol = getSchematicSymbol(node);
+    const klass = toCanonicalClass(node);
+    const x = cursorX;
+    const y = isInlineClass(klass)
+      ? MAIN_SPINE_Y - symbol.size.height / 2
+      : centerNodeOnPortY(node, 'in-left', MAIN_SPINE_Y);
+    positions[id] = { x, y };
+    if (isInlineClass(klass)) inlinePlacements.push({ nodeId: id, x, y, order: index });
+    if (isApparatusClass(klass)) apparatusPlacements.push({ nodeId: id, x, y, attachedToSpine: true, attachmentX: x, attachmentY: MAIN_SPINE_Y });
+    cursorX += symbol.size.width + X_GAP;
+  });
+
+  return { positions, inlinePlacements, apparatusPlacements };
+};
+
+const buildOrthogonalPipe = (source: Point, target: Point): Point[] => {
+  if (Math.abs(source.y - target.y) <= 1) return [source, target];
+  const midX = (source.x + target.x) / 2;
+  return [source, { x: midX, y: source.y }, { x: midX, y: target.y }, target];
+};
+
+const buildPipeFirstComposer = (nodes: Node<SoapNodeData>[], edges: Edge[]) => {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const spineIds = findMainSpinePath(nodes, edges);
+  const { positions, inlinePlacements, apparatusPlacements } = buildNodePositionsFromSpine(nodes, spineIds);
+  const spineSet = new Set(spineIds);
+  const { inMap } = buildTopologyMetadata(nodes, edges);
+
+  const topological = buildTopologicalOrder(nodes, edges);
+  const pending = topological.filter((id) => !spineSet.has(id));
+  const branchYOffset = 150;
+
+  pending.forEach((id, branchIndex) => {
+    const node = nodeById.get(id);
+    if (!node) return;
+    const symbol = getSchematicSymbol(node);
+    const parents = inMap.get(id) ?? [];
+    const attachedParent = parents.find((p) => positions[p]) ?? spineIds[Math.max(0, spineIds.length - 1)];
+    const parentPos = attachedParent ? positions[attachedParent] : { x: BASE_X, y: MAIN_SPINE_Y - symbol.size.height / 2 };
+    const parentSymbol = attachedParent ? getSchematicSymbol(nodeById.get(attachedParent)!) : symbol;
+    const parentAnchorX = parentPos.x + parentSymbol.size.width;
+    const branchDirection = branchIndex % 2 === 0 ? 1 : -1;
+    const x = parentAnchorX + X_GAP + branchIndex * 14;
+    const y = MAIN_SPINE_Y + branchDirection * branchYOffset - symbol.size.height / 2;
+    positions[id] = { x, y };
+    if (isInlineClass(toCanonicalClass(node))) inlinePlacements.push({ nodeId: id, x, y, order: spineIds.length + branchIndex });
+    else apparatusPlacements.push({ nodeId: id, x, y, attachedToSpine: Boolean(attachedParent), attachmentX: parentAnchorX, attachmentY: MAIN_SPINE_Y });
+  });
+
   const routes: Record<string, SchematicRoute> = {};
+  const branchPlacements: SchematicBranchPlacement[] = [];
+  const edgeMap = edgeByKey(edges);
+
+  for (let i = 0; i < spineIds.length - 1; i += 1) {
+    const sourceId = spineIds[i]!;
+    const targetId = spineIds[i + 1]!;
+    const edge = edgeMap.get(`${sourceId}->${targetId}`);
+    if (!edge) continue;
+    const source = getPortPoint({ ...nodeById.get(sourceId)!, position: positions[sourceId] } as Node<SoapNodeData>, edge.sourceHandle);
+    const target = getPortPoint({ ...nodeById.get(targetId)!, position: positions[targetId] } as Node<SoapNodeData>, edge.targetHandle);
+    routes[edge.id] = { points: buildOrthogonalPipe(source, target), showSecondaryLabel: false };
+  }
 
   edges.forEach((edge) => {
+    if (routes[edge.id]) return;
     const sourceNode = nodeById.get(edge.source);
     const targetNode = nodeById.get(edge.target);
     if (!sourceNode || !targetNode) return;
-    const source = getPortPoint(sourceNode, edge.sourceHandle);
-    const target = getPortPoint(targetNode, edge.targetHandle);
-    const points = buildOrthogonalRoute(source, target, (edgeLaneCounter.get(`${edge.source}:${edge.target}`) ?? 0) * 10).points;
-    const primary = placeLabel(points, nodeBoxes, usedLabelBoxes);
+    const source = getPortPoint({ ...sourceNode, position: positions[edge.source] } as Node<SoapNodeData>, edge.sourceHandle);
+    const target = getPortPoint({ ...targetNode, position: positions[edge.target] } as Node<SoapNodeData>, edge.targetHandle);
+    const points = buildOrthogonalPipe(source, target);
+    routes[edge.id] = { points };
+    if (spineSet.has(edge.source) && !spineSet.has(edge.target)) {
+      branchPlacements.push({ edgeId: edge.id, sourceId: edge.source, targetId: edge.target, junction: { x: source.x, y: MAIN_SPINE_Y }, targetPoint: target, points });
+    }
+  });
+
+  const spineSegments: Array<{ from: Point; to: Point }> = [];
+  for (let i = 0; i < spineIds.length - 1; i += 1) {
+    const fromId = spineIds[i]!;
+    const toId = spineIds[i + 1]!;
+    const edge = edgeMap.get(`${fromId}->${toId}`);
+    const route = edge ? routes[edge.id] : undefined;
+    if (route?.points?.length && route.points.length >= 2) {
+      const from = route.points[0]!;
+      const to = route.points[route.points.length - 1]!;
+      spineSegments.push({ from, to });
+    }
+  }
+
+  return {
+    positions,
+    model: {
+      spine: { y: MAIN_SPINE_Y, nodeIds: spineIds, segments: spineSegments },
+      inlinePlacements,
+      apparatusPlacements,
+      branchPlacements,
+      routes,
+    } as SchematicComposerModel,
+  };
+};
+
+const applyLabelDeclutter = (nodes: Node<SoapNodeData>[], edges: Edge[], positions: Record<string, Point>, routes: Record<string, SchematicRoute>) => {
+  const nodeBoxes = nodes.map((node) => nodeBox(node, positions[node.id]));
+  const usedLabelBoxes: Array<{ x: number; y: number; width: number; height: number }> = [];
+
+  edges.forEach((edge) => {
+    const route = routes[edge.id];
+    if (!route || route.points.length < 2) return;
+    const primary = placeLabel(route.points, nodeBoxes, usedLabelBoxes);
     const secondary = primary ? { x: primary.x, y: primary.y + 14 } : undefined;
-    const canShowSecondary = Boolean(secondary) && !nodeBoxes.some((n) => intersects({ x: secondary!.x - SECONDARY_LABEL_SIZE.width / 2, y: secondary!.y - SECONDARY_LABEL_SIZE.height / 2, width: SECONDARY_LABEL_SIZE.width, height: SECONDARY_LABEL_SIZE.height }, n, 6));
-    routes[edge.id] = { points, labelPoint: primary, secondaryLabelPoint: secondary, showSecondaryLabel: canShowSecondary };
-    edgeLaneCounter.set(`${edge.source}:${edge.target}`, (edgeLaneCounter.get(`${edge.source}:${edge.target}`) ?? 0) + 1);
+    const canShowSecondary = Boolean(secondary)
+      && !nodeBoxes.some((n) => intersects({ x: secondary!.x - SECONDARY_W / 2, y: secondary!.y - SECONDARY_H / 2, width: SECONDARY_W, height: SECONDARY_H }, n, 6))
+      && route.points.length > 3;
+    routes[edge.id] = { ...route, labelPoint: primary, secondaryLabelPoint: secondary, showSecondaryLabel: Boolean(route.showSecondaryLabel) ? route.showSecondaryLabel : canShowSecondary };
   });
 
   return routes;
@@ -292,13 +394,14 @@ export const buildCanonicalProcessGraph = (nodes: Node<SoapNodeData>[], edges: E
 
 export const buildCanonicalSchematic = (nodes: Node<SoapNodeData>[], edges: Edge[]) => {
   const canonicalGraph = buildCanonicalProcessGraph(nodes, edges);
-  const autoPositions = buildCanonicalLaneLayout(nodes, edges);
-  const routes = buildRoutes(nodes, edges, autoPositions);
+  const composed = buildPipeFirstComposer(nodes, edges);
+  const routes = applyLabelDeclutter(nodes, edges, composed.positions, composed.model.routes);
   return {
     canonicalGraph,
-    positions: autoPositions,
+    positions: composed.positions,
     routes,
-    autoPositions,
+    autoPositions: composed.positions,
+    composer: composed.model,
   };
 };
 
@@ -338,7 +441,13 @@ export const resolveEdgeAnchors = (edge: Edge, sourceNode: Node<SoapNodeData>, t
 
 export const buildSchematicLayoutLightweight = (nodes: Node<SoapNodeData>[], edges: Edge[]) => {
   const result = buildCanonicalSchematic(nodes, edges);
-  return { positions: result.positions, routes: result.routes, autoPositions: result.autoPositions, canonicalGraph: result.canonicalGraph };
+  return {
+    positions: result.positions,
+    routes: result.routes,
+    autoPositions: result.autoPositions,
+    canonicalGraph: result.canonicalGraph,
+    composer: result.composer,
+  };
 };
 
 export const buildSchematicLayoutElk = async (nodes: Node<SoapNodeData>[], edges: Edge[]) => Promise.resolve(buildSchematicLayoutLightweight(nodes, edges));
