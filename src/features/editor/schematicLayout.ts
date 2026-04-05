@@ -47,6 +47,19 @@ export type SchematicSpine = {
   segments: Array<{ from: Point; to: Point }>;
 };
 
+export type SchematicTrack = {
+  id: string;
+  y: number;
+  kind: 'main' | 'branch';
+};
+
+export type SchematicSlot = {
+  nodeId: string;
+  index: number;
+  x: number;
+  trackId: string;
+};
+
 export type SchematicInlinePlacement = {
   nodeId: string;
   x: number;
@@ -78,11 +91,14 @@ export type SchematicComposerModel = {
   apparatusPlacements: SchematicApparatusPlacement[];
   branchPlacements: SchematicBranchPlacement[];
   routes: Record<string, SchematicRoute>;
+  tracks: SchematicTrack[];
+  slots: SchematicSlot[];
 };
 
-const X_GAP = 76;
-const MAIN_SPINE_Y = 240;
-const BASE_X = 120;
+const SLOT_WIDTH = 168;
+const MAIN_TRACK_Y = 238;
+const BASE_X = 116;
+const TRACK_SPACING = 104;
 const LABEL_W = 90;
 const LABEL_H = 24;
 const SECONDARY_W = 120;
@@ -133,10 +149,11 @@ const placeLabel = (
 ) => {
   const segments = Array.from({ length: routePoints.length - 1 }, (_, i) => [routePoints[i], routePoints[i + 1]] as const);
   const candidates: Point[] = [];
-  segments.slice(Math.max(0, Math.floor(segments.length / 2) - 1), Math.floor(segments.length / 2) + 1).forEach(([a, b]) => {
-    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  const centerSegment = segments[Math.floor(segments.length / 2)];
+  if (centerSegment) {
+    const mid = { x: (centerSegment[0].x + centerSegment[1].x) / 2, y: (centerSegment[0].y + centerSegment[1].y) / 2 };
     candidates.push(mid, { x: mid.x, y: mid.y - 18 }, { x: mid.x, y: mid.y + 18 });
-  });
+  }
 
   for (const point of candidates) {
     const box = { x: point.x - LABEL_W / 2, y: point.y - LABEL_H / 2, width: LABEL_W, height: LABEL_H };
@@ -229,88 +246,101 @@ const findMainSpinePath = (nodes: Node<SoapNodeData>[], edges: Edge[]) => {
   return path.reverse();
 };
 
-const centerNodeOnPortY = (node: Node<SoapNodeData>, desiredPortId: string, y: number) => {
+const getTrackAlignedNodeY = (node: Node<SoapNodeData>, trackY: number) => {
   const symbol = getSchematicSymbol(node);
-  const desired = symbol.ports.find((port) => port.id === desiredPortId)
-    ?? symbol.ports.find((port) => port.side === 'left')
-    ?? symbol.ports[0];
-  const ratio = desired?.side === 'left' || desired?.side === 'right'
-    ? desired.ratio
-    : 0.5;
-  return y - symbol.size.height * ratio;
+  return trackY - symbol.size.height / 2;
 };
 
-const buildNodePositionsFromSpine = (nodes: Node<SoapNodeData>[], spineIds: string[]) => {
-  const nodeById = new Map(nodes.map((n) => [n.id, n]));
+const getTrackPort = (node: Node<SoapNodeData>, position: Point, handle: string | null | undefined) => {
+  const symbol = getSchematicSymbol(node);
+  const side = handle?.includes('left') ? 'left' : handle?.includes('right') ? 'right' : undefined;
+  if (side === 'left') return { x: position.x, y: position.y + symbol.size.height / 2 };
+  if (side === 'right') return { x: position.x + symbol.size.width, y: position.y + symbol.size.height / 2 };
+  return getPortPoint({ ...node, position } as Node<SoapNodeData>, handle);
+};
+
+const buildTrackBasedSchematic = (nodes: Node<SoapNodeData>[], edges: Edge[]) => {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const { inMap, outMap } = buildTopologyMetadata(nodes, edges);
+  const topologicalOrder = buildTopologicalOrder(nodes, edges);
+  const spineIds = findMainSpinePath(nodes, edges);
+  const spineSet = new Set(spineIds);
   const positions: Record<string, Point> = {};
+  const slotById = new Map<string, SchematicSlot>();
+  const slots: SchematicSlot[] = [];
+  const tracks: SchematicTrack[] = [{ id: 'main', y: MAIN_TRACK_Y, kind: 'main' }];
   const inlinePlacements: SchematicInlinePlacement[] = [];
   const apparatusPlacements: SchematicApparatusPlacement[] = [];
+  const branchPlacements: SchematicBranchPlacement[] = [];
 
-  let cursorX = BASE_X;
   spineIds.forEach((id, index) => {
     const node = nodeById.get(id);
     if (!node) return;
-    const symbol = getSchematicSymbol(node);
-    const klass = toCanonicalClass(node);
-    const x = cursorX;
-    const y = isInlineClass(klass)
-      ? MAIN_SPINE_Y - symbol.size.height / 2
-      : centerNodeOnPortY(node, 'in-left', MAIN_SPINE_Y);
+    const x = BASE_X + index * SLOT_WIDTH;
+    const y = getTrackAlignedNodeY(node, MAIN_TRACK_Y);
     positions[id] = { x, y };
+    const slot = { nodeId: id, index, x, trackId: 'main' };
+    slots.push(slot);
+    slotById.set(id, slot);
+    const klass = toCanonicalClass(node);
     if (isInlineClass(klass)) inlinePlacements.push({ nodeId: id, x, y, order: index });
-    if (isApparatusClass(klass)) apparatusPlacements.push({ nodeId: id, x, y, attachedToSpine: true, attachmentX: x, attachmentY: MAIN_SPINE_Y });
-    cursorX += symbol.size.width + X_GAP;
+    if (isApparatusClass(klass)) apparatusPlacements.push({ nodeId: id, x, y, attachedToSpine: true, attachmentX: x, attachmentY: MAIN_TRACK_Y });
   });
 
-  return { positions, inlinePlacements, apparatusPlacements };
-};
-
-const buildOrthogonalPipe = (source: Point, target: Point): Point[] => {
-  if (Math.abs(source.y - target.y) <= 1) return [source, target];
-  const midX = (source.x + target.x) / 2;
-  return [source, { x: midX, y: source.y }, { x: midX, y: target.y }, target];
-};
-
-const buildPipeFirstComposer = (nodes: Node<SoapNodeData>[], edges: Edge[]) => {
-  const nodeById = new Map(nodes.map((node) => [node.id, node]));
-  const spineIds = findMainSpinePath(nodes, edges);
-  const { positions, inlinePlacements, apparatusPlacements } = buildNodePositionsFromSpine(nodes, spineIds);
-  const spineSet = new Set(spineIds);
-  const { inMap } = buildTopologyMetadata(nodes, edges);
-
-  const topological = buildTopologicalOrder(nodes, edges);
-  const pending = topological.filter((id) => !spineSet.has(id));
-  const branchYOffset = 150;
-
-  pending.forEach((id, branchIndex) => {
+  const branchTrackBySource = new Map<string, string[]>();
+  let branchTrackIndex = 0;
+  topologicalOrder.filter((id) => !spineSet.has(id)).forEach((id) => {
     const node = nodeById.get(id);
     if (!node) return;
-    const symbol = getSchematicSymbol(node);
     const parents = inMap.get(id) ?? [];
-    const attachedParent = parents.find((p) => positions[p]) ?? spineIds[Math.max(0, spineIds.length - 1)];
-    const parentPos = attachedParent ? positions[attachedParent] : { x: BASE_X, y: MAIN_SPINE_Y - symbol.size.height / 2 };
-    const parentSymbol = attachedParent ? getSchematicSymbol(nodeById.get(attachedParent)!) : symbol;
-    const parentAnchorX = parentPos.x + parentSymbol.size.width;
-    const branchDirection = branchIndex % 2 === 0 ? 1 : -1;
-    const x = parentAnchorX + X_GAP + branchIndex * 14;
-    const y = MAIN_SPINE_Y + branchDirection * branchYOffset - symbol.size.height / 2;
+    const attachedSpineParent = parents.find((parentId) => spineSet.has(parentId));
+    const resolvedParentId = attachedSpineParent ?? parents.find((parentId) => slotById.has(parentId)) ?? spineIds[Math.max(spineIds.length - 1, 0)];
+    const parentSlot = resolvedParentId ? slotById.get(resolvedParentId) : undefined;
+    const parentX = parentSlot?.x ?? BASE_X;
+
+    const sourceBranchTracks = branchTrackBySource.get(resolvedParentId ?? id) ?? [];
+    if (!sourceBranchTracks.length) branchTrackBySource.set(resolvedParentId ?? id, sourceBranchTracks);
+    const branchSlotIndex = sourceBranchTracks.length;
+    const direction = branchTrackIndex % 2 === 0 ? 1 : -1;
+    const trackY = MAIN_TRACK_Y + direction * TRACK_SPACING * (1 + Math.floor(branchTrackIndex / 2));
+    const trackId = `branch-${branchTrackIndex + 1}`;
+    branchTrackIndex += 1;
+    sourceBranchTracks.push(trackId);
+    tracks.push({ id: trackId, y: trackY, kind: 'branch' });
+
+    const x = parentX + SLOT_WIDTH;
+    const y = getTrackAlignedNodeY(node, trackY);
+    const slot: SchematicSlot = { nodeId: id, index: slots.length, x, trackId };
+    slots.push(slot);
+    slotById.set(id, slot);
     positions[id] = { x, y };
-    if (isInlineClass(toCanonicalClass(node))) inlinePlacements.push({ nodeId: id, x, y, order: spineIds.length + branchIndex });
-    else apparatusPlacements.push({ nodeId: id, x, y, attachedToSpine: Boolean(attachedParent), attachmentX: parentAnchorX, attachmentY: MAIN_SPINE_Y });
+
+    const klass = toCanonicalClass(node);
+    if (isInlineClass(klass)) inlinePlacements.push({ nodeId: id, x, y, order: slots.length });
+    if (isApparatusClass(klass)) apparatusPlacements.push({ nodeId: id, x, y, attachedToSpine: Boolean(resolvedParentId), attachmentX: parentX, attachmentY: trackY });
   });
 
   const routes: Record<string, SchematicRoute> = {};
-  const branchPlacements: SchematicBranchPlacement[] = [];
   const edgeMap = edgeByKey(edges);
+  const mainTrackStart = spineIds.length ? positions[spineIds[0]].x : BASE_X;
+  const mainTrackEnd = spineIds.length ? (() => {
+    const lastId = spineIds[spineIds.length - 1];
+    const lastNode = nodeById.get(lastId);
+    const lastPos = positions[lastId];
+    if (!lastNode) return lastPos?.x ?? BASE_X;
+    return (lastPos?.x ?? BASE_X) + getSchematicSymbol(lastNode).size.width;
+  })() : BASE_X + SLOT_WIDTH;
 
   for (let i = 0; i < spineIds.length - 1; i += 1) {
     const sourceId = spineIds[i]!;
     const targetId = spineIds[i + 1]!;
     const edge = edgeMap.get(`${sourceId}->${targetId}`);
     if (!edge) continue;
-    const source = getPortPoint({ ...nodeById.get(sourceId)!, position: positions[sourceId] } as Node<SoapNodeData>, edge.sourceHandle);
-    const target = getPortPoint({ ...nodeById.get(targetId)!, position: positions[targetId] } as Node<SoapNodeData>, edge.targetHandle);
-    routes[edge.id] = { points: buildOrthogonalPipe(source, target), showSecondaryLabel: false };
+    const sourceNode = nodeById.get(sourceId)!;
+    const targetNode = nodeById.get(targetId)!;
+    const source = getTrackPort(sourceNode, positions[sourceId], edge.sourceHandle);
+    const target = getTrackPort(targetNode, positions[targetId], edge.targetHandle);
+    routes[edge.id] = { points: [source, target], showSecondaryLabel: false };
   }
 
   edges.forEach((edge) => {
@@ -318,36 +348,41 @@ const buildPipeFirstComposer = (nodes: Node<SoapNodeData>[], edges: Edge[]) => {
     const sourceNode = nodeById.get(edge.source);
     const targetNode = nodeById.get(edge.target);
     if (!sourceNode || !targetNode) return;
-    const source = getPortPoint({ ...sourceNode, position: positions[edge.source] } as Node<SoapNodeData>, edge.sourceHandle);
-    const target = getPortPoint({ ...targetNode, position: positions[edge.target] } as Node<SoapNodeData>, edge.targetHandle);
-    const points = buildOrthogonalPipe(source, target);
-    routes[edge.id] = { points };
-    if (spineSet.has(edge.source) && !spineSet.has(edge.target)) {
-      branchPlacements.push({ edgeId: edge.id, sourceId: edge.source, targetId: edge.target, junction: { x: source.x, y: MAIN_SPINE_Y }, targetPoint: target, points });
+    const sourceSlot = slotById.get(edge.source);
+    const targetSlot = slotById.get(edge.target);
+    const source = getTrackPort(sourceNode, positions[edge.source], edge.sourceHandle);
+    const target = getTrackPort(targetNode, positions[edge.target], edge.targetHandle);
+    const sourceTrackY = tracks.find((track) => track.id === sourceSlot?.trackId)?.y ?? MAIN_TRACK_Y;
+    const targetTrackY = tracks.find((track) => track.id === targetSlot?.trackId)?.y ?? MAIN_TRACK_Y;
+
+    if (sourceTrackY === targetTrackY) {
+      routes[edge.id] = { points: [source, target], showSecondaryLabel: false };
+      return;
+    }
+
+    const junction = { x: source.x + 18, y: sourceTrackY };
+    const points = [source, junction, { x: junction.x, y: targetTrackY }, target];
+    routes[edge.id] = { points, showSecondaryLabel: true };
+
+    if (sourceSlot?.trackId === 'main') {
+      branchPlacements.push({ edgeId: edge.id, sourceId: edge.source, targetId: edge.target, junction, targetPoint: target, points });
     }
   });
 
-  const spineSegments: Array<{ from: Point; to: Point }> = [];
-  for (let i = 0; i < spineIds.length - 1; i += 1) {
-    const fromId = spineIds[i]!;
-    const toId = spineIds[i + 1]!;
-    const edge = edgeMap.get(`${fromId}->${toId}`);
-    const route = edge ? routes[edge.id] : undefined;
-    if (route?.points?.length && route.points.length >= 2) {
-      const from = route.points[0]!;
-      const to = route.points[route.points.length - 1]!;
-      spineSegments.push({ from, to });
-    }
-  }
+  const spineSegments = spineIds.length
+    ? [{ from: { x: mainTrackStart, y: MAIN_TRACK_Y }, to: { x: mainTrackEnd, y: MAIN_TRACK_Y } }]
+    : [];
 
   return {
     positions,
     model: {
-      spine: { y: MAIN_SPINE_Y, nodeIds: spineIds, segments: spineSegments },
+      spine: { y: MAIN_TRACK_Y, nodeIds: spineIds, segments: spineSegments },
       inlinePlacements,
       apparatusPlacements,
       branchPlacements,
       routes,
+      tracks,
+      slots,
     } as SchematicComposerModel,
   };
 };
@@ -361,10 +396,11 @@ const applyLabelDeclutter = (nodes: Node<SoapNodeData>[], edges: Edge[], positio
     if (!route || route.points.length < 2) return;
     const primary = placeLabel(route.points, nodeBoxes, usedLabelBoxes);
     const secondary = primary ? { x: primary.x, y: primary.y + 14 } : undefined;
+    const hasLongStraight = route.points.length === 2 && Math.abs(route.points[1].x - route.points[0].x) > SLOT_WIDTH * 1.25;
     const canShowSecondary = Boolean(secondary)
-      && !nodeBoxes.some((n) => intersects({ x: secondary!.x - SECONDARY_W / 2, y: secondary!.y - SECONDARY_H / 2, width: SECONDARY_W, height: SECONDARY_H }, n, 6))
-      && route.points.length > 3;
-    routes[edge.id] = { ...route, labelPoint: primary, secondaryLabelPoint: secondary, showSecondaryLabel: Boolean(route.showSecondaryLabel) ? route.showSecondaryLabel : canShowSecondary };
+      && hasLongStraight
+      && !nodeBoxes.some((n) => intersects({ x: secondary!.x - SECONDARY_W / 2, y: secondary!.y - SECONDARY_H / 2, width: SECONDARY_W, height: SECONDARY_H }, n, 6));
+    routes[edge.id] = { ...route, labelPoint: primary, secondaryLabelPoint: secondary, showSecondaryLabel: canShowSecondary };
   });
 
   return routes;
@@ -394,7 +430,7 @@ export const buildCanonicalProcessGraph = (nodes: Node<SoapNodeData>[], edges: E
 
 export const buildCanonicalSchematic = (nodes: Node<SoapNodeData>[], edges: Edge[]) => {
   const canonicalGraph = buildCanonicalProcessGraph(nodes, edges);
-  const composed = buildPipeFirstComposer(nodes, edges);
+  const composed = buildTrackBasedSchematic(nodes, edges);
   const routes = applyLabelDeclutter(nodes, edges, composed.positions, composed.model.routes);
   return {
     canonicalGraph,

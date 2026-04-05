@@ -181,11 +181,11 @@ button.primary, .toolbox-actions .primary { background: linear-gradient(180deg, 
 .aux-card strong { font-size: 12px; color: #dbe8f7; }
 .service-details { display: grid; gap: 5px; color: #92a8c3; font-size: 12px; border: 1px dashed rgba(143, 181, 226, 0.24); border-radius: 10px; padding: 7px 8px; }
 .service-details summary { cursor: pointer; color: #cad9eb; font-weight: 600; }
-.diagnostics-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; min-width: 0; }
-.diagnostics-summary span { border: 1px solid rgba(255,255,255,0.05); background: rgba(255,255,255,0.03); border-radius: 12px; padding: 8px 10px; color: #9bb0ca; }
+.diagnostics-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; min-width: 0; align-items: stretch; }
+.diagnostics-summary span { border: 1px solid rgba(255,255,255,0.05); background: rgba(255,255,255,0.03); border-radius: 12px; padding: 8px 10px; color: #9bb0ca; min-width: 0; display: grid; gap: 2px; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; }
 .issue-list-detailed .issue-card, .segment-card { width: 100%; text-align: left; display: grid; gap: 6px; padding: 12px; color: inherit; min-width: 0; overflow: hidden; }
-.issue-list-detailed .issue-card strong, .segment-card strong { font-size: 13px; }
-.issue-list-detailed .issue-card span, .segment-card span { color: #95abc6; line-height: 1.35; overflow-wrap: anywhere; word-break: break-word; }
+.issue-list-detailed .issue-card strong, .segment-card strong { font-size: 13px; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.issue-list-detailed .issue-card span, .segment-card span { color: #95abc6; line-height: 1.35; overflow-wrap: anywhere; word-break: break-word; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .segment-card:hover, .issue-list-detailed .issue-card:hover { border-color: rgba(168, 206, 255, 0.3); }
 .severity-error { border-color: rgba(255, 118, 140, 0.35); }
 .severity-warning { border-color: rgba(255, 200, 98, 0.28); }
@@ -607,15 +607,16 @@ button.primary, .toolbox-actions .primary { background: linear-gradient(180deg, 
 .command-palette-list::-webkit-scrollbar-thumb { background: rgba(121, 156, 204, 0.45); border-radius: 10px; }
 .command-palette-list::-webkit-scrollbar-thumb:hover { background: rgba(143, 184, 241, 0.6); }
 
-.schematic-node { color: #203249; display: grid; grid-template-rows: auto auto; justify-items: center; gap: 6px; padding: 2px 8px; background: transparent; border: 0; border-radius: 0; box-shadow: none; font-family: 'Inter', system-ui, sans-serif; }
+.schematic-node { color: #203249; display: grid; grid-template-rows: auto auto; justify-items: center; gap: 4px; padding: 0 4px; background: transparent; border: 0; border-radius: 0; box-shadow: none; font-family: 'Inter', system-ui, sans-serif; }
 .schematic-node.is-selected .schematic-node-symbol svg { stroke: #1f4d83; stroke-width: 2.1; filter: drop-shadow(0 0 0.3px rgba(31, 77, 131, 0.85)); }
-.schematic-node-symbol { width: 88px; height: 74px; display: grid; place-items: center; position: relative; }
-.schematic-node-symbol svg { width: 84px; height: 66px; fill: rgba(255,255,255,0.12); stroke: #2f4158; stroke-width: 1.8; vector-effect: non-scaling-stroke; }
-.schematic-node-symbol.is-inline { width: 94px; }
-.schematic-inline-pipe { position: absolute; left: 0; right: 0; top: 36px; border-top: 2px solid rgba(68, 89, 114, 0.9); }
-.schematic-node-labels { display: grid; justify-items: center; gap: 2px; max-width: 148px; text-align: center; }
+.schematic-node .react-flow__handle { width: 1px; height: 1px; min-width: 1px; min-height: 1px; border: 0; opacity: 0; background: transparent; pointer-events: none; }
+.schematic-node-symbol { width: 86px; height: 66px; display: grid; place-items: center; position: relative; }
+.schematic-node-symbol svg { width: 80px; height: 62px; fill: rgba(255,255,255,0.1); stroke: #2f4158; stroke-width: 1.8; vector-effect: non-scaling-stroke; }
+.schematic-node-symbol.is-inline { width: 86px; }
+.schematic-inline-pipe { position: absolute; left: 0; right: 0; top: 32px; border-top: 2px solid rgba(68, 89, 114, 0.9); }
+.schematic-node-labels { display: grid; justify-items: center; gap: 1px; max-width: 132px; text-align: center; min-width: 0; }
 .schematic-node-labels strong { font-size: 12px; line-height: 1.2; color: #16253a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-.schematic-node-labels span { font-size: 10px; color: #5a6d87; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.schematic-node-labels span { font-size: 10px; color: #5a6d87; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; opacity: 0.82; }
 .schematic-edge-label { position: absolute; pointer-events: none; display: grid; gap: 1px; font-size: 10px; letter-spacing: 0.02em; border: 1px solid rgba(73, 93, 122, 0.22); background: rgba(248, 250, 253, 0.94); color: #33435a; border-radius: 4px; padding: 1px 5px; min-width: 44px; text-align: center; }
 .schematic-edge-label strong { font-size: 10px; line-height: 1.2; }
 .schematic-edge-label span { font-size: 9px; color: #617089; }
