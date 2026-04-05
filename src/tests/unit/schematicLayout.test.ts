@@ -17,6 +17,63 @@ describe('schematic layout', () => {
     expect(anchors.target.x).toBe(target.position.x);
   });
 
+  it('linear process builds single continuous spine', () => {
+    const tank = buildNode('tank', { x: 0, y: 0 }, project);
+    const pump = buildNode('pump', { x: 0, y: 0 }, project);
+    const reactor = buildNode('reactor', { x: 0, y: 0 }, project);
+    const meter = buildNode('flowMeter', { x: 0, y: 0 }, project);
+    const valve = buildNode('shutoffValve', { x: 0, y: 0 }, project);
+    const buffer = buildNode('bufferTank', { x: 0, y: 0 }, project);
+    const sink = buildNode('consumer', { x: 0, y: 0 }, project);
+    const edges = [
+      buildEdge(tank.id, pump.id, 'water', 'DN50', { sourceHandle: 'out-right', targetHandle: 'in-left' }, project),
+      buildEdge(pump.id, reactor.id, 'water', 'DN50', { sourceHandle: 'out-right', targetHandle: 'in-left' }, project),
+      buildEdge(reactor.id, meter.id, 'water', 'DN50', { sourceHandle: 'out-right', targetHandle: 'in-left' }, project),
+      buildEdge(meter.id, valve.id, 'water', 'DN50', { sourceHandle: 'out-right', targetHandle: 'in-left' }, project),
+      buildEdge(valve.id, buffer.id, 'water', 'DN50', { sourceHandle: 'out-right', targetHandle: 'in-left' }, project),
+      buildEdge(buffer.id, sink.id, 'water', 'DN50', { sourceHandle: 'out-right', targetHandle: 'in-left' }, project),
+    ];
+
+    const layout = buildSchematicLayoutLightweight([tank, pump, reactor, meter, valve, buffer, sink], edges);
+
+    expect(layout.composer.spine.nodeIds).toEqual([tank.id, pump.id, reactor.id, meter.id, valve.id, buffer.id, sink.id]);
+    expect(layout.composer.spine.segments.length).toBe(edges.length);
+    edges.forEach((edge) => {
+      expect(layout.routes[edge.id]?.points.length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  it('inline devices are embedded into spine, not detached', () => {
+    const source = buildNode('source', { x: 0, y: 0 }, project);
+    const valve = buildNode('shutoffValve', { x: 0, y: 0 }, project);
+    const meter = buildNode('flowMeter', { x: 0, y: 0 }, project);
+    const sink = buildNode('consumer', { x: 0, y: 0 }, project);
+    const e1 = buildEdge(source.id, valve.id, 'water', 'DN40', { sourceHandle: 'out-right', targetHandle: 'in-left' }, project);
+    const e2 = buildEdge(valve.id, meter.id, 'water', 'DN40', { sourceHandle: 'out-right', targetHandle: 'in-left' }, project);
+    const e3 = buildEdge(meter.id, sink.id, 'water', 'DN40', { sourceHandle: 'out-right', targetHandle: 'in-left' }, project);
+    const layout = buildSchematicLayoutLightweight([source, valve, meter, sink], [e1, e2, e3]);
+
+    const inlineIds = new Set(layout.composer.inlinePlacements.map((placement) => placement.nodeId));
+    expect(inlineIds.has(valve.id)).toBe(true);
+    expect(inlineIds.has(meter.id)).toBe(true);
+    expect(layout.composer.spine.nodeIds).toContain(valve.id);
+    expect(layout.composer.spine.nodeIds).toContain(meter.id);
+  });
+
+  it('apparatus attach to spine via valid connection points', () => {
+    const source = buildNode('source', { x: 0, y: 0 }, project);
+    const reactor = buildNode('reactor', { x: 0, y: 0 }, project);
+    const sink = buildNode('consumer', { x: 0, y: 0 }, project);
+    const e1 = buildEdge(source.id, reactor.id, 'water', 'DN80', { sourceHandle: 'out-right', targetHandle: 'in-left' }, project);
+    const e2 = buildEdge(reactor.id, sink.id, 'water', 'DN80', { sourceHandle: 'out-right', targetHandle: 'in-left' }, project);
+    const layout = buildSchematicLayoutLightweight([source, reactor, sink], [e1, e2]);
+
+    const reactorPlacement = layout.composer.apparatusPlacements.find((item) => item.nodeId === reactor.id);
+    expect(reactorPlacement).toBeDefined();
+    expect(reactorPlacement?.attachedToSpine).toBe(true);
+    expect(reactorPlacement?.attachmentY).toBe(layout.composer.spine.y);
+  });
+
   it('builds identical schematic for same topology with different simulation coordinates', () => {
     const sourceA = buildNode('source', { x: 10, y: 20 }, project);
     const pumpA = buildNode('pump', { x: 1200, y: 700 }, project);
@@ -32,34 +89,23 @@ describe('schematic layout', () => {
     const layoutB = buildSchematicLayoutLightweight([sourceB, pumpB, sinkB], [edgeA1, edgeA2]);
 
     expect(mapPositions(layoutA)).toEqual(mapPositions(layoutB));
+    expect(layoutA.composer.spine.nodeIds).toEqual(layoutB.composer.spine.nodeIds);
   });
 
-  it('changes schematic when process topology changes', () => {
+  it('branching process produces branch lines from main spine', () => {
     const source = buildNode('source', { x: 0, y: 0 }, project);
     const pump = buildNode('pump', { x: 0, y: 0 }, project);
-    const sink = buildNode('consumer', { x: 0, y: 0 }, project);
-    const e1 = buildEdge(source.id, pump.id, 'water', 'DN50', { sourceHandle: 'out-right', targetHandle: 'in-left' }, project);
-    const e2 = buildEdge(pump.id, sink.id, 'water', 'DN50', { sourceHandle: 'out-right', targetHandle: 'in-left' }, project);
-    const baseLayout = buildSchematicLayoutLightweight([source, pump, sink], [e1, e2]);
+    const sinkMain = buildNode('consumer', { x: 0, y: 0 }, project);
+    const drain = buildNode('utilityDrain', { x: 0, y: 0 }, project);
+    const e1 = buildEdge(source.id, pump.id, 'water', 'DN65', { sourceHandle: 'out-right', targetHandle: 'in-left' }, project);
+    const e2 = buildEdge(pump.id, sinkMain.id, 'water', 'DN65', { sourceHandle: 'out-right', targetHandle: 'in-left' }, project);
+    const e3 = buildEdge(pump.id, drain.id, 'water', 'DN40', { sourceHandle: 'out-right', targetHandle: 'in-left' }, project);
 
-    const meter = buildNode('flowMeter', { x: 1400, y: -900 }, project);
-    const e1a = buildEdge(source.id, meter.id, 'water', 'DN50', { sourceHandle: 'out-right', targetHandle: 'in-left' }, project);
-    const e1b = buildEdge(meter.id, pump.id, 'water', 'DN50', { sourceHandle: 'out-right', targetHandle: 'in-left' }, project);
-    const changedLayout = buildSchematicLayoutLightweight([source, meter, pump, sink], [e1a, e1b, e2]);
+    const layout = buildSchematicLayoutLightweight([source, pump, sinkMain, drain], [e1, e2, e3]);
 
-    expect(mapPositions(baseLayout)).not.toEqual(mapPositions(changedLayout));
-  });
-
-  it('keeps inline devices on process line', () => {
-    const source = buildNode('source', { x: 0, y: 0 }, project);
-    const valve = buildNode('shutoffValve', { x: 0, y: 0 }, project);
-    const sink = buildNode('consumer', { x: 0, y: 0 }, project);
-    const e1 = buildEdge(source.id, valve.id, 'water', 'DN40', { sourceHandle: 'out-right', targetHandle: 'in-left' }, project);
-    const e2 = buildEdge(valve.id, sink.id, 'water', 'DN40', { sourceHandle: 'out-right', targetHandle: 'in-left' }, project);
-    const layout = buildSchematicLayoutLightweight([source, valve, sink], [e1, e2]);
-
-    expect(layout.positions[source.id].y).toBe(layout.positions[valve.id].y);
-    expect(layout.positions[valve.id].y).toBe(layout.positions[sink.id].y);
+    expect(layout.composer.branchPlacements.length).toBeGreaterThanOrEqual(1);
+    expect(layout.composer.branchPlacements[0]?.sourceId).toBe(pump.id);
+    expect(layout.composer.branchPlacements[0]?.junction.y).toBe(layout.composer.spine.y);
   });
 
   it('builds canonical process graph classes for renderer pipeline', () => {
