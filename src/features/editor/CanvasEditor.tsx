@@ -12,6 +12,7 @@ import { LocalActionPanel } from './LocalActionPanel';
 import { SoapEdge, SoapNode } from '../../domain/schemas/types';
 import { buildSchematicLayout, buildSchematicLayoutElk, shouldUseElkLayout } from './schematicLayout';
 import { OverlayRect, clampOverlayToShell } from './overlayPositioning';
+import { buildEdgeContextActions, buildNodeContextActions } from '../simulation/contextActionController';
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const VIEWPORT_POSITION_EPSILON = 0.5;
@@ -474,81 +475,47 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
   }, [closeContextMenu, selectEdge]);
 
   const nodeMenuItems = useCallback((node: SoapNode): ContextMenuItem[] => {
-    const process = node.data.process as any;
-    const running = Boolean(process.isRunning ?? process.pumpOn ?? node.data.status === 'running');
-    const intakeAllowed = Boolean(process.allowIntake ?? process.canReceive ?? true);
-    const dischargeAllowed = Boolean(process.allowDischarge ?? process.canDischarge ?? true);
-    const valveOpen = Boolean(process.isOpen ?? process.valveOpen ?? process.valveState !== 'closed');
-    const isAuto = (process.valveMode ?? process.mode ?? node.data.mode) === 'auto';
-    const hasAlarm = Boolean(node.data.alarms?.length || node.data.runtime.alarmText || node.data.simulation.alarmText);
     const connectedEdge = projectEdges.find((edge) => edge.source === node.id || edge.target === node.id);
     const sourceEdge = projectEdges.find((edge) => edge.target === node.id);
     const targetEdge = projectEdges.find((edge) => edge.source === node.id);
-    const items: ContextMenuItem[] = [];
-
-    if (node.data.kind === 'pump' || node.data.kind === 'dosingPump') {
-      const speedFactor = Number(process.speedFactor ?? 1);
-      items.push(
-        { id: 'pump-start', label: 'Включить', disabled: running, onClick: () => withNodeSelection(node.id, () => executeNodeAction(node.id, 'pump:start')) },
-        { id: 'pump-stop', label: 'Остановить', disabled: !running, onClick: () => withNodeSelection(node.id, () => executeNodeAction(node.id, 'pump:stop')) },
-        { id: 'pump-alarm', label: 'Сбросить тревогу', disabled: !hasAlarm, onClick: () => withNodeSelection(node.id, () => executeNodeAction(node.id, 'pump:clearAlarm')) },
-        { id: 'pump-speed-up', label: 'Подача +10%', onClick: () => withNodeSelection(node.id, () => updateNodeField(node.id, 'speedFactor', Math.min(2, Number((speedFactor + 0.1).toFixed(2))))) },
-        { id: 'pump-speed-down', label: 'Подача -10%', onClick: () => withNodeSelection(node.id, () => updateNodeField(node.id, 'speedFactor', Math.max(0.1, Number((speedFactor - 0.1).toFixed(2))))) },
-      );
-    } else if (node.data.className === 'valve') {
-      items.push(
-        { id: 'valve-open', label: 'Открыть', disabled: valveOpen, onClick: () => withNodeSelection(node.id, () => executeNodeAction(node.id, 'valve:open')) },
-        { id: 'valve-close', label: 'Закрыть', disabled: !valveOpen, onClick: () => withNodeSelection(node.id, () => executeNodeAction(node.id, 'valve:close')) },
-        { id: 'valve-auto', label: 'Авто', disabled: isAuto, onClick: () => withNodeSelection(node.id, () => executeNodeAction(node.id, 'valve:auto')) },
-        { id: 'valve-manual', label: 'Ручной', disabled: !isAuto, onClick: () => withNodeSelection(node.id, () => executeNodeAction(node.id, 'valve:manual')) },
-      );
-    } else if (node.data.kind === 'tank' || node.data.kind === 'bufferTank') {
-      items.push(
-        { id: 'tank-intake-on', label: 'Разрешить приём', disabled: intakeAllowed, onClick: () => withNodeSelection(node.id, () => executeNodeAction(node.id, 'tank:enableReceive')) },
-        { id: 'tank-intake-off', label: 'Запретить приём', disabled: !intakeAllowed, onClick: () => withNodeSelection(node.id, () => executeNodeAction(node.id, 'tank:disableReceive')) },
-        { id: 'tank-discharge-on', label: 'Разрешить выдачу', disabled: dischargeAllowed, onClick: () => withNodeSelection(node.id, () => executeNodeAction(node.id, 'tank:enableDischarge')) },
-        { id: 'tank-discharge-off', label: 'Запретить выдачу', disabled: !dischargeAllowed, onClick: () => withNodeSelection(node.id, () => executeNodeAction(node.id, 'tank:disableDischarge')) },
-      );
-    } else if (node.data.kind === 'reactor' || node.data.kind === 'heatedReactor' || node.data.kind === 'fillingStation') {
-      items.push(
-        { id: 'reactor-start', label: 'Включить', disabled: running, onClick: () => withNodeSelection(node.id, () => executeNodeAction(node.id, 'reactor:start')) },
-        { id: 'reactor-stop', label: 'Остановить', disabled: !running, onClick: () => withNodeSelection(node.id, () => executeNodeAction(node.id, 'reactor:stop')) },
-        { id: 'reactor-idle', label: 'Ожидание', disabled: node.data.status === 'idle', onClick: () => withNodeSelection(node.id, () => executeNodeAction(node.id, 'reactor:setIdle')) },
-        { id: 'reactor-maint', label: 'Ремонт', disabled: node.data.status === 'maintenance', onClick: () => withNodeSelection(node.id, () => executeNodeAction(node.id, 'reactor:setMaintenance')) },
-      );
-    }
-
-    if (sourceEdge) items.push({ id: 'jump-source', label: 'Перейти к источнику', onClick: () => withNodeSelection(node.id, () => selectNode(sourceEdge.source)) });
-    if (targetEdge) items.push({ id: 'jump-target', label: 'Перейти к приёмнику', onClick: () => withNodeSelection(node.id, () => selectNode(targetEdge.target)) });
-
-    items.push(
-      { id: 'open-inspector', label: 'Открыть инспектор', onClick: () => withNodeSelection(node.id, () => setInspectorTab('main')) },
-      { id: 'measurement-probe', label: 'Поставить контрольную точку', onClick: () => withNodeSelection(node.id, () => addMeasurementPoint('probe', { nodeId: node.id })) },
-    );
-    if (connectedEdge) {
-      items.push({ id: 'measurement-pressure', label: 'Поставить манометр', onClick: () => withNodeSelection(node.id, () => addMeasurementPoint('pressure', { nodeId: node.id })) });
-    }
-    return items;
+    return buildNodeContextActions(node, Boolean(sourceEdge), Boolean(targetEdge)).map((action) => ({
+      id: action.id,
+      label: action.label,
+      disabled: action.disabled,
+      onClick: () => withNodeSelection(node.id, () => {
+        if (action.id === 'start') executeNodeAction(node.id, 'pump:start');
+        else if (action.id === 'stop') executeNodeAction(node.id, 'pump:stop');
+        else if (action.id === 'open') executeNodeAction(node.id, 'valve:open');
+        else if (action.id === 'close') executeNodeAction(node.id, 'valve:close');
+        else if (action.id === 'auto') executeNodeAction(node.id, 'valve:auto');
+        else if (action.id === 'manual') executeNodeAction(node.id, 'valve:manual');
+        else if (action.id === 'clear-alarm') executeNodeAction(node.id, 'pump:clearAlarm');
+        else if (action.id === 'jump-source' && sourceEdge) selectNode(sourceEdge.source);
+        else if (action.id === 'jump-target' && targetEdge) selectNode(targetEdge.target);
+        else if (action.id === 'trace') setInspectorTab('simulation');
+        else if (action.id === 'diagnostics') setInspectorTab('alarms');
+        else if (action.id === 'replace') setInspectorTab('actions');
+        else if (action.id === 'isolate') updateNodeField(node.id, 'allowDischarge', false);
+      }),
+    }));
   }, [addMeasurementPoint, executeNodeAction, projectEdges, selectNode, setInspectorTab, updateNodeField, withNodeSelection]);
 
   const edgeMenuItems = useCallback((edge: SoapEdge): ContextMenuItem[] => {
     const source = nodeById.get(edge.source);
     const target = nodeById.get(edge.target);
-    const items: ContextMenuItem[] = [
-      { id: 'edge-inspector', label: 'Открыть инспектор', onClick: () => withEdgeSelection(edge.id, () => setInspectorTab('main')) },
-      { id: 'edge-source', label: 'Перейти к источнику', disabled: !source, onClick: () => withEdgeSelection(edge.id, () => source && selectNode(source.id)) },
-      { id: 'edge-target', label: 'Перейти к приёмнику', disabled: !target, onClick: () => withEdgeSelection(edge.id, () => target && selectNode(target.id)) },
-      { id: 'edge-delete', label: 'Удалить сегмент', tone: 'danger', onClick: () => withEdgeSelection(edge.id, () => executeEdgeAction('delete', edge.id)) },
-      { id: 'edge-pressure', label: 'Поставить манометр', onClick: () => withEdgeSelection(edge.id, () => addMeasurementPoint('pressure', { edgeId: edge.id, ratio: 0.5 })) },
-      { id: 'edge-flow', label: 'Поставить расходомер', onClick: () => withEdgeSelection(edge.id, () => addMeasurementPoint('flow', { edgeId: edge.id, ratio: 0.5 })) },
-      { id: 'edge-probe', label: 'Поставить контрольную точку', onClick: () => withEdgeSelection(edge.id, () => addMeasurementPoint('probe', { edgeId: edge.id, ratio: 0.5 })) },
-      { id: 'edge-insert', label: 'Добавить элемент в линию', onClick: () => withEdgeSelection(edge.id, () => openLibraryPicker('context-insert', { edgeId: edge.id })) },
-      { id: 'edge-break', label: 'Разорвать линию', onClick: () => withEdgeSelection(edge.id, () => executeEdgeAction('break', edge.id)) },
-      { id: 'edge-zeta-up', label: 'Сопротивление +0.2', onClick: () => withEdgeSelection(edge.id, () => updateEdgeField(edge.id, 'localResistanceZeta', Number((Number(edge.data?.localResistanceZeta ?? edge.data?.minorLossCoefficient ?? 1.2) + 0.2).toFixed(2)))) },
-      { id: 'edge-zeta-down', label: 'Сопротивление -0.2', onClick: () => withEdgeSelection(edge.id, () => updateEdgeField(edge.id, 'localResistanceZeta', Math.max(0, Number((Number(edge.data?.localResistanceZeta ?? edge.data?.minorLossCoefficient ?? 1.2) - 0.2).toFixed(2))))) },
-    ];
-    return items;
-  }, [addMeasurementPoint, executeEdgeAction, nodeById, openLibraryPicker, selectNode, setInspectorTab, updateEdgeField, withEdgeSelection]);
+    return buildEdgeContextActions(edge).map((action) => ({
+      id: action.id,
+      label: action.label,
+      disabled: action.disabled,
+      onClick: () => withEdgeSelection(edge.id, () => {
+        if (action.id === 'jump-source' && source) selectNode(source.id);
+        else if (action.id === 'jump-target' && target) selectNode(target.id);
+        else if (action.id === 'diagnostics') setInspectorTab('alarms');
+        else if (action.id === 'trace') setInspectorTab('simulation');
+        else if (action.id === 'clear-block') updateEdgeField(edge.id, 'blocked', false);
+      }),
+    }));
+  }, [nodeById, selectNode, setInspectorTab, updateEdgeField, withEdgeSelection]);
 
   const canvasMenuItems = useMemo<ContextMenuItem[]>(() => [
     { id: 'fit', label: 'Вписать схему', onClick: () => { void handleFitToView(); closeContextMenu(); } },
