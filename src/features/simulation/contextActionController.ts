@@ -5,6 +5,7 @@ export interface ContextActionItem {
   id: string;
   label: string;
   disabled?: boolean;
+  secondary?: boolean;
 }
 
 export const buildNodeContextActions = (node: SoapNode, hasSource: boolean, hasTarget: boolean): ContextActionItem[] => {
@@ -14,36 +15,28 @@ export const buildNodeContextActions = (node: SoapNode, hasSource: boolean, hasT
   const running = Boolean(process.pumpOn ?? process.isRunning ?? node.data.status === 'running');
   const isAuto = String(process.mode ?? node.data.mode).toLowerCase() !== 'manual';
 
-  const items: ContextActionItem[] = [];
-  if (capability.canStartStop) {
-    items.push({ id: 'start', label: 'Включить', disabled: running });
-    items.push({ id: 'stop', label: 'Выключить', disabled: !running });
-  }
-  if (capability.canOpenClose) {
-    items.push({ id: 'open', label: 'Открыть', disabled: isOpen });
-    items.push({ id: 'close', label: 'Закрыть', disabled: !isOpen });
-  }
-  if (capability.supportsAutoManual) {
-    items.push({ id: 'auto', label: 'Авто', disabled: isAuto });
-    items.push({ id: 'manual', label: 'Ручной', disabled: !isAuto });
-  }
-  if (capability.actions.includes('isolate')) items.push({ id: 'isolate', label: 'Изолировать' });
-  items.push({ id: 'clear-alarm', label: 'Сбросить тревогу' });
-  items.push({ id: 'replace', label: 'Заменить оборудование' });
-  if (hasSource) items.push({ id: 'jump-source', label: 'Перейти к источнику' });
-  if (hasTarget) items.push({ id: 'jump-target', label: 'Перейти к приёмнику' });
-  items.push({ id: 'trace', label: 'Подсветить маршрут' });
-  items.push({ id: 'diagnostics', label: 'Открыть диагностику' });
-  return items;
+  const primary: ContextActionItem[] = [];
+  if (capability.canStartStop) primary.push({ id: running ? 'stop' : 'start', label: running ? 'Остановить' : 'Включить' });
+  if (capability.canOpenClose) primary.push({ id: isOpen ? 'close' : 'open', label: isOpen ? 'Закрыть' : 'Открыть' });
+  if (capability.supportsAutoManual) primary.push({ id: isAuto ? 'manual' : 'auto', label: isAuto ? 'Ручной режим' : 'Авто режим' });
+  if (capability.actions.includes('isolate')) primary.push({ id: 'isolate', label: 'Изолировать' });
+  primary.push({ id: 'diagnostics', label: 'Диагностика' });
+  primary.push({ id: 'replace', label: 'Заменить' });
+
+  const moreHint = hasSource || hasTarget ? 'Ещё…' : 'Маршрут';
+  if (hasSource || hasTarget) primary.push({ id: 'more', label: moreHint, secondary: true });
+  else primary.push({ id: 'trace', label: 'Подсветить маршрут', secondary: true });
+
+  return primary.slice(0, 6);
 };
 
 export const buildEdgeContextActions = (edge: SoapEdge): ContextActionItem[] => {
   const routeBlocked = Boolean(edge.data?.blocked || (edge.data?.blockedBy?.length ?? 0) > 0);
   return [
-    { id: 'jump-source', label: 'Перейти к источнику' },
-    { id: 'jump-target', label: 'Перейти к приёмнику' },
+    { id: 'jump-source', label: 'К источнику' },
+    { id: 'jump-target', label: 'К приёмнику' },
     { id: 'trace', label: 'Подсветить маршрут' },
-    { id: 'diagnostics', label: 'Открыть диагностику' },
+    { id: 'diagnostics', label: 'Диагностика' },
     { id: 'clear-block', label: 'Сбросить блокировку', disabled: !routeBlocked },
   ];
 };

@@ -183,7 +183,7 @@ export const App = () => {
   const loadTemplate = useAppStore((state) => state.loadTemplate);
   const addNode = useAppStore((state) => state.addNode);
   const [leftShell, setLeftShell] = useState<LeftShellState>(() => defaultLeftShellState());
-  const [rightPanel, setRightPanel] = useState<RightPanelKey>('inspector');
+  const [rightPanel, setRightPanel] = useState<RightPanelKey>(null);
   const [activeCanvasTool, setActiveCanvasTool] = useState<CanvasTool>('select');
   const [gridEnabled, setGridEnabled] = useState(true);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -217,6 +217,10 @@ export const App = () => {
       setActiveCanvasTool('select');
     }
   }, [activeCanvasTool, presentationMode]);
+
+  useEffect(() => {
+    if (presentationMode === 'simulation') setRightPanel((current) => (current === 'inspector' ? null : current));
+  }, [presentationMode]);
 
   const updateLeftShell = (event: Parameters<typeof transitionLeftShell>[1]) => {
     setLeftShell((current) => transitionLeftShell(current, event));

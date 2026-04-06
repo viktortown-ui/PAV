@@ -8,6 +8,7 @@ export interface EquipmentVisualProfile {
   kind: SoapNodeKind;
   family: SymbolFamily;
   svgVariant: string;
+  spriteComponent: string;
   categoryColor: string;
   strokeColor: string;
   stateIndicator: EquipmentStateIndicator;
@@ -17,12 +18,55 @@ export interface EquipmentVisualProfile {
 }
 
 const familyColor: Record<SymbolFamily, { fill: string; stroke: string }> = {
-  vessel: { fill: '#4f79c5', stroke: '#bfd3ff' },
-  machinery: { fill: '#bb7f32', stroke: '#ffe1b8' },
-  valve: { fill: '#977f36', stroke: '#f8e6b6' },
-  instrument: { fill: '#2f8b79', stroke: '#bff8eb' },
-  topology: { fill: '#5e6d87', stroke: '#d5e1f2' },
-  terminal: { fill: '#5f738e', stroke: '#d4e4f7' },
+  vessel: { fill: '#5b89d6', stroke: '#d0e2ff' },
+  machinery: { fill: '#ca8b3a', stroke: '#ffe5bf' },
+  valve: { fill: '#b89a42', stroke: '#f6e7bc' },
+  instrument: { fill: '#35a38f', stroke: '#ccfff4' },
+  topology: { fill: '#7f8fa8', stroke: '#d5e1f2' },
+  terminal: { fill: '#8a9db8', stroke: '#dce9f8' },
+};
+
+const spriteByKind: Record<SoapNodeKind, string> = {
+  tank: 'TankSprite',
+  bufferTank: 'BufferTankSprite',
+  reactor: 'ReactorSprite',
+  heatedReactor: 'ReactorSprite',
+  pump: 'PumpSprite',
+  dosingPump: 'PumpSprite',
+  manualValve: 'ValveSprite',
+  shutoffValve: 'ValveSprite',
+  solenoidValve: 'ValveSprite',
+  controlValve: 'ValveSprite',
+  drainValve: 'ValveSprite',
+  reliefValve: 'ValveSprite',
+  gateValve: 'GateValveSprite',
+  checkValve: 'CheckValveSprite',
+  flowMeter: 'FlowmeterSprite',
+  waterFilter: 'FilterSprite',
+  filterUnit: 'FilterSprite',
+  inlineFilter: 'FilterSprite',
+  pressureSensor: 'InstrumentSprite',
+  temperatureSensor: 'InstrumentSprite',
+  levelSensor: 'InstrumentSprite',
+  phSensor: 'InstrumentSprite',
+  conductivitySensor: 'InstrumentSprite',
+  indicator: 'InstrumentSprite',
+  heatExchanger: 'HeatExchangerSprite',
+  inlineMixer: 'HeatExchangerSprite',
+  roSkid: 'CoolerSprite',
+  fillingStation: 'FillingStationSprite',
+  source: 'SourceSinkSprite',
+  consumer: 'SourceSinkSprite',
+  utilityDrain: 'TerminalSprite',
+  offPageConnector: 'TerminalSprite',
+  serviceTerminal: 'TerminalSprite',
+  samplePoint: 'TerminalSprite',
+  tee: 'TerminalSprite',
+  cross: 'TerminalSprite',
+  collector: 'TerminalSprite',
+  splitter: 'TerminalSprite',
+  mixingJunction: 'TerminalSprite',
+  drainBranch: 'TerminalSprite',
 };
 
 export const resolveStateIndicator = (node: SoapNodeData): EquipmentStateIndicator => {
@@ -39,8 +83,8 @@ export const resolveStateIndicator = (node: SoapNodeData): EquipmentStateIndicat
 };
 
 export const resolveLodLevel = (zoom: number, selected = false): LodLevel => {
-  if (selected || zoom > 1.1) return 'near';
-  if (zoom < 0.72) return 'far';
+  if (selected || zoom > 1.12) return 'near';
+  if (zoom < 0.7) return 'far';
   return 'medium';
 };
 
@@ -52,6 +96,7 @@ export const getEquipmentVisualProfile = (node: SoapNodeData, lod: LodLevel): Eq
     kind: node.kind,
     family,
     svgVariant: `${family}:${node.kind}`,
+    spriteComponent: spriteByKind[node.kind] ?? 'TerminalSprite',
     categoryColor: palette.fill,
     strokeColor: palette.stroke,
     stateIndicator: resolveStateIndicator(node),

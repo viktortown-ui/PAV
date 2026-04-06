@@ -29,7 +29,7 @@ export type CanvasTool = 'select' | 'connect' | 'measure-pressure' | 'measure-te
 type MarkerAnchor = { worldX: number; worldY: number; anchorText: string };
 type ContextTarget = { kind: 'node'; nodeId: string } | { kind: 'edge'; edgeId: string } | { kind: 'canvas' };
 type ContextMenuState = { x: number; y: number; target: ContextTarget };
-type ContextMenuItem = { id: string; label: string; onClick: () => void; disabled?: boolean; tone?: 'danger'; note?: string };
+type ContextMenuItem = { id: string; label: string; onClick: () => void; disabled?: boolean; tone?: 'danger'; note?: string; secondary?: boolean };
 
 const sameViewport = (a: Viewport, b: Viewport) => (
   Math.abs(a.x - b.x) < VIEWPORT_POSITION_EPSILON
@@ -478,10 +478,12 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
     const connectedEdge = projectEdges.find((edge) => edge.source === node.id || edge.target === node.id);
     const sourceEdge = projectEdges.find((edge) => edge.target === node.id);
     const targetEdge = projectEdges.find((edge) => edge.source === node.id);
-    return buildNodeContextActions(node, Boolean(sourceEdge), Boolean(targetEdge)).map((action) => ({
+    const actions = buildNodeContextActions(node, Boolean(sourceEdge), Boolean(targetEdge));
+    return actions.slice(0, 6).map((action) => ({
       id: action.id,
       label: action.label,
       disabled: action.disabled,
+      secondary: action.secondary,
       onClick: () => withNodeSelection(node.id, () => {
         if (action.id === 'start') executeNodeAction(node.id, 'pump:start');
         else if (action.id === 'stop') executeNodeAction(node.id, 'pump:stop');
@@ -669,7 +671,7 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
           );
         })}
       </div>
-      <LocalActionPanel selectedNode={selectedNode} selectedEdge={selectedEdge} selectedMeasurementPoint={selectedMeasurementPoint} anchor={selectedMeasurementPoint ? measurementPanelAnchor : localPanelAnchor} presentationMode={view.presentationMode} />
+      <LocalActionPanel selectedNode={view.presentationMode === 'simulation' ? undefined : selectedNode} selectedEdge={view.presentationMode === 'simulation' ? undefined : selectedEdge} selectedMeasurementPoint={selectedMeasurementPoint} anchor={selectedMeasurementPoint ? measurementPanelAnchor : localPanelAnchor} presentationMode={view.presentationMode} />
       {contextMenu ? createPortal((
         <div
           ref={contextMenuRef}
@@ -682,7 +684,7 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
             <button
               key={item.id}
               type="button"
-              className={`context-menu__item ${item.tone === 'danger' ? 'is-danger' : ''}`}
+              className={`context-menu__item ${item.tone === 'danger' ? 'is-danger' : ''} ${item.secondary ? 'is-secondary' : ''}`}
               disabled={item.disabled}
               title={item.note}
               onClick={item.onClick}
