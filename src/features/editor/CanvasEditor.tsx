@@ -402,7 +402,7 @@ const CanvasEditorComponent = ({ focusMode = false, activeTool = 'select', gridE
 
   const handleFitToView = useCallback(async () => {
     if (!flow) return;
-    await flow.fitView({ padding: 0.2, duration: 220 });
+    await flow.fitView({ padding: 0.13, duration: 220 });
   }, [flow]);
 
   const handleResetZoom = useCallback(async () => {
