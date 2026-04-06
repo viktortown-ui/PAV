@@ -42,7 +42,7 @@ const FlowEdgeComponent = ({ id, sourceX, sourceY, targetX, targetY, sourcePosit
   const emphasis = Boolean(data?.selectedPath || selected);
   const hovered = Boolean(data?.hovered);
   const visibleMode = data?.labelMode ?? 'selected';
-  const shouldShowBadge = presentationMode === 'simulation' && zoom >= 0.72 && (visibleMode === 'all' || (visibleMode === 'active' && (active || blocked)) || (visibleMode === 'selected' && (selected || hovered || emphasis)));
+  const shouldShowBadge = false;
   const isSelected = selectedEdgeId === id;
   const showToolbar = isSelected && zoom >= 0.58;
   const direction = data?.direction ?? 'forward';

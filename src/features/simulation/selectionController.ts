@@ -1,15 +1,17 @@
 import { ProjectDocument } from '../../domain/schemas/types';
 
 export type BottomTab = 'overview' | 'control' | 'parameters' | 'diagnostics' | 'connections' | 'history';
+export type BottomDockState = 'hidden' | 'peek' | 'expanded';
+
 export interface BottomWorkbenchState {
-  open: boolean;
+  dock: BottomDockState;
   activeTab: BottomTab;
   targetType: 'node' | 'edge' | null;
   targetId?: string;
 }
 
 export const defaultBottomWorkbenchState: BottomWorkbenchState = {
-  open: false,
+  dock: 'hidden',
   activeTab: 'overview',
   targetType: null,
 };
@@ -44,7 +46,7 @@ export const buildRouteTrace = (project: ProjectDocument, nodeId: string) => {
 };
 
 export const selectionOpensBottomPanel = (selectedNodeId?: string, selectedEdgeId?: string): BottomWorkbenchState => {
-  if (selectedNodeId) return { open: true, activeTab: 'overview', targetType: 'node', targetId: selectedNodeId };
-  if (selectedEdgeId) return { open: true, activeTab: 'connections', targetType: 'edge', targetId: selectedEdgeId };
+  if (selectedNodeId) return { dock: 'peek', activeTab: 'overview', targetType: 'node', targetId: selectedNodeId };
+  if (selectedEdgeId) return { dock: 'peek', activeTab: 'connections', targetType: 'edge', targetId: selectedEdgeId };
   return defaultBottomWorkbenchState;
 };
