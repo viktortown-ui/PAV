@@ -239,11 +239,11 @@ export const SimulationPanel = ({ focusMode = false, rightPanelVisible = false, 
     : 'Маршрут не определён';
 
   const handleFitToView = useCallback(async () => {
-    await flow.fitView({ padding: 0.2, duration: 220 });
+    await flow.fitView({ padding: 0.13, duration: 220 });
   }, [flow]);
 
   const handleReturnToDiagram = useCallback(async () => {
-    await flow.fitView({ padding: 0.17, duration: 180 });
+    await flow.fitView({ padding: 0.12, duration: 180 });
   }, [flow]);
 
   const focusNodeById = useCallback(async (nodeId?: string) => {

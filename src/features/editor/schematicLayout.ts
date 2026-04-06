@@ -95,10 +95,10 @@ export type SchematicComposerModel = {
   slots: SchematicSlot[];
 };
 
-const SLOT_WIDTH = 168;
-const MAIN_TRACK_Y = 238;
-const BASE_X = 116;
-const TRACK_SPACING = 104;
+const SLOT_WIDTH = 142;
+const MAIN_TRACK_Y = 222;
+const BASE_X = 92;
+const TRACK_SPACING = 86;
 const LABEL_W = 90;
 const LABEL_H = 24;
 const SECONDARY_W = 120;

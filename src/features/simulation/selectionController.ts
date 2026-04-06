@@ -1,6 +1,6 @@
 import { ProjectDocument } from '../../domain/schemas/types';
 
-export type BottomTab = 'overview' | 'control' | 'parameters' | 'diagnostics' | 'connections' | 'history';
+export type BottomTab = 'overview' | 'control' | 'parameters' | 'mediumPhysics' | 'diagnostics' | 'connections' | 'history';
 export type BottomDockState = 'hidden' | 'peek' | 'expanded';
 
 export interface BottomWorkbenchState {

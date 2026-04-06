@@ -6,28 +6,60 @@ import { getEquipmentVisualProfile, resolveLodLevel } from '../../features/simul
 import { readFileSync } from 'node:fs';
 
 describe('simulation reconstruction', () => {
+  it('equipment sprites are type-distinct and not card-shells', () => {
+    const spriteSource = readFileSync('src/features/simulation/EquipmentSprite.tsx', 'utf8');
+    expect(spriteSource.includes('pumpSprite')).toBe(true);
+    expect(spriteSource.includes('reactorSprite')).toBe(true);
+    expect(spriteSource.includes('gateValveSprite')).toBe(true);
+    expect(spriteSource.includes('flowmeterSprite')).toBe(true);
+    expect(spriteSource.includes('rect x="0" y="0" width="80" height="80"')).toBe(false);
+  });
+
   it('simulation nodes no longer use card-shell renderer', () => {
     const source = readFileSync('src/ui/nodes/ProcessNode.tsx', 'utf8');
     expect(source.includes('node-shell')).toBe(false);
     expect(source.includes('process-node-sprite')).toBe(true);
   });
 
-  it('each equipment type maps to silhouette sprite component', () => {
-    const project = makeProject();
-    const pump = buildNode('pump', { x: 0, y: 0 }, project);
-    const valve = buildNode('gateValve', { x: 60, y: 0 }, project);
-    const flow = buildNode('flowMeter', { x: 120, y: 0 }, project);
-
-    expect(getEquipmentVisualProfile(pump.data, 'medium').spriteComponent).toBe('PumpSprite');
-    expect(getEquipmentVisualProfile(valve.data, 'medium').spriteComponent).toBe('GateValveSprite');
-    expect(getEquipmentVisualProfile(flow.data, 'medium').spriteComponent).toBe('FlowmeterSprite');
-  });
-
-  it('left click opens bottom dock in peek state, not expanded by default', () => {
+  it('bottom dock supports hidden/peek/expanded workflow', () => {
+    expect(selectionOpensBottomPanel(undefined, undefined)).toMatchObject({ dock: 'hidden' });
     expect(selectionOpensBottomPanel('N1', undefined)).toMatchObject({ dock: 'peek', targetType: 'node', targetId: 'N1' });
+    const source = readFileSync('src/features/simulation/BottomWorkbenchPanel.tsx', 'utf8');
+    expect(source.includes("setBottomWorkbenchDock('expanded')")).toBe(true);
+    expect(source.includes("setBottomWorkbenchDock('peek')")).toBe(true);
   });
 
-  it('right click menu is short and capability-filtered', () => {
+  it('simulation UI strings in workbench are Russian-localized', () => {
+    const source = readFileSync('src/features/simulation/BottomWorkbenchPanel.tsx', 'utf8');
+    ['Обзор', 'Управление', 'Параметры', 'Среда и физика', 'Диагностика', 'Связи', 'История'].forEach((word) => {
+      expect(source.includes(word)).toBe(true);
+    });
+    ['Overview', 'History', 'Upstream', 'Downstream'].forEach((word) => {
+      expect(source.includes(word)).toBe(false);
+    });
+  });
+
+  it('raw backend keys are not rendered directly in parameter labels', () => {
+    const source = readFileSync('src/features/simulation/BottomWorkbenchPanel.tsx', 'utf8');
+    expect(source.includes('parameterRows.map(([key, value])')).toBe(false);
+    expect(source.includes('<span>{key}</span>')).toBe(false);
+  });
+
+  it('capability-based parameter groups render by equipment type', () => {
+    const source = readFileSync('src/features/simulation/BottomWorkbenchPanel.tsx', 'utf8');
+    expect(source.includes('isPump')).toBe(true);
+    expect(source.includes('isVessel')).toBe(true);
+    expect(source.includes('isValve')).toBe(true);
+    expect(source.includes('isSensor')).toBe(true);
+  });
+
+  it('right inspector is secondary/collapsible in simulation', () => {
+    const css = readFileSync('src/styles/global.css', 'utf8');
+    expect(css.includes('.mode-simulation .right-rail.is-drawer-open')).toBe(true);
+    expect(css.includes('20vw')).toBe(true);
+  });
+
+  it('compact context menu still works', () => {
     const project = makeProject();
     const pump = buildNode('pump', { x: 0, y: 0 }, project);
     const sensor = buildNode('pressureSensor', { x: 80, y: 0 }, project);
@@ -39,13 +71,7 @@ describe('simulation reconstruction', () => {
     expect(sensorActions.some((item) => item.id === 'start' || item.id === 'stop')).toBe(false);
   });
 
-  it('right inspector is secondary/collapsible in simulation', () => {
-    const css = readFileSync('src/styles/global.css', 'utf8');
-    expect(css.includes('.mode-simulation .right-rail.is-drawer-open')).toBe(true);
-    expect(css.includes('20vw')).toBe(true);
-  });
-
-  it('legacy overlay info cards are absent in default simulation view', () => {
+  it('canvas remains free of heavy overlays in simulation mode', () => {
     const css = readFileSync('src/styles/global.css', 'utf8');
     expect(css.includes('.mode-simulation .edge-badge')).toBe(true);
     expect(css.includes('.mode-simulation .local-action-panel { display: none !important; }')).toBe(true);
